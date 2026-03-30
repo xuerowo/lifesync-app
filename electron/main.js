@@ -12,7 +12,9 @@ let mainWindow;
 let abortLocalSync = false;
 
 // 數據文件路徑
-const DATA_DIR = path.join(app.getAppPath(), 'data');
+const DATA_DIR = app.isPackaged 
+  ? path.join(app.getPath('userData'), 'data')
+  : path.join(app.getAppPath(), 'data');
 const GALLERY_DIR = path.join(DATA_DIR, 'gallery');
 const DATA_FILE = path.join(DATA_DIR, 'lifesync-data.json');
 
