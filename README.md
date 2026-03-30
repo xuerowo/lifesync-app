@@ -61,7 +61,7 @@ LifeSync 是一款基於 React + Electron + Vite 開發的個人生活管理工�
     ```bash
     npm run build
     ```
-3.  等待建構完成後，打包好的產物將位於 **`dist_electron/`** 目錄中：
+2.  等待建構完成後，打包好的產物將位於 **`dist_electron/`** 目錄中：
     *   `LifeSync Setup 1.0.0.exe`：安裝程式。
     *   `LifeSync 1.0.0.exe`：免安裝可攜式版本。
     *   `win-unpacked/`：解壓後的應用程式目錄。
