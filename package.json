@@ -1,7 +1,9 @@
 {
   "name": "lifesync-app",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "LifeSync App - A personal productivity and data synchronization tool",
+  "author": "Your Name <your.email@example.com>",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -40,5 +42,28 @@
     "vite": "^7.2.4",
     "vite-plugin-electron": "^0.29.0",
     "vite-plugin-electron-renderer": "^0.14.6"
+  },
+  "build": {
+    "appId": "com.lifesync.app",
+    "productName": "LifeSync",
+    "directories": {
+      "output": "dist_electron"
+    },
+    "files": [
+      "dist",
+      "dist-electron",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "public/app-icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }
