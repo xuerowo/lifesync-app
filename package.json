@@ -61,8 +61,7 @@
         "nsis",
         "portable"
       ],
-      "icon": "public/app-icon.png",
-      "publisherName": "Your Name"
+      "icon": "public/app-icon.png"
     },
     "nsis": {
       "oneClick": false,
