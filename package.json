@@ -46,6 +46,7 @@
   "build": {
     "appId": "com.lifesync.app",
     "productName": "LifeSync",
+    "copyright": "Copyright © 2026 Your Name",
     "directories": {
       "output": "dist_electron"
     },
@@ -60,11 +61,13 @@
         "nsis",
         "portable"
       ],
-      "icon": "public/app-icon.png"
+      "icon": "public/app-icon.png",
+      "publisherName": "Your Name"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "LifeSync"
     }
   }
 }
