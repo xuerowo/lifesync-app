@@ -1,10 +1,7 @@
 import { createClient } from 'webdav';
 import fs from 'fs/promises';
 import path from 'path';
-import crypto from 'crypto';
-
-const ITERATIONS = 100000;
-const ALGO = 'aes-256-gcm';
+import { encryptBuffer, decryptBuffer } from './galleryCrypto.js';
 
 // 全局取消旗標
 let abortSync = false;
@@ -14,31 +11,6 @@ let abortSync = false;
  */
 export function setAbortFlag(value) {
     abortSync = value;
-}
-
-function deriveKey(password, salt) {
-  return crypto.pbkdf2Sync(password, salt, ITERATIONS, 32, 'sha256');
-}
-
-function encryptBuffer(buffer, password) {
-  const salt = crypto.randomBytes(16);
-  const iv = crypto.randomBytes(12);
-  const key = deriveKey(password, salt);
-  const cipher = crypto.createCipheriv(ALGO, key, iv);
-  const encrypted = Buffer.concat([cipher.update(buffer), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return Buffer.concat([salt, iv, encrypted, tag]);
-}
-
-function decryptBuffer(buffer, password) {
-  const salt = buffer.slice(0, 16);
-  const iv = buffer.slice(16, 28);
-  const tag = buffer.slice(-16);
-  const data = buffer.slice(28, -16);
-  const key = deriveKey(password, salt);
-  const decipher = crypto.createDecipheriv(ALGO, key, iv);
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(data), decipher.final()]);
 }
 
 export function setupCloudHandlers(ipcMain, { GALLERY_DIR }) {
@@ -122,7 +94,7 @@ export function setupCloudHandlers(ipcMain, { GALLERY_DIR }) {
 
         try {
           const fileBuffer = await fs.readFile(path.join(GALLERY_DIR, fileName));
-          const encryptedBuffer = encryptBuffer(fileBuffer, masterPassword);
+          const encryptedBuffer = await encryptBuffer(fileBuffer, masterPassword);
           await client.putFileContents(`/gallery/${encryptedName}`, encryptedBuffer);
           results.uploaded++;
         } catch (err) {
@@ -172,7 +144,7 @@ export function setupCloudHandlers(ipcMain, { GALLERY_DIR }) {
 
         try {
           const encryptedBuffer = await client.getFileContents(item.filename);
-          const decryptedBuffer = decryptBuffer(encryptedBuffer, masterPassword);
+          const decryptedBuffer = await decryptBuffer(encryptedBuffer, masterPassword);
           await fs.writeFile(localPath, decryptedBuffer);
           results.downloaded++;
         } catch (err) {
