@@ -3,6 +3,7 @@ import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Cloud } from 'luci
 import { useAppData } from '../../contexts/AppDataContext';
 import { getDateStr, getTodayStr, formatTaskTime } from '../../utils';
 import { WEEK_DAYS } from '../../constants/index.jsx';
+import { getCalendarTasksForDay, isDoneOnDate } from '../../domain/calendar';
 
 const CalendarView = ({ calendarDate, setCalendarDate, setEditingTask }) => {
   const { data } = useAppData();
@@ -13,51 +14,8 @@ const CalendarView = ({ calendarDate, setCalendarDate, setEditingTask }) => {
     return d;
   });
 
-  const getTasksForDay = (day) => {
-    const dayIdx = day.getDay();
-    const dateStr = getDateStr(day);
-    
-    const allMajorTasks = [...data.majorTasks, ...data.archivedTasks];
-    const allSubTasks = [...data.subTasks, ...data.archivedSubTasks];
-
-    return allSubTasks.filter(task => {
-      if (task.type === 'infinite') return false;
-      const major = allMajorTasks.find(m => m.id === task.majorTaskId);
-      if (!major) return false;
-
-      const isArchived = task.completed || major.completed;
-      
-      let effectiveStart, effectiveEnd;
-
-      if (task.type === 'precise') {
-        if (task.noTime) {
-          if (!isArchived) return false;
-          const completionDate = (task.completedAt || major.completedAt)?.split('T')[0];
-          effectiveStart = completionDate;
-          effectiveEnd = completionDate;
-        } else if (isArchived) {
-          effectiveStart = (task.createdAt || task.startDateTime)?.split('T')[0];
-          effectiveEnd = (task.completedAt || major.completedAt || new Date().toISOString())?.split('T')[0];
-        } else {
-          effectiveStart = task.startDateTime?.split('T')[0];
-          effectiveEnd = (task.endDateTime || task.startDateTime)?.split('T')[0];
-        }
-      } else {
-        effectiveStart = (task.createdAt || major.startDate)?.split('T')[0];
-        if (isArchived) {
-          effectiveEnd = (task.completedAt || major.completedAt || new Date().toISOString())?.split('T')[0];
-        } else {
-          effectiveEnd = major.endDate;
-        }
-      }
-
-      if (dateStr < effectiveStart || dateStr > effectiveEnd) return false;
-
-      if (task.type === 'weekly') return task.days.includes(dayIdx);
-      
-      return true;
-    }).sort((a, b) => (a.startTime || a.startDateTime || '').localeCompare(b.startTime || b.startDateTime || ''));
-  };
+  // 各種時間欄位分別換成本地日期再比較（以前直接切 UTC 字串，台灣凌晨 0～8 點的事會跑到前一天）
+  const getTasksForDay = (day) => getCalendarTasksForDay(data, getDateStr(day), day.getDay(), getTodayStr());
 
   return (
     <div className="bg-white/40 backdrop-blur-xl rounded-3xl md:rounded-[48px] p-5 md:p-10 border border-white/60 shadow-xl animate-in slide-up">
@@ -97,9 +55,7 @@ const CalendarView = ({ calendarDate, setCalendarDate, setEditingTask }) => {
                   // 判斷該任務在該日期是否完成
                   // 1. 如果是一次性任務且已完成，檢查完成日期
                   // 2. 如果是重複性任務，檢查當天是否有對應的 taskHistory 紀錄
-                  const isDoneOnThisDay = t.type === 'precise'
-                    ? (t.completed && t.completedAt?.startsWith(dateStr))
-                    : data.taskHistory.some(h => h.taskId === t.id && h.completedAt?.startsWith(dateStr));
+                  const isDoneOnThisDay = isDoneOnDate(t, data.taskHistory, dateStr);
                   
                   return (
                     <div key={t.id} onClick={() => setEditingTask({ type: 'sub', item: t })} className={`p-2.5 md:p-3 rounded-xl cursor-pointer hover:brightness-105 transition-all text-left ${isToday ? 'bg-white/20' : 'bg-white shadow-sm border border-sky-50'}`}>

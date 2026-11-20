@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useMemo, useRef 
 import { getTodayStr, getLocalISOString } from '../utils';
 import { createDefaultData, normalizeData } from '../shared/defaultData';
 import { computeActivePriorityTasks, createRecentGuard, isOneTimeTask } from '../domain/tasks';
-import { parseLocalDate } from '../domain/dates';
+import { localStampedIsoFromUtcIso, parseLocalDate } from '../domain/dates';
 
 const AppDataContext = createContext();
 
@@ -287,7 +287,8 @@ export const AppDataProvider = ({ children }) => {
         subTasks: prev.subTasks.map(t => t.id === id ? {
           ...t,
           completionCount: newCount,
-          lastCompletedAt: lastRecord ? lastRecord.completedAt : null
+          // completedAt 是真正的 UTC 時間；lastCompletedAt 要用和其他地方一樣的「本地時間標 Z」格式
+          lastCompletedAt: lastRecord ? localStampedIsoFromUtcIso(lastRecord.completedAt) : null
         } : t)
       };
     }

@@ -66,3 +66,15 @@ export function localDateFromLocalDateTime(str) {
 export function localDateFromDateOnly(str) {
   return datePrefix(str);
 }
+
+/**
+ * 真正的 UTC 時間（completedAt）→ lastCompletedAt 用的「本地時間標 Z」格式，
+ * 結果和 utils 的 getLocalISOString(new Date(iso)) 相同。無法辨識時回傳 null。
+ */
+export function localStampedIsoFromUtcIso(iso, offsetMinutes) {
+  if (typeof iso !== 'string' || !iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  const offset = Number.isFinite(offsetMinutes) ? offsetMinutes : d.getTimezoneOffset();
+  return new Date(d.getTime() - offset * 60000).toISOString();
+}
