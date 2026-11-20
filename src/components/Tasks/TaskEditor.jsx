@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Settings2, X, Zap, CheckCircle2, TrendingUp, Tag } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
 import { INDICATORS, WEEK_DAYS } from '../../constants/index.jsx';
+import { firstGoalId, toggleWeekDay, toNonNegativeInt, validateSubTaskTimes } from '../../domain/inputs';
 
 const TaskEditor = ({ editingTask, setEditingTask }) => {
   const { data, updateData, reorderPriorityTasks } = useAppData();
@@ -15,6 +16,13 @@ const TaskEditor = ({ editingTask, setEditingTask }) => {
     if (!localItem.title?.trim()) {
       alert(`請輸入${isMajor ? '計畫' : '任務'}名稱`);
       return;
+    }
+    if (!isMajor) {
+      const timeError = validateSubTaskTimes(localItem);
+      if (timeError) {
+        alert(timeError);
+        return;
+      }
     }
     updateData(prev => {
       if (isMajor) {
@@ -91,7 +99,7 @@ const TaskEditor = ({ editingTask, setEditingTask }) => {
           {isMajor ? (
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-6">
-                <div><label className="block text-[10px] font-black text-sky-600 mb-2 tracking-widest uppercase">維度</label><select className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none appearance-none cursor-pointer" value={localItem.indicatorId} onChange={e => setLocalItem({ ...localItem, indicatorId: e.target.value })}>{INDICATORS.map(ind => <option key={ind.id} value={ind.id}>{ind.name}</option>)}</select></div>
+                <div><label className="block text-[10px] font-black text-sky-600 mb-2 tracking-widest uppercase">維度</label><select className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none appearance-none cursor-pointer" value={localItem.indicatorId} onChange={e => setLocalItem({ ...localItem, indicatorId: e.target.value, goalId: firstGoalId(data.goals, e.target.value) })}>{INDICATORS.map(ind => <option key={ind.id} value={ind.id}>{ind.name}</option>)}</select></div>
                 <div><label className="block text-[10px] font-black text-sky-600 mb-2 tracking-widest uppercase">目標</label><select className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none appearance-none cursor-pointer" value={localItem.goalId} onChange={e => setLocalItem({ ...localItem, goalId: e.target.value })}>{data.goals[localItem.indicatorId]?.map(g => <option key={g.id} value={g.id}>{g.title}</option>)}</select></div>
               </div>
               <div className="grid grid-cols-2 gap-6">
@@ -151,7 +159,7 @@ const TaskEditor = ({ editingTask, setEditingTask }) => {
                   </button>
                 ))}
               </div>
-              {localItem.type === 'weekly' && (<div className="flex justify-between bg-white/30 p-2 rounded-[24px] border border-white/40">{[0, 1, 2, 3, 4, 5, 6].map(d => <button key={d} onClick={() => { const newDays = localItem.days.includes(d) ? localItem.days.filter(v => v !== d) : [...localItem.days, d].sort(); setLocalItem({ ...localItem, days: newDays }); }} className={`w-11 h-11 rounded-full text-[10px] font-black transition-all border-2 ${localItem.days.includes(d) ? 'bg-sky-500 text-white border-sky-400 shadow-md scale-110' : 'text-sky-300 border-transparent hover:bg-white/40'}`}>{WEEK_DAYS[d]}</button>)}</div>)}
+              {localItem.type === 'weekly' && (<div className="flex justify-between bg-white/30 p-2 rounded-[24px] border border-white/40">{[0, 1, 2, 3, 4, 5, 6].map(d => <button key={d} onClick={() => setLocalItem({ ...localItem, days: toggleWeekDay(localItem.days, d) })} className={`w-11 h-11 rounded-full text-[10px] font-black transition-all border-2 ${localItem.days.includes(d) ? 'bg-sky-500 text-white border-sky-400 shadow-md scale-110' : 'text-sky-300 border-transparent hover:bg-white/40'}`}>{WEEK_DAYS[d]}</button>)}</div>)}
               
               {localItem.type !== 'infinite' && (
                 <div className="flex items-center gap-4 p-5 bg-white/30 backdrop-blur-md rounded-[28px] border border-white/60 shadow-sm">
@@ -208,9 +216,10 @@ const TaskEditor = ({ editingTask, setEditingTask }) => {
                   <input
                     type="number"
                     min="0"
+                    step="1"
                     className="w-full bg-white/40 backdrop-blur-md p-5 pl-14 rounded-3xl text-xl font-black outline-none border border-white/60 focus:border-sky-500/50 focus:bg-white/60 text-sky-900 transition-all shadow-sm"
                     value={localItem.rewardTickets ?? 1}
-                    onChange={e => setLocalItem({ ...localItem, rewardTickets: parseInt(e.target.value) || 0 })}
+                    onChange={e => setLocalItem({ ...localItem, rewardTickets: toNonNegativeInt(e.target.value) })}
                     placeholder="輸入獎勵數量..."
                   />
                 </div>

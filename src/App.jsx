@@ -220,7 +220,7 @@ const App = () => {
   const handleCompleteSubTask = (id) => {
     const task = completeSubTaskData(id);
     if (task) {
-      const ticketsToAdd = task.rewardTickets || 1;
+      const ticketsToAdd = task.rewardTickets ?? 1;
       addLotteryTickets(ticketsToAdd);
       setTicketNotification({ count: ticketsToAdd, type: 'gain', id: crypto.randomUUID() });
     }

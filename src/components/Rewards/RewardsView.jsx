@@ -8,6 +8,7 @@ import { RARITY_STYLES, ITEMS_PER_PAGE } from '../../constants/index.jsx';
 import RarityBadge from '../Shared/RarityBadge';
 import { getPrizeSortName } from '../../domain/lottery';
 import { clampPage, getTotalPages } from '../../domain/pagination';
+import { atLeast, toNonNegativeInt, toNonNegativeNumber } from '../../domain/inputs';
 
 const EditableContent = ({ initialValue, onSave, className, placeholder }) => {
   const [localValue, setLocalValue] = useState(initialValue);
@@ -239,8 +240,9 @@ const RewardsView = ({
                     <span className="text-sm md:text-lg font-black text-sky-900">持有抽卡券：</span>
                     <input
                       type="number"
+                      min="0"
                       value={data.lotteryTickets || 0}
-                      onChange={(e) => updateData(prev => ({ ...prev, lotteryTickets: parseInt(e.target.value) || 0 }))}
+                      onChange={(e) => updateData(prev => ({ ...prev, lotteryTickets: toNonNegativeInt(e.target.value) }))}
                       style={{ width: `${(data.lotteryTickets || 0).toString().length + 1.5}ch`, minWidth: '3ch' }}
                       className="bg-sky-50/50 hover:bg-white focus:bg-white text-amber-500 text-xl md:text-2xl font-black px-2 rounded-xl outline-none border-2 border-transparent focus:border-amber-300 transition-all text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       title="點擊編輯數量"
@@ -332,7 +334,7 @@ const RewardsView = ({
               </div>
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-4">
                 {['UR', 'SSR', 'SR', 'R', 'N'].map(r => (
-                  <div key={r} className={`relative group p-4 rounded-3xl border-2 transition-all ${RARITY_STYLES[r].lightBg} ${RARITY_STYLES[r].border} hover:bg-white`}><div className="flex justify-between items-start mb-2"><span className={`text-xs font-black ${RARITY_STYLES[r].color}`}>{r}</span>{RARITY_STYLES[r].icon}</div><div className="flex items-baseline gap-1"><input type="number" value={data.lotteryProbability[r]} onChange={(e) => updateData(prev => ({ ...prev, lotteryProbability: { ...prev.lotteryProbability, [r]: Number(e.target.value) } }))} className={`w-full bg-transparent text-2xl font-black ${RARITY_STYLES[r].color} outline-none`} /><span className="text-xs font-bold text-gray-400">%</span></div></div>
+                  <div key={r} className={`relative group p-4 rounded-3xl border-2 transition-all ${RARITY_STYLES[r].lightBg} ${RARITY_STYLES[r].border} hover:bg-white`}><div className="flex justify-between items-start mb-2"><span className={`text-xs font-black ${RARITY_STYLES[r].color}`}>{r}</span>{RARITY_STYLES[r].icon}</div><div className="flex items-baseline gap-1"><input type="number" min="0" value={data.lotteryProbability[r]} onChange={(e) => updateData(prev => ({ ...prev, lotteryProbability: { ...prev.lotteryProbability, [r]: toNonNegativeNumber(e.target.value) } }))} className={`w-full bg-transparent text-2xl font-black ${RARITY_STYLES[r].color} outline-none`} /><span className="text-xs font-bold text-gray-400">%</span></div></div>
                 ))}
               </div>
             </div>
@@ -463,11 +465,14 @@ const RewardsView = ({
                             />
                             <div className="flex items-center gap-2">
                               <span className="text-[10px] font-black text-sky-300 uppercase tracking-widest">條件：</span>
+                              {/* 條件至少 1 次：打字途中允許暫時清空，離開欄位時才補成 1，避免一清空就跳成 1、接著打字變成 15 */}
                               <input
                                 type="number"
+                                min="1"
                                 className="w-16 bg-sky-50/50 rounded-lg px-2 py-0.5 text-xs font-black text-sky-600 outline-none"
                                 value={achievement.condition}
-                                onChange={e => updateData(prev => ({ ...prev, achievements: prev.achievements.map(a => a.id === achievement.id ? { ...a, condition: parseInt(e.target.value) || 0 } : a) }))}
+                                onChange={e => updateData(prev => ({ ...prev, achievements: prev.achievements.map(a => a.id === achievement.id ? { ...a, condition: toNonNegativeInt(e.target.value) } : a) }))}
+                                onBlur={() => { if (!(achievement.condition >= 1)) updateData(prev => ({ ...prev, achievements: prev.achievements.map(a => a.id === achievement.id ? { ...a, condition: atLeast(a.condition, 1) } : a) })); }}
                               />
                               <span className="text-[10px] font-black text-sky-300 uppercase tracking-widest">次</span>
                             </div>
