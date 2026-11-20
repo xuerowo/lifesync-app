@@ -5,6 +5,8 @@ import {
   createRecentGuard,
   isCompletedOnDate,
   isOneTimeTask,
+  keepsPriorityAfterCompletion,
+  priorityAfterCompletion,
   renumberPriorityTasks,
 } from '../src/domain/tasks.js';
 
@@ -166,5 +168,63 @@ describe('isOneTimeTask', () => {
     expect(isOneTimeTask({ type: 'daily' })).toBe(false);
     expect(isOneTimeTask({ type: 'weekly' })).toBe(false);
     expect(isOneTimeTask({ type: 'infinite' })).toBe(false);
+  });
+});
+
+describe('Q11：每日、每週優先任務完成後保留優先標記', () => {
+  const daily = { id: 'd', type: 'daily', isPriority: true, priorityOrder: 1, lastCompletedAt: null };
+  const weeklyWed = { id: 'w', type: 'weekly', days: [3], isPriority: true, priorityOrder: 2, lastCompletedAt: null };
+  const once = { id: 'o', type: 'precise', isPriority: true, priorityOrder: 3, completed: false };
+  const normal = { id: 'n', type: 'precise', isPriority: false, priorityOrder: 0 };
+  const TUESDAY = new Date(2026, 10, 17, 10, 0);
+  const THURSDAY = new Date(2026, 10, 19, 10, 0);
+  const NEXT_WEDNESDAY = new Date(2026, 10, 25, 10, 0);
+
+  // 和 completeSubTaskData 的順序一樣：先處理優先標記，再記下完成時間（本地時間標 Z）
+  const complete = (list, id, stamp) =>
+    priorityAfterCompletion(list, id).map(t => (t.id === id ? { ...t, lastCompletedAt: stamp } : t));
+
+  it('keepsPriorityAfterCompletion：只有每日、每週保留', () => {
+    expect(keepsPriorityAfterCompletion({ type: 'daily' })).toBe(true);
+    expect(keepsPriorityAfterCompletion({ type: 'weekly' })).toBe(true);
+    expect(keepsPriorityAfterCompletion({ type: 'precise' })).toBe(false);
+    expect(keepsPriorityAfterCompletion({ type: 'infinite' })).toBe(false);
+    expect(keepsPriorityAfterCompletion(undefined)).toBe(false);
+  });
+
+  it('每日優先任務完成後標記和順位都不變；今天剩下的時間不擋人，明天又排第一', () => {
+    const list = [daily, once, normal];
+    const after = complete(list, 'd', '2026-11-16T10:00:00.000Z');
+    const d = after.find(t => t.id === 'd');
+    expect(d.isPriority).toBe(true);
+    expect(d.priorityOrder).toBe(1);
+    // 今天：輪到下一個優先任務
+    expect(ids(computeActivePriorityTasks(after, MONDAY))).toEqual(['o']);
+    // 明天：每日任務回到第一順位
+    expect(ids(computeActivePriorityTasks(after, TUESDAY))).toEqual(['d', 'o']);
+  });
+
+  it('每週優先任務在指定日完成後保留；非指定日不擋人，下一個指定日又排回來', () => {
+    const list = [weeklyWed, once];
+    const after = complete(list, 'w', '2026-11-18T10:00:00.000Z');
+    expect(after.find(t => t.id === 'w')).toMatchObject({ isPriority: true, priorityOrder: 2 });
+    expect(ids(computeActivePriorityTasks(after, WEDNESDAY))).toEqual(['o']);
+    expect(ids(computeActivePriorityTasks(after, THURSDAY))).toEqual(['o']);
+    expect(ids(computeActivePriorityTasks(after, NEXT_WEDNESDAY))).toEqual(['w', 'o']);
+  });
+
+  it('一次性優先任務完成後仍會拿掉標記，其他優先任務重新編號', () => {
+    const first = { ...once, priorityOrder: 1 };
+    const second = { ...daily, priorityOrder: 2 };
+    const after = priorityAfterCompletion([first, second, normal], 'o');
+    expect(after.find(t => t.id === 'o')).toMatchObject({ isPriority: false, priorityOrder: 0 });
+    expect(after.find(t => t.id === 'd').priorityOrder).toBe(1);
+  });
+
+  it('不是優先任務、或找不到這個 id 時原樣回傳（同一個陣列）', () => {
+    const list = [normal, daily];
+    expect(priorityAfterCompletion(list, 'n')).toBe(list);
+    expect(priorityAfterCompletion(list, 'nope')).toBe(list);
+    expect(priorityAfterCompletion(list, 'd')).toBe(list);
   });
 });

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { getTodayStr, getLocalISOString } from '../utils';
 import { createDefaultData, normalizeData } from '../shared/defaultData';
-import { completionRewardTickets, computeActivePriorityTasks, createRecentGuard, isOneTimeTask, renumberPriorityTasks } from '../domain/tasks';
+import { completionRewardTickets, computeActivePriorityTasks, createRecentGuard, isOneTimeTask, priorityAfterCompletion, renumberPriorityTasks } from '../domain/tasks';
 import { localStampedIsoFromUtcIso, parseLocalDate } from '../domain/dates';
 import { saveResultError, toSaveFailure } from '../domain/saveRetry';
 import { withoutReenteredSecret } from '../domain/loadError';
@@ -533,13 +533,9 @@ export const AppDataProvider = ({ children }) => {
                       data.archivedTasks.find(m => m.id === task.majorTaskId);
 
     updateData(prev => {
-      let newSubTasks = [...prev.subTasks];
+      // 每日、每週任務完成後保留優先標記；一次性任務拿掉並重排（規則見 domain/tasks.js）
+      let newSubTasks = priorityAfterCompletion(prev.subTasks, id);
       let newArchivedSubTasks = [...prev.archivedSubTasks];
-
-      if (task.isPriority) {
-        const tempTasks = newSubTasks.map(t => t.id === id ? { ...t, isPriority: false, priorityOrder: 0 } : t);
-        newSubTasks = renumberPriorityTasks(tempTasks);
-      }
 
       const completionRecord = {
         id: crypto.randomUUID(),

@@ -59,6 +59,29 @@ export function computeActivePriorityTasks(subTasks, now = new Date()) {
     .sort((a, b) => a.priorityOrder - b.priorityOrder);
 }
 
+/**
+ * 完成之後還要不要保留「優先」標記（Q11）。
+ * - 每日、每週任務：保留。今天完成後，computeActivePriorityTasks 會在今天剩下的時間跳過它；
+ *   明天（每週任務是下一個指定的日子）它又會排回原本的順位。
+ * - 一次性任務：拿掉（它已經歸檔，不會再做）。
+ * - 隨時挑戰任務本來就不能設成優先；舊資料萬一有，也照一次性任務的規則拿掉，
+ *   否則它永遠不算「今天已完成」，會一直擋住其他任務。
+ */
+export function keepsPriorityAfterCompletion(task) {
+  return isRepeating(task);
+}
+
+/**
+ * 完成任務 taskId 之後的子任務清單（只處理優先標記，不處理完成次數與歸檔）。
+ * 要拿掉優先標記時，拿掉後把剩下的優先任務重新編成 1..n；要保留時原樣回傳。
+ */
+export function priorityAfterCompletion(subTasks, taskId) {
+  const task = subTasks.find(t => t.id === taskId);
+  if (!task?.isPriority || keepsPriorityAfterCompletion(task)) return subTasks;
+  const withoutMark = subTasks.map(t => (t.id === taskId ? { ...t, isPriority: false, priorityOrder: 0 } : t));
+  return renumberPriorityTasks(withoutMark);
+}
+
 /** 一次性任務：不是每日、每週、隨時挑戰的任務 */
 export function isOneTimeTask(task) {
   return !!task && task.type !== 'daily' && task.type !== 'weekly' && task.type !== 'infinite';
