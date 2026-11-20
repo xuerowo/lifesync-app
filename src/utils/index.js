@@ -107,12 +107,16 @@ export const calculatePomodoroStats = (timeline) => {
     const duration = Math.max(0, (endTime - startTime) / 1000);
 
     // 根據段落起始事件更新狀態
+    // 進入新階段一定代表已解除暫停（舊紀錄在暫停中切換階段時沒有寫 pause_end）
     if (startEvent.type === 'focus_start') {
       currentMode = 'focus';
+      isPaused = false;
     } else if (startEvent.type === 'flow_start') {
       currentMode = 'flow';
+      isPaused = false;
     } else if (startEvent.type === 'break_start') {
       currentMode = 'break';
+      isPaused = false;
     } else if (startEvent.type === 'pause_start') {
       isPaused = true;
     } else if (startEvent.type === 'pause_end') {

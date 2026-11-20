@@ -29,6 +29,17 @@ export const shouldHandleTimeout = ({ timeLeft, status, isPaused, showSettlement
   !showSummary;
 
 /**
+ * 進入新階段（focus_start／break_start／flow_start）時要寫進時間軸的事件。
+ * 如果當下正在暫停，先補一筆時間相同的 pause_end，讓時間軸上的暫停有頭有尾。
+ */
+export const phaseStartEvents = (type, { isPaused, time }) => {
+  const events = [];
+  if (isPaused) events.push({ type: 'pause_end', time });
+  events.push({ type, time });
+  return events;
+};
+
+/**
  * 倒數歸零後的下一個階段。
  * 回傳 null 表示這個狀態沒有「時間到」可言（idle、flow 等）。
  */

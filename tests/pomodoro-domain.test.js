@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { breakSecondsFor, nextPhaseOnTimeout, shouldHandleTimeout } from '../src/domain/pomodoro.js'
+import { breakSecondsFor, nextPhaseOnTimeout, phaseStartEvents, shouldHandleTimeout } from '../src/domain/pomodoro.js'
 
 const settings = { focus: 25, break: 5 }
 
@@ -50,6 +50,23 @@ describe('nextPhaseOnTimeout：倒數歸零後的下一階段', () => {
   it('待機與心流沒有「時間到」', () => {
     expect(nextPhaseOnTimeout({ status: 'idle', cycles: 0, settings })).toBeNull()
     expect(nextPhaseOnTimeout({ status: 'flow', cycles: 0, settings })).toBeNull()
+  })
+})
+
+describe('phaseStartEvents：進入新階段時寫入的事件', () => {
+  const time = '2026-01-01T09:10:00.000Z'
+
+  it('沒有暫停時只寫階段開始', () => {
+    expect(phaseStartEvents('break_start', { isPaused: false, time })).toEqual([
+      { type: 'break_start', time },
+    ])
+  })
+
+  it('暫停中切換時先補 pause_end，時間與新階段相同', () => {
+    expect(phaseStartEvents('flow_start', { isPaused: true, time })).toEqual([
+      { type: 'pause_end', time },
+      { type: 'flow_start', time },
+    ])
   })
 })
 

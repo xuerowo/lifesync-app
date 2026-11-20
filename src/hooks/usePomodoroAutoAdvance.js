@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useRef } from 'react';
 import { useAudio } from './useAudio';
-import { breakSecondsFor, nextPhaseOnTimeout, shouldHandleTimeout } from '../domain/pomodoro';
+import { breakSecondsFor, nextPhaseOnTimeout, phaseStartEvents, shouldHandleTimeout } from '../domain/pomodoro';
 
 /**
  * 番茄鐘的階段切換（進入專注／休息／心流）與「時間到」的自動處理。
@@ -24,8 +24,10 @@ export const usePomodoroAutoAdvance = ({
   // 同一次歸零只處理一次；倒數重新大於 0 才解除
   const timeoutHandledRef = useRef(false);
 
-  const addTimelineEvent = (type, time = new Date().toISOString()) => {
-    setTimeline(prev => [...prev, { type, time }]);
+  // 寫入「進入新階段」事件；若正在暫停，會先補一筆 pause_end
+  const addPhaseStartEvent = (type, time = new Date().toISOString()) => {
+    const events = phaseStartEvents(type, { isPaused, time });
+    setTimeline(prev => [...prev, ...events]);
   };
 
   /**
@@ -42,7 +44,7 @@ export const usePomodoroAutoAdvance = ({
     if (newSession) {
       setTimeline([{ type: 'focus_start', time: now }]);
     } else {
-      addTimelineEvent('focus_start', now);
+      addPhaseStartEvent('focus_start', now);
     }
     setShowSettlement(false);
     setShowSummary(false);
@@ -54,14 +56,16 @@ export const usePomodoroAutoAdvance = ({
     setStatus('break');
     setCurrentSessionDuration(0);
     setIsPaused(false);
-    addTimelineEvent('break_start');
+    addPhaseStartEvent('break_start');
     setTimeLeft(breakSecondsFor(currentCycles, settings));
   };
 
+  // 進入心流也一併解除暫停，與時間軸（flow_start 之後不算暫停）一致
   const enterFlow = () => {
     setStatus('flow');
     setCurrentSessionDuration(0);
-    addTimelineEvent('flow_start');
+    setIsPaused(false);
+    addPhaseStartEvent('flow_start');
   };
 
   const handleTimeout = useEffectEvent(() => {
