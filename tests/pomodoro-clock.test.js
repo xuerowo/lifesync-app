@@ -239,7 +239,7 @@ describe('loadPomodoroState：開啟程式時讀回番茄鐘狀態', () => {
   it('沒有存過任何東西：待機、預設設定', () => {
     const s = loadPomodoroState(fakeStorage({}), ms(0))
     expect(s.status).toBe('idle')
-    expect(s.settings).toEqual({ focus: 25, break: 5 })
+    expect(s.settings).toEqual({ focus: 25, break: 5, longBreakEnabled: true, longBreakMinutes: 20, longBreakEvery: 4 })
     expect(s.timeline).toEqual([])
     expect(s.phaseLength).toBeNull()
   })
@@ -328,7 +328,7 @@ describe('loadPomodoroState：開啟程式時讀回番茄鐘狀態', () => {
       lastPomodoroTick: 'xyz',
     }), ms(0))
     expect(s.status).toBe('break')
-    expect(s.settings).toEqual({ focus: 25, break: 5 })
+    expect(s.settings).toEqual({ focus: 25, break: 5, longBreakEnabled: true, longBreakMinutes: 20, longBreakEvery: 4 })
     expect(s.selectedTaskIds).toEqual([])
     expect(s.sessionStats).toBeNull()
     expect(s.cycles).toBe(0)
@@ -358,6 +358,13 @@ describe('loadPomodoroState：開啟程式時讀回番茄鐘狀態', () => {
   it('不在等待時，舊的「已關掉鈴聲」不會帶到下一次', () => {
     const s = loadPomodoroState(fakeStorage(running({ pomodoroAlarmMuted: 'true', lastPomodoroTick: ms(1) })), ms(1) + 1000)
     expect(s.alarmMuted).toBe(false)
+  })
+
+  it('舊的設定（休息 15 分鐘、沒有長休息欄位）：讀進來時換算成「長休息關閉」，之後以存下的設定為準', () => {
+    const s = loadPomodoroState(fakeStorage({ pomodoroSettings: JSON.stringify({ focus: 30, break: 15 }) }), ms(0))
+    expect(s.settings).toEqual({ focus: 30, break: 15, longBreakEnabled: false, longBreakMinutes: 20, longBreakEvery: 4 })
+    const later = loadPomodoroState(fakeStorage({ pomodoroSettings: JSON.stringify({ focus: 30, break: 5, longBreakEnabled: false, longBreakMinutes: 20, longBreakEvery: 4 }) }), ms(0))
+    expect(later.settings.longBreakEnabled).toBe(false)
   })
 
   it('看不懂的狀態當成待機', () => {

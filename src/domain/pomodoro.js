@@ -1,9 +1,59 @@
 // 番茄鐘的階段轉換規則（純函式，不碰 React 狀態，方便測試）
 
-// 每 4 輪給一次長休息；只有在休息設定不長（<= 10 分鐘）時才套用
-const LONG_BREAK_EVERY = 4;
-const LONG_BREAK_MAX_SETTING = 10;
-const LONG_BREAK_MINUTES = 20;
+// ---------------------------------------------------------------------------
+// 設定（存在 localStorage 的 pomodoroSettings）
+// ---------------------------------------------------------------------------
+
+// 各項分鐘數的可選範圍，和設定畫面的拉桿相同
+export const POMODORO_RANGES = {
+  focus: { min: 5, max: 90 },
+  break: { min: 1, max: 30 },
+  // 長休息也是休息，用和「休息時間」一樣的範圍
+  longBreakMinutes: { min: 1, max: 30 },
+  // 每幾個番茄一次長休息：至少 2（每 1 個就長休息，等於把休息時間調長）
+  longBreakEvery: { min: 2, max: 10 },
+};
+
+// 2026-11-20 之前沒有長休息設定，寫死「休息設定 <= 10 分鐘時，每 4 個番茄休息 20 分鐘」。
+// 舊設定沒有這幾個欄位時，照舊規則換算成設定值；存回去之後就以設定為準，不再看休息是不是 <= 10 分鐘。
+const LEGACY_LONG_BREAK_MAX_SETTING = 10;
+const DEFAULT_LONG_BREAK_MINUTES = 20;
+const DEFAULT_LONG_BREAK_EVERY = 4;
+
+/** 轉成範圍內的整數；不是數字就用 fallback */
+const clampInt = (value, { min, max }, fallback) => {
+  if (typeof value !== 'number' && typeof value !== 'string') return fallback;
+  const n = value === '' ? NaN : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(n)));
+};
+
+/**
+ * 整理番茄鐘設定：補上預設值、舊設定換算長休息、長休息的值一律是範圍內的整數。
+ * 專注與休息時間只在不是數字時換成預設（維持舊行為，不改動已存的值）。
+ * @returns {{ focus: number, break: number, longBreakEnabled: boolean, longBreakMinutes: number, longBreakEvery: number }}
+ */
+export const normalizePomodoroSettings = (raw) => {
+  const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const settings = { ...source };
+  settings.focus = Number.isFinite(source.focus) ? source.focus : 25;
+  settings.break = Number.isFinite(source.break) ? source.break : 5;
+  settings.longBreakEnabled = typeof source.longBreakEnabled === 'boolean'
+    ? source.longBreakEnabled
+    : settings.break <= LEGACY_LONG_BREAK_MAX_SETTING;
+  settings.longBreakMinutes = clampInt(source.longBreakMinutes, POMODORO_RANGES.longBreakMinutes, DEFAULT_LONG_BREAK_MINUTES);
+  settings.longBreakEvery = clampInt(source.longBreakEvery, POMODORO_RANGES.longBreakEvery, DEFAULT_LONG_BREAK_EVERY);
+  return settings;
+};
+
+/**
+ * 這次休息是不是長休息。
+ * @param {number} cycles 進入這次休息時「已完成」的番茄數
+ */
+export const isLongBreak = (cycles, settings) => {
+  const s = normalizePomodoroSettings(settings);
+  return s.longBreakEnabled && cycles > 0 && cycles % s.longBreakEvery === 0;
+};
 
 /**
  * 進入休息時應倒數幾秒。
@@ -11,9 +61,7 @@ const LONG_BREAK_MINUTES = 20;
  * @param {{ break: number }} settings 分鐘數設定
  */
 export const breakSecondsFor = (cycles, settings) => {
-  if (settings.break <= LONG_BREAK_MAX_SETTING && cycles > 0 && cycles % LONG_BREAK_EVERY === 0) {
-    return LONG_BREAK_MINUTES * 60;
-  }
+  if (isLongBreak(cycles, settings)) return normalizePomodoroSettings(settings).longBreakMinutes * 60;
   return settings.break * 60;
 };
 
@@ -21,10 +69,10 @@ export const breakSecondsFor = (cycles, settings) => {
  * 下一次休息的長度，以及是不是長休息（等待畫面的按鈕要寫「開始長休息（20 分鐘）」）。
  * @param {number} cycles 進入這次休息時「已完成」的番茄數
  */
-export const nextBreakInfo = (cycles, settings) => {
-  const seconds = breakSecondsFor(cycles, settings);
-  return { seconds, isLong: seconds !== settings.break * 60 };
-};
+export const nextBreakInfo = (cycles, settings) => ({
+  seconds: breakSecondsFor(cycles, settings),
+  isLong: isLongBreak(cycles, settings),
+});
 
 /**
  * 「時間到」是否該被處理。已經在等使用者按「開始休息／開始專注」時（awaiting）不再處理。

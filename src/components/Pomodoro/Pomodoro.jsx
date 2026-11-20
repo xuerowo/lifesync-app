@@ -9,7 +9,7 @@ import { isPausedByAppClose, pomodoroClock } from '../../domain/pomodoroClock';
 import PomodoroSummary from './PomodoroSummary';
 import PomodoroHistory from './PomodoroHistory';
 import { completionRewardTickets } from '../../domain/tasks';
-import { addableSessionTasks, nextBreakInfo, pomodoroCandidateTasks, pomodoroSettlementTickets, settlePomodoroTickets } from '../../domain/pomodoro';
+import { addableSessionTasks, nextBreakInfo, normalizePomodoroSettings, POMODORO_RANGES, pomodoroCandidateTasks, pomodoroSettlementTickets, settlePomodoroTickets } from '../../domain/pomodoro';
 import AddSessionTaskPicker from './AddSessionTaskPicker';
 
 const Pomodoro = ({
@@ -47,6 +47,10 @@ const Pomodoro = ({
   const { data, updateData, addPomodoroRecord } = useAppData();
 
   const [isAddingTask, setIsAddingTask] = useState(false);
+
+  // 設定一律經過整理再存（長休息的值保證是範圍內的整數）
+  const updateSettings = (patch) => setSettings(prev => normalizePomodoroSettings({ ...prev, ...patch }));
+  const longBreakSettings = normalizePomodoroSettings(settings);
 
   // 可選的目標任務（學習維度、未完成；規則見 domain/pomodoro.js，「＋」加入任務也用同一份）
   const learningTasks = pomodoroCandidateTasks(subTasks);
@@ -318,7 +322,7 @@ const Pomodoro = ({
                       max="90"
                       step="1"
                       value={settings.focus}
-                      onChange={(e) => setSettings({ ...settings, focus: Number(e.target.value) })}
+                      onChange={(e) => updateSettings({ focus: Number(e.target.value) })}
                       className="w-full accent-sky-500 h-1.5 md:h-2"
                     />
                     <div className="text-right text-lg md:text-xl font-black text-sky-700 mt-1">{settings.focus} min</div>
@@ -330,10 +334,57 @@ const Pomodoro = ({
                       min="1"
                       max="30"
                       value={settings.break}
-                      onChange={(e) => setSettings({ ...settings, break: Number(e.target.value) })}
+                      onChange={(e) => updateSettings({ break: Number(e.target.value) })}
                       className="w-full accent-emerald-500 h-1.5 md:h-2"
                     />
                     <div className="text-right text-lg md:text-xl font-black text-emerald-600 mt-1">{settings.break} min</div>
+                  </div>
+                  {/* 長休息：每完成幾個番茄，那一次休息改用長休息的分鐘數 */}
+                  <div className="pt-3 border-t border-white/60">
+                    <label className="flex items-center justify-between gap-3 cursor-pointer">
+                      <span className="text-[10px] md:text-xs font-bold text-sky-800">長休息</span>
+                      <input
+                        type="checkbox"
+                        checked={longBreakSettings.longBreakEnabled}
+                        onChange={(e) => updateSettings({ longBreakEnabled: e.target.checked })}
+                        className="w-4 h-4 accent-emerald-500 cursor-pointer"
+                      />
+                    </label>
+                    {longBreakSettings.longBreakEnabled ? (
+                      <div className="space-y-3 mt-3">
+                        <div>
+                          <label className="block text-[10px] md:text-xs font-bold text-sky-800 mb-2">長休息時間 (分鐘)</label>
+                          <input
+                            type="range"
+                            min={POMODORO_RANGES.longBreakMinutes.min}
+                            max={POMODORO_RANGES.longBreakMinutes.max}
+                            step="1"
+                            value={longBreakSettings.longBreakMinutes}
+                            onChange={(e) => updateSettings({ longBreakMinutes: Number(e.target.value) })}
+                            className="w-full accent-emerald-500 h-1.5 md:h-2"
+                          />
+                          <div className="text-right text-lg md:text-xl font-black text-emerald-600 mt-1">{longBreakSettings.longBreakMinutes} min</div>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] md:text-xs font-bold text-sky-800 mb-2">每幾個番茄一次</label>
+                          <input
+                            type="range"
+                            min={POMODORO_RANGES.longBreakEvery.min}
+                            max={POMODORO_RANGES.longBreakEvery.max}
+                            step="1"
+                            value={longBreakSettings.longBreakEvery}
+                            onChange={(e) => updateSettings({ longBreakEvery: Number(e.target.value) })}
+                            className="w-full accent-emerald-500 h-1.5 md:h-2"
+                          />
+                          <div className="text-right text-lg md:text-xl font-black text-emerald-600 mt-1">每 {longBreakSettings.longBreakEvery} 個</div>
+                        </div>
+                        <p className="text-[10px] md:text-[11px] font-bold text-slate-500">
+                          完成第 {longBreakSettings.longBreakEvery}、{longBreakSettings.longBreakEvery * 2}…個番茄後，休息 {longBreakSettings.longBreakMinutes} 分鐘
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-[10px] md:text-[11px] font-bold text-slate-500">關閉：每次都休息 {settings.break} 分鐘</p>
+                    )}
                   </div>
                 </div>
               </div>

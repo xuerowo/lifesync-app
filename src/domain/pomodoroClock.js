@@ -7,7 +7,7 @@
 // - 電腦休眠、阻塞式對話框開著時，畫面的計時器雖然停住，醒來後照實際經過的時間算（規則：要算）。
 // - 程式關閉的時間不算：下次開啟時，在最後一次「還活著」的時間點補一筆 pause_start，停在關閉時的剩餘時間（規則：視同暫停）。
 
-import { breakSecondsFor, nextPhaseOnTimeout } from './pomodoro.js';
+import { breakSecondsFor, nextPhaseOnTimeout, normalizePomodoroSettings } from './pomodoro.js';
 
 const PHASE_START_TYPES = new Set(['focus_start', 'flow_start', 'break_start']);
 const RUNNING_STATUSES = new Set(['focus', 'flow', 'break']);
@@ -179,14 +179,8 @@ export const loadPomodoroState = (storage, nowMs) => {
     }
   };
 
-  const savedSettings = parseJson(get('pomodoroSettings'), null);
-  const settings = {
-    focus: 25,
-    break: 5,
-    ...(savedSettings && typeof savedSettings === 'object' && !Array.isArray(savedSettings) ? savedSettings : {}),
-  };
-  if (!Number.isFinite(settings.focus)) settings.focus = 25;
-  if (!Number.isFinite(settings.break)) settings.break = 5;
+  // 舊設定沒有長休息欄位時，在這裡照舊規則換算（見 normalizePomodoroSettings）
+  const settings = normalizePomodoroSettings(parseJson(get('pomodoroSettings'), null));
 
   const rawStatus = get('pomodoroStatus');
   const status = RUNNING_STATUSES.has(rawStatus) ? rawStatus : 'idle';
