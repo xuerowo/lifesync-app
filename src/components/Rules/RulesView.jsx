@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ListChecks, Plus, ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
+import { deleteRuleMessage } from '../../domain/confirmations.js';
 
 const RulesView = () => {
   const { data, updateData } = useAppData();
@@ -16,6 +17,9 @@ const RulesView = () => {
   };
 
   const deleteRule = (id) => {
+    // 內容是空的守則沒有東西會遺失，直接刪；有內容的先確認
+    const message = deleteRuleMessage(data.rules.find(r => r.id === id));
+    if (message && !confirm(message)) return;
     updateData(prev => ({ ...prev, rules: prev.rules.filter(r => r.id !== id) }));
   };
 

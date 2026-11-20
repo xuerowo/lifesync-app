@@ -6,6 +6,7 @@ import { useAppData } from '../../contexts/AppDataContext';
 import { useLottery } from '../../hooks/useLottery';
 import { RARITY_STYLES, ITEMS_PER_PAGE } from '../../constants/index.jsx';
 import RarityBadge from '../Shared/RarityBadge';
+import { deleteAchievementMessage } from '../../domain/confirmations.js';
 import { getPrizeSortName } from '../../domain/lottery';
 import { clampPage, getTotalPages } from '../../domain/pagination';
 import { atLeast, toNonNegativeInt, toNonNegativeNumber } from '../../domain/inputs';
@@ -477,7 +478,7 @@ const RewardsView = ({
                               <span className="text-[10px] font-black text-sky-300 uppercase tracking-widest">次</span>
                             </div>
                           </div>
-                          <button onClick={() => updateData(prev => ({ ...prev, achievements: prev.achievements.filter(a => a.id !== achievement.id) }))} className="p-2 text-sky-200 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-4 h-4" /></button>
+                          <button onClick={() => { if (confirm(deleteAchievementMessage(achievement))) updateData(prev => ({ ...prev, achievements: prev.achievements.filter(a => a.id !== achievement.id) })); }} title="刪除成就" className="p-2 text-sky-200 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-4 h-4" /></button>
                         </div>
                         <div className="space-y-4">
                           <div className="flex items-center gap-3">

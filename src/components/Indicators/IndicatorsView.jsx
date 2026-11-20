@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Archive, Trophy, RotateCcw, Trash2, Plus, CheckCircle2, ArrowUp, ArrowDown, BookOpen, Heart, Smile } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
 import { INDICATORS } from '../../constants/index.jsx';
+import { deleteGoalMessage } from '../../domain/confirmations.js';
 
 // 每個維度最多幾個目標（新增與恢復目標都受這個限制）
 const MAX_GOALS_PER_INDICATOR = 3;
@@ -122,7 +123,7 @@ const IndicatorsView = () => {
                     <button onClick={() => completeGoal(ind.id, goal.id)} className="p-1 md:p-1.5 text-sky-200 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg md:rounded-xl transition-all" title="完成目標"><CheckCircle2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
                     <button onClick={() => moveGoal(ind.id, idx, -1)} className="p-1 md:p-1.5 text-sky-200 hover:text-sky-400 hover:bg-sky-50 rounded-lg md:rounded-xl transition-all" title="上移"><ArrowUp className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
                     <button onClick={() => moveGoal(ind.id, idx, 1)} className="p-1 md:p-1.5 text-sky-200 hover:text-sky-400 hover:bg-sky-50 rounded-lg md:rounded-xl transition-all" title="下移"><ArrowDown className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
-                    <button onClick={() => deleteGoal(ind.id, goal.id)} className="p-1 md:p-1.5 text-sky-200 hover:text-red-400 hover:bg-red-50 rounded-lg md:rounded-xl transition-all" title="刪除"><Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
+                    <button onClick={() => { if (confirm(deleteGoalMessage(data, goal))) deleteGoal(ind.id, goal.id); }} className="p-1 md:p-1.5 text-sky-200 hover:text-red-400 hover:bg-red-50 rounded-lg md:rounded-xl transition-all" title="刪除"><Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
                   </div>
                 </motion.div>
               ))}
@@ -176,7 +177,7 @@ const IndicatorsView = () => {
                     </div>
                     <div className="flex gap-0.5 md:gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => uncompleteGoal(goal.id)} className="p-1.5 md:p-2 text-emerald-300 hover:text-sky-500 transition-colors" title="恢復目標"><RotateCcw className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
-                      <button onClick={() => updateData(prev => ({ ...prev, archivedGoals: prev.archivedGoals.filter(g => g.id !== goal.id) }))} className="p-1.5 md:p-2 text-emerald-200 hover:text-red-400 transition-colors" title="刪除紀錄"><Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
+                      <button onClick={() => { if (confirm(deleteGoalMessage(data, goal, { archived: true }))) updateData(prev => ({ ...prev, archivedGoals: prev.archivedGoals.filter(g => g.id !== goal.id) })); }} className="p-1.5 md:p-2 text-emerald-200 hover:text-red-400 transition-colors" title="刪除紀錄"><Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
                     </div>
                   </div>
                   <h3 className="text-base md:text-lg font-black text-emerald-800 line-through mb-1 break-words leading-tight">{goal.title || '未命名目標'}</h3>

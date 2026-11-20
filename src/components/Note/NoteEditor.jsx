@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { BookOpen, X, CheckCircle2 } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
+import { DISCARD_NOTE_MESSAGE, hasUnsavedNoteChanges } from '../../domain/confirmations.js';
 
 const NoteEditor = ({ editingNote, setEditingNote }) => {
   const { data, updateData } = useAppData();
@@ -22,6 +23,12 @@ const NoteEditor = ({ editingNote, setEditingNote }) => {
     setEditingNote(null);
   };
 
+  // 按 X 關閉：有還沒保存的修改時先確認，避免一按就丟掉剛寫的內容
+  const handleClose = () => {
+    if (hasUnsavedNoteChanges(editingNote, localItem) && !confirm(DISCARD_NOTE_MESSAGE)) return;
+    setEditingNote(null);
+  };
+
   return createPortal(
     <div className="fixed inset-0 z-[500] flex items-center justify-center bg-sky-950/20 backdrop-blur-sm p-4 animate-in fade-in">
       <motion.div
@@ -33,7 +40,7 @@ const NoteEditor = ({ editingNote, setEditingNote }) => {
           <h3 className="font-black text-2xl flex items-center gap-3 text-sky-900 drop-shadow-sm">
             <BookOpen className="w-7 h-7 text-sky-500" /> {isNew ? '撰寫筆記' : '編輯筆記'}
           </h3>
-          <button onClick={() => setEditingNote(null)} className="p-3 hover:bg-white/40 rounded-2xl transition-all hover:scale-110 active:scale-90">
+          <button onClick={handleClose} title="關閉" className="p-3 hover:bg-white/40 rounded-2xl transition-all hover:scale-110 active:scale-90">
             <X className="w-6 h-6 text-sky-600" />
           </button>
         </div>

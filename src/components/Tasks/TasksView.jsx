@@ -6,6 +6,9 @@ import {
 import { useAppData } from '../../contexts/AppDataContext';
 import { INDICATORS } from '../../constants/index.jsx';
 import { getTodayStr, formatTaskTime } from '../../utils';
+import {
+  completeMajorTaskMessage, deleteMajorTaskMessage, deleteSubTaskMessage, revertCompletionMessage
+} from '../../domain/confirmations.js';
 
 const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask }) => {
   const {
@@ -76,6 +79,23 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
     } else {
       completeSubTaskData(id);
     }
+  };
+
+  // 會刪資料或扣券的操作，一律先確認；確認文字寫明會刪幾筆紀錄、扣幾張券
+  const confirmRevert = (subId, majorTaskId) => {
+    if (!confirm(revertCompletionMessage(data, subId))) return;
+    if (majorTaskId) lastInteractedMajorId.current = majorTaskId;
+    revertTaskCompletion(subId);
+  };
+
+  const confirmDeleteSubTask = (subId, majorTaskId) => {
+    if (!confirm(deleteSubTaskMessage(data, subId))) return;
+    lastInteractedMajorId.current = majorTaskId;
+    deleteSubTask(subId);
+  };
+
+  const confirmDeleteMajorTask = (majorTaskId) => {
+    if (confirm(deleteMajorTaskMessage(data, majorTaskId))) deleteMajorTask(majorTaskId);
   };
 
 
@@ -179,7 +199,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
               <div className={`w-8 h-8 md:w-10 md:h-10 rounded-xl md:rounded-2xl bg-gradient-to-br ${ind?.color} flex items-center justify-center text-white shadow-lg shadow-sky-200/50`}>{ind?.icon}</div>
               <span className="text-[8px] md:text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 md:px-4 md:py-2 bg-white/60 text-sky-700 rounded-xl md:rounded-2xl border border-white/40 backdrop-blur-md truncate max-w-[120px] md:max-w-none">{goal?.title || '計畫中'}</span>
             </div>
-            <button onClick={() => toggleMajorTask(task.id)} className="p-2 md:p-2.5 bg-white/60 hover:bg-emerald-50 text-sky-400 hover:text-emerald-500 rounded-xl md:rounded-2xl transition-all hover:scale-110 active:scale-90 border border-white/40 shadow-sm"><CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /></button>
+            <button onClick={() => { if (confirm(completeMajorTaskMessage(data, task.id))) toggleMajorTask(task.id); }} title="完成整個計畫" className="p-2 md:p-2.5 bg-white/60 hover:bg-emerald-50 text-sky-400 hover:text-emerald-500 rounded-xl md:rounded-2xl transition-all hover:scale-110 active:scale-90 border border-white/40 shadow-sm"><CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /></button>
           </div>
           <h3 className="text-xl md:text-2xl font-black text-sky-950 mb-1 md:mb-1.5 break-words tracking-tight relative z-10">{task.title}</h3>
           <p className="text-[9px] md:text-[10px] font-black text-sky-800 mb-6 md:mb-8 flex items-center gap-1.5 md:gap-2 uppercase tracking-[0.1em] bg-sky-100/50 w-fit px-2.5 py-1 rounded-lg border border-sky-200/50 relative z-10"><CalendarDays className="w-3 md:w-3.5 h-3 md:h-3.5" /> {task.startDate} — {task.endDate}</p>
@@ -223,10 +243,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                           checked={isTodayCompleted}
                           onChange={() => {
                             if (isTodayCompleted) {
-                              if (confirm('確定要取消今日的完成紀錄嗎？這將會回收一張抽卡券。')) {
-                                lastInteractedMajorId.current = task.id;
-                                revertTaskCompletion(sub.id);
-                              }
+                              confirmRevert(sub.id, task.id);
                             } else {
                               completeSubTask(sub.id, task.id);
                             }
@@ -260,7 +277,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                       {(sub.type === 'daily' || sub.type === 'weekly' || sub.type === 'infinite') && sub.completionCount > 0 && (
                         <div className="flex items-center gap-1 shrink-0">
                           <button
-                            onClick={() => { lastInteractedMajorId.current = task.id; revertTaskCompletion(sub.id); }}
+                            onClick={() => confirmRevert(sub.id, task.id)}
                             className="p-1 text-rose-300 hover:text-rose-500 transition-colors"
                             title="撤銷最後一次完成"
                           >
@@ -277,7 +294,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                   <div className="flex gap-0 opacity-0 md:group-hover/sub:opacity-100 transition-opacity shrink-0">
                     <button onClick={() => { lastInteractedMajorId.current = task.id; setEditingTask({ type: 'sub', item: sub }); }} className="p-1.5 md:p-2 text-sky-600 hover:text-sky-800 hover:bg-sky-50 rounded-lg md:rounded-xl transition-all" title="編輯項目"><Edit3 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
                     {(sub.type === 'daily' || sub.type === 'weekly' || sub.type === 'infinite') && (<button onClick={() => { if(confirm('確定要終止此任務並將其歸檔嗎？')) { lastInteractedMajorId.current = task.id; terminateSubTask(sub.id); } }} className="p-1.5 md:p-2 text-sky-600 hover:text-amber-500 hover:bg-amber-50 rounded-lg md:rounded-xl transition-all" title="終止並歸檔"><Archive className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>)}
-                    <button onClick={() => { lastInteractedMajorId.current = task.id; deleteSubTask(sub.id); }} className="p-1.5 md:p-2 text-sky-600 hover:text-red-500 hover:bg-red-50 rounded-lg md:rounded-xl transition-all" title="刪除項目"><Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
+                    <button onClick={() => confirmDeleteSubTask(sub.id, task.id)} className="p-1.5 md:p-2 text-sky-600 hover:text-red-500 hover:bg-red-50 rounded-lg md:rounded-xl transition-all" title="刪除項目"><Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
                   </div>
                 </motion.div>
                 );
@@ -300,7 +317,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                     <div className="space-y-2 mt-2">
                       {archivedSubs.map(sub => (
                         <div key={sub.id} className="flex items-center gap-2.5 p-2.5 bg-sky-50/30 rounded-xl md:rounded-2xl border border-sky-50 group/archived">
-                          <input type="checkbox" checked={true} onChange={() => { lastInteractedMajorId.current = task.id; revertTaskCompletion(sub.id); }} className="w-4 h-4 md:w-5 md:h-5 rounded-md md:rounded-lg text-emerald-500 border-sky-100 cursor-pointer" />
+                          <input type="checkbox" checked={true} onChange={() => confirmRevert(sub.id, task.id)} title="撤銷完成" className="w-4 h-4 md:w-5 md:h-5 rounded-md md:rounded-lg text-emerald-500 border-sky-100 cursor-pointer" />
                           <div className="flex-grow min-w-0">
                             <div className="flex items-start justify-between gap-1 mb-0.5">
                               <p className="text-[11px] md:text-xs font-bold line-through text-sky-300 break-words leading-tight">{sub.title}</p>
@@ -310,7 +327,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                             </div>
                             <p className="text-[7px] md:text-[8px] font-black text-sky-200">{formatTaskTime(sub)}</p>
                           </div>
-                          <button onClick={() => { lastInteractedMajorId.current = task.id; deleteSubTask(sub.id); }} className="opacity-0 md:group-hover/archived:opacity-100 p-1 text-sky-100 hover:text-red-400">
+                          <button onClick={() => confirmDeleteSubTask(sub.id, task.id)} title="刪除項目" className="opacity-0 md:group-hover/archived:opacity-100 p-1 text-sky-100 hover:text-red-400">
                             <Trash2 className="w-3 h-3 md:w-3.5 md:h-3.5" />
                           </button>
                         </div>
@@ -321,7 +338,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
               );
             })()}
           </div>
-          <div className="mt-4 md:mt-6 pt-3 md:pt-4 border-t border-white/20 flex justify-between relative z-10"><button onClick={() => setEditingTask({ type: 'major', item: task })} className="text-[9px] md:text-[10px] font-black text-sky-600 hover:text-sky-800 flex items-center gap-1 md:gap-1.5 px-2 md:px-3 py-1 md:py-1.5 bg-white/40 hover:bg-white/80 rounded-lg md:rounded-xl transition-all border border-white/40 shadow-sm"><Settings2 className="w-3 md:w-3.5 h-3 md:h-3.5" /> 編輯</button><button onClick={() => { if(confirm('確定要刪除此計畫及其所有任務嗎？')) deleteMajorTask(task.id) }} className="text-[9px] md:text-[10px] font-black text-sky-400 hover:text-red-500 flex items-center gap-1 md:gap-1.5 px-2 md:px-3 py-1 md:py-1.5 bg-white/40 hover:bg-red-50 rounded-lg md:rounded-xl transition-all border border-white/40 shadow-sm"><Trash2 className="w-3 md:w-3.5 h-3 md:h-3.5" /></button></div>
+          <div className="mt-4 md:mt-6 pt-3 md:pt-4 border-t border-white/20 flex justify-between relative z-10"><button onClick={() => setEditingTask({ type: 'major', item: task })} className="text-[9px] md:text-[10px] font-black text-sky-600 hover:text-sky-800 flex items-center gap-1 md:gap-1.5 px-2 md:px-3 py-1 md:py-1.5 bg-white/40 hover:bg-white/80 rounded-lg md:rounded-xl transition-all border border-white/40 shadow-sm"><Settings2 className="w-3 md:w-3.5 h-3 md:h-3.5" /> 編輯</button><button onClick={() => confirmDeleteMajorTask(task.id)} title="刪除計畫" className="text-[9px] md:text-[10px] font-black text-sky-400 hover:text-red-500 flex items-center gap-1 md:gap-1.5 px-2 md:px-3 py-1 md:py-1.5 bg-white/40 hover:bg-red-50 rounded-lg md:rounded-xl transition-all border border-white/40 shadow-sm"><Trash2 className="w-3 md:w-3.5 h-3 md:h-3.5" /></button></div>
         </motion.div>
       );
     })}
@@ -352,7 +369,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                 </div>
                 <div className="flex gap-0.5 md:gap-1">
                   <button onClick={() => updateData(prev => ({ ...prev, archivedTasks: prev.archivedTasks.filter(t => t.id !== task.id), majorTasks: [...prev.majorTasks, { ...task, completed: false }] }))} className="p-1.5 md:p-2 text-emerald-300 hover:text-sky-500 transition-colors" title="恢復計畫"><RotateCcw className="w-4 h-4 md:w-5 md:h-5" /></button>
-                  <button onClick={() => { if(confirm('確定要永久刪除此已完成計畫及其任務紀錄嗎？')) deleteMajorTask(task.id) }} className="p-1.5 md:p-2 text-emerald-200 hover:text-red-400 transition-colors" title="刪除計畫"><Trash2 className="w-4 h-4 md:w-5 md:h-5" /></button>
+                  <button onClick={() => confirmDeleteMajorTask(task.id)} className="p-1.5 md:p-2 text-emerald-200 hover:text-red-400 transition-colors" title="刪除計畫"><Trash2 className="w-4 h-4 md:w-5 md:h-5" /></button>
                 </div>
               </div>
               <h3 className="text-lg md:text-xl font-black text-emerald-800 mb-1 line-through break-words">{task.title}</h3>
@@ -372,11 +389,14 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                     <div className="space-y-2 mt-2 md:mt-3 animate-in slide-down">
                       {allSubs.map(sub => (
                         <div key={sub.id} className="flex items-center gap-2.5 p-2.5 md:p-3 bg-white/40 rounded-xl md:rounded-2xl border border-emerald-100/50">
+                          {/* 顯示真實的完成狀態：已撤銷（回到進行中）的任務不打勾，也不能再撤銷，避免一直重複扣券 */}
                           <input
                             type="checkbox"
-                            checked={true}
-                            onChange={() => revertTaskCompletion(sub.id)}
-                            className="w-4 h-4 md:w-5 md:h-5 rounded-md md:rounded-lg text-emerald-500 border-sky-100 cursor-pointer"
+                            checked={!!sub.completed}
+                            disabled={!sub.completed}
+                            onChange={() => { if (sub.completed) confirmRevert(sub.id); }}
+                            title={sub.completed ? '撤銷完成' : '已撤銷完成；恢復計畫後可以在計畫裡重新完成'}
+                            className={`w-4 h-4 md:w-5 md:h-5 rounded-md md:rounded-lg text-emerald-500 border-sky-100 ${sub.completed ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
                           />
                           <div className="flex-grow min-w-0">
                             <div className="flex items-start justify-between gap-1 mb-0.5">
