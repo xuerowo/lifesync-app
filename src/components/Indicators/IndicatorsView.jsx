@@ -7,7 +7,8 @@ import { INDICATORS } from '../../constants/index.jsx';
 // 每個維度最多幾個目標（新增與恢復目標都受這個限制）
 const MAX_GOALS_PER_INDICATOR = 3;
 
-const IndicatorsView = ({ setEditingTask }) => {
+// App 仍會傳 setEditingTask 進來，但這個頁面用不到
+const IndicatorsView = () => {
   const { data, updateData, getIndicatorStats } = useAppData();
   const [addingGoalTo, setAddingGoalTo] = useState(null);
   const [newGoalTitle, setNewGoalTitle] = useState('');
