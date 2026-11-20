@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, Menu, safeStorage, dialog, session } from 
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
+import { existsSync } from 'fs';
 import { setupCloudHandlers, setAbortFlag } from './cloudManager.js';
 import { createStorage } from './storage.js';
 import { resolveImageReadPath, copyImageIntoGallery } from './galleryFiles.js';
@@ -309,37 +310,76 @@ ipcMain.handle('cloud-cancel-sync', async () => {
 ipcMain.handle('export-full-backup', async (event, { targetDir, data }) => {
   abortLocalSync = false;
   setAbortFlag(false);
+  // 先寫到「.partial」資料夾，全部完成才改成正式名稱；
+  // 中途取消或失敗時保留 .partial 名稱，一看就知道這份備份不完整。
+  let partialDir = null;
   try {
     const timestamp = getPreciseTimestamp();
-    const backupDir = path.join(targetDir, `LifeSync_Backup_${timestamp}`);
-    const galleryBackupDir = path.join(backupDir, 'gallery');
-    
-    await fs.mkdir(galleryBackupDir, { recursive: true });
-    
-    // 1. 保存 JSON
-    await fs.writeFile(path.join(backupDir, 'lifesync-data.json'), JSON.stringify(data, null, 2), 'utf-8');
-    
-    // 2. 複製圖庫
-    try {
-      const files = await fs.readdir(GALLERY_DIR);
-      const total = files.length;
-      for (let i = 0; i < files.length; i++) {
-        if (abortLocalSync) break;
-        const file = files[i];
-        event.sender.send('cloud-progress', { 
-            current: i + 1, 
-            total, 
-            message: `正在備份圖庫: ${file}` 
-        });
-        await fs.copyFile(path.join(GALLERY_DIR, file), path.join(galleryBackupDir, file));
-      }
-    } catch {
-      console.warn('圖庫為空或無法讀取');
+    let finalDir = path.join(targetDir, `LifeSync_Backup_${timestamp}`);
+    // 同一秒內重複匯出時，不要和既有的資料夾混在一起
+    for (let n = 2; existsSync(finalDir) || existsSync(`${finalDir}.partial`); n++) {
+      finalDir = path.join(targetDir, `LifeSync_Backup_${timestamp}_${n}`);
     }
-    
-    return { success: true, path: backupDir, aborted: abortLocalSync };
+    partialDir = `${finalDir}.partial`;
+    const galleryBackupDir = path.join(partialDir, 'gallery');
+
+    await fs.mkdir(galleryBackupDir, { recursive: true });
+
+    // 1. 保存 JSON
+    await fs.writeFile(path.join(partialDir, 'lifesync-data.json'), JSON.stringify(data, null, 2), 'utf-8');
+
+    // 2. 複製圖庫（圖庫資料夾不存在＝沒有圖片；複製途中出錯則整份備份視為失敗）
+    let files = [];
+    try {
+      const entries = await fs.readdir(GALLERY_DIR, { withFileTypes: true });
+      files = entries.filter((entry) => entry.isFile()).map((entry) => entry.name);
+    } catch (readError) {
+      if (readError.code !== 'ENOENT') throw readError;
+      console.warn('圖庫資料夾不存在，只備份資料檔');
+    }
+    const total = files.length;
+    for (let i = 0; i < files.length; i++) {
+      if (abortLocalSync) break;
+      const file = files[i];
+      event.sender.send('cloud-progress', {
+          current: i + 1,
+          total,
+          message: `正在備份圖庫: ${file}`
+      });
+      await fs.copyFile(path.join(GALLERY_DIR, file), path.join(galleryBackupDir, file));
+    }
+
+    if (abortLocalSync) {
+      return { success: true, path: partialDir, aborted: true };
+    }
+
+    // 3. 全部完成，改成正式名稱（Windows 上剛寫好的資料夾可能被防毒軟體暫時鎖住，失敗時重試幾次）
+    try {
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await fs.rename(partialDir, finalDir);
+          break;
+        } catch (renameError) {
+          const retryable = ['EPERM', 'EACCES', 'EBUSY'].includes(renameError.code);
+          if (!retryable || attempt >= 5) throw renameError;
+          await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
+        }
+      }
+    } catch (renameError) {
+      return {
+        success: false,
+        path: partialDir,
+        error: `備份已寫入「${partialDir}」，但改成正式名稱時失敗：${renameError.message}`,
+      };
+    }
+    return { success: true, path: finalDir, aborted: false };
   } catch (error) {
-    return { success: false, error: error.message };
+    const leftPartial = partialDir && existsSync(partialDir);
+    return {
+      success: false,
+      path: leftPartial ? partialDir : null,
+      error: leftPartial ? `${error.message}（未完成的備份留在「${partialDir}」）` : error.message,
+    };
   }
 });
 
