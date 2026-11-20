@@ -246,6 +246,7 @@ ipcMain.handle('get-data', async () => {
 
 // 讀檔失敗時，從 backups\ 裡最近一份可用的自動備份還原。
 // 壞掉的資料檔會先改名保留（lifesync-data.corrupt-時間.json），絕不刪除。
+// 只有上一次讀檔失敗時才會執行；資料讀得好好的時候會回傳 RESTORE_NOT_ALLOWED，不動任何檔案。
 // 回傳和 get-data 相同的格式，另外加上 restoredFrom、restoredFromTime、preservedAs。
 ipcMain.handle('restore-latest-backup', async () => {
   try {
@@ -292,14 +293,15 @@ ipcMain.on('save-data-sync', (event, data) => {
 
 // 覆蓋本機資料（雲端還原、匯入 JSON、還原完整備份）之前，先在 backups\ 拍一份快照。
 // data 是畫面上目前的資料：先存好再拍，快照才不會漏掉最後幾秒的修改。
-// 回傳 { success, path? , error? }；失敗時畫面端不可繼續覆蓋。
+// 回傳 { success, path?, code?, error? }；失敗時畫面端不可繼續覆蓋。
+// code 是錯誤碼（例如 EEXIST、ENOSPC、SNAPSHOT_BLOCKED），畫面用它寫出白話的原因。
 ipcMain.handle('snapshot-data', async (event, { reason, data } = {}) => {
   try {
     const snapshotPath = await storage.snapshotCurrent(reason, data);
     return { success: true, path: snapshotPath };
   } catch (e) {
-    console.error('[storage] 覆蓋前快照失敗:', e.message);
-    return { success: false, error: e.message };
+    console.error('[storage] 覆蓋前快照失敗:', e.code, e.message);
+    return { success: false, code: e.code || 'SNAPSHOT_FAILED', error: e.message };
   }
 });
 

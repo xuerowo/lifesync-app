@@ -3,7 +3,7 @@ import fs from 'fs'
 import fsp from 'fs/promises'
 import os from 'os'
 import path from 'path'
-import { createStorage, DATA_FILE_NAME } from '../electron/storage.js'
+import { createStorage, DATA_FILE_NAME, compareBackupNames, isBackupFileName } from '../electron/storage.js'
 import { createDefaultData } from '../src/shared/defaultData.js'
 
 // 假的加密：加上前綴；解密時沒有前綴就當成解不開
@@ -247,6 +247,13 @@ describe('讀檔失敗時禁止存檔', () => {
     expect((await makeStorage().load()).status).toBe('error')
   })
 
+  it('資料檔不見、backups 裡只有不是程式建立的 .json → 當作新安裝', async () => {
+    fs.mkdirSync(backupDir)
+    writeJson(path.join(backupDir, 'my-notes.json'), { a: 1 })
+    const res = await makeStorage().load()
+    expect(res.status).toBe('new')
+  })
+
   it('資料檔不見但有備份 → MISSING_WITH_BACKUPS，且被擋下', async () => {
     fs.mkdirSync(backupDir)
     writeJson(path.join(backupDir, 'lifesync-data-2026-11-19.json'), { lotteryTickets: 3 })
@@ -346,6 +353,78 @@ describe('快照', () => {
     const storage = makeStorage()
     expect(await storage.snapshot('x')).toBeNull()
   })
+
+  it('同一秒內 3 份快照、只留 2 份時，刪掉的是第 1 份（不是依字串排序刪掉 -2）', async () => {
+    writeJson(dataFile, { lotteryTickets: 1 })
+    const storage = makeStorage({ maxSnapshots: 2 })
+    await storage.load()
+    const first = await storage.snapshot('import')
+    const second = await storage.snapshot('import')
+    const third = await storage.snapshot('import')
+    expect(path.basename(second)).toBe('snapshot-20261120-093000-import-2.json')
+    expect(path.basename(third)).toBe('snapshot-20261120-093000-import-3.json')
+    expect(fs.existsSync(first)).toBe(false)
+    expect(fs.existsSync(second)).toBe(true)
+    expect(fs.existsSync(third)).toBe(true)
+  })
+
+  it('原因結尾是「-數字」時改成「_數字」，不會和同一秒內的序號混淆', async () => {
+    writeJson(dataFile, { lotteryTickets: 1 })
+    const storage = makeStorage()
+    await storage.load()
+    expect(path.basename(await storage.snapshot('x-2'))).toBe('snapshot-20261120-093000-x_2.json')
+  })
+
+  it('上次讀檔失敗而且資料檔還是壞的 → SNAPSHOT_BLOCKED，不拍快照，舊快照不會被擠掉', async () => {
+    fs.mkdirSync(backupDir)
+    const good = path.join(backupDir, 'snapshot-20261119-120000-import.json')
+    writeJson(good, { lotteryTickets: 7 })
+    fs.writeFileSync(dataFile, '{ broken', 'utf-8')
+    const storage = makeStorage({ maxSnapshots: 1 })
+    expect((await storage.load()).status).toBe('error')
+    await expect(storage.snapshot('x')).rejects.toMatchObject({ code: 'SNAPSHOT_BLOCKED' })
+    await expect(storage.snapshotCurrent('x')).rejects.toMatchObject({ code: 'SNAPSHOT_BLOCKED' })
+    expect(listDir(backupDir)).toEqual(['snapshot-20261119-120000-import.json'])
+  })
+
+  it('上次讀檔失敗、但資料檔現在已經讀得出來 → 照常拍快照', async () => {
+    fs.writeFileSync(dataFile, '{ broken', 'utf-8')
+    const storage = makeStorage()
+    await storage.load()
+    writeJson(dataFile, { lotteryTickets: 3 })
+    expect(readJson(await storage.snapshot('x')).lotteryTickets).toBe(3)
+  })
+})
+
+describe('備份檔名', () => {
+  it('compareBackupNames：先比時間，同一秒再比序號', () => {
+    const names = [
+      'snapshot-20261120-093000-a-2.json',
+      'snapshot-20261120-093001-a.json',
+      'snapshot-20261120-093000-a.json',
+      'snapshot-20261120-093000-a-10.json',
+      'snapshot-20261119-235959-before-cloud-restore.json',
+    ]
+    expect([...names].sort(compareBackupNames)).toEqual([
+      'snapshot-20261119-235959-before-cloud-restore.json',
+      'snapshot-20261120-093000-a.json',
+      'snapshot-20261120-093000-a-2.json',
+      'snapshot-20261120-093000-a-10.json',
+      'snapshot-20261120-093001-a.json',
+    ])
+    expect(['lifesync-data-2026-11-20.json', 'lifesync-data-2026-01-05.json'].sort(compareBackupNames)).toEqual([
+      'lifesync-data-2026-01-05.json',
+      'lifesync-data-2026-11-20.json',
+    ])
+  })
+
+  it('isBackupFileName：只認每日備份與快照', () => {
+    expect(isBackupFileName('lifesync-data-2026-11-20.json')).toBe(true)
+    expect(isBackupFileName('snapshot-20261120-093000-import.json')).toBe(true)
+    expect(isBackupFileName('snapshot-20261120-093000.json')).toBe(true)
+    expect(isBackupFileName('my-notes.json')).toBe(false)
+    expect(isBackupFileName('lifesync-data.json')).toBe(false)
+  })
 })
 
 describe('snapshotCurrent：覆蓋前先存好畫面上的資料再拍快照', () => {
@@ -439,6 +518,20 @@ describe('restoreLatestBackup', () => {
     expect(res.preservedAs).toBe(path.join(dir, 'lifesync-data.corrupt-20261120-093000-2.json'))
     expect(fs.readFileSync(first, 'utf-8')).toBe('old garbage')
     expect(fs.readFileSync(res.preservedAs, 'utf-8')).toBe('new garbage')
+  })
+
+  it('資料讀得好好的時候不允許還原（RESTORE_NOT_ALLOWED），資料檔不會被改名', async () => {
+    fs.mkdirSync(backupDir)
+    writeJson(path.join(backupDir, 'lifesync-data-2026-11-19.json'), { lotteryTickets: 3 })
+    writeJson(dataFile, { lotteryTickets: 9 })
+    const storage = makeStorage()
+    expect((await storage.load()).status).toBe('ok')
+    const res = await storage.restoreLatestBackup()
+    expect(res).toMatchObject({ status: 'error', code: 'RESTORE_NOT_ALLOWED' })
+    expect(readJson(dataFile).lotteryTickets).toBe(9)
+    expect(listDir(dir).filter((f) => f.includes('.corrupt-'))).toEqual([])
+    // 從沒讀過檔也一樣不允許
+    expect(await makeStorage().restoreLatestBackup()).toMatchObject({ code: 'RESTORE_NOT_ALLOWED' })
   })
 
   it('沒有可用備份 → NO_BACKUP，不動原檔', async () => {

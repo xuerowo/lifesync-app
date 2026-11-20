@@ -16,6 +16,33 @@ const MAX_RENAME_RETRIES = 5;
 
 const DAILY_BACKUP_RE = /^lifesync-data-\d{4}-\d{2}-\d{2}\.json$/;
 const SNAPSHOT_RE = /^snapshot-\d{8}-\d{6}(-[A-Za-z0-9_-]+)?\.json$/;
+// 從檔名取出時間（daily：日期；snapshot：日期-時間）與同一秒內的序號（-2、-3…，沒有就是 1）
+const DAILY_KEY_RE = /^lifesync-data-(\d{4}-\d{2}-\d{2})\.json$/;
+const SNAPSHOT_KEY_RE = /^snapshot-(\d{8}-\d{6})(?:-[A-Za-z0-9_-]*?)?(?:-(\d+))?\.json$/;
+
+/** 是不是程式自己建立的備份檔（每日備份或快照）；偵測「有沒有備份」和還原時都用這個判斷 */
+export const isBackupFileName = (name) => DAILY_BACKUP_RE.test(name) || SNAPSHOT_RE.test(name);
+
+/**
+ * 備份檔的排序依據：先比時間，同一秒內再比序號（沒有序號的是第 1 份）。
+ * 不能直接比字串：「-2.json」的「-」排在「.json」的「.」前面，第 2 份會被當成比第 1 份舊。
+ */
+const backupSortKey = (name) => {
+  const daily = DAILY_KEY_RE.exec(name);
+  if (daily) return { time: daily[1], seq: 1 };
+  const snap = SNAPSHOT_KEY_RE.exec(name);
+  if (snap) return { time: snap[1], seq: snap[2] ? Number(snap[2]) : 1 };
+  return { time: '', seq: 0 };
+};
+
+/** 舊的在前 */
+export const compareBackupNames = (a, b) => {
+  const ka = backupSortKey(a);
+  const kb = backupSortKey(b);
+  if (ka.time !== kb.time) return ka.time < kb.time ? -1 : 1;
+  if (ka.seq !== kb.seq) return ka.seq - kb.seq;
+  return a < b ? -1 : a > b ? 1 : 0;
+};
 
 const pad = (n) => String(n).padStart(2, '0');
 const dateStamp = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -109,7 +136,7 @@ export function createStorage({
 
   const listBackupFiles = (re) => {
     try {
-      return fs.readdirSync(backupDir).filter((name) => re.test(name)).sort();
+      return fs.readdirSync(backupDir).filter((name) => re.test(name)).sort(compareBackupNames);
     } catch {
       return [];
     }
@@ -127,9 +154,19 @@ export function createStorage({
     }
   };
 
+  // 只算程式自己建立的備份（和還原時接受的檔名相同），使用者自己丟進去的其他 .json 不算
   const hasAnyBackup = () => {
     try {
-      return fs.readdirSync(backupDir).some((name) => name.toLowerCase().endsWith('.json'));
+      return fs.readdirSync(backupDir).some(isBackupFileName);
+    } catch {
+      return false;
+    }
+  };
+
+  // 資料檔現在讀得出來、而且是物件（用在上次讀檔失敗、但檔案可能已經好了的情況）
+  const dataFileParses = () => {
+    try {
+      return isPlainObject(JSON.parse(stripBom(fs.readFileSync(dataFile, 'utf-8'))));
     } catch {
       return false;
     }
@@ -327,11 +364,22 @@ export function createStorage({
     return result;
   };
 
+  // 拍快照：把目前的資料檔複製一份到 backups\。
+  // 上次讀檔失敗、而且資料檔現在還是讀不出來時拒絕（SNAPSHOT_BLOCKED）：
+  // 否則每拍一次壞檔，就會把一份好的快照擠出「最多保留 N 份」的範圍。
   const snapshot = (reason = 'manual') =>
     enqueue(async () => {
       if (!existsSync(dataFile)) return null;
+      if (!canSave() && !dataFileParses()) {
+        throw makeError(
+          'SNAPSHOT_BLOCKED',
+          `資料檔沒有成功載入（狀態：${lastLoadStatus ?? '尚未載入'}），而且現在仍讀不出來，不替它拍快照，以免擠掉較舊的好快照`,
+        );
+      }
       fs.mkdirSync(backupDir, { recursive: true });
-      const safeReason = String(reason).replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 40) || 'manual';
+      // 原因結尾若是「-數字」，會和同一秒內的序號（-2、-3…）分不清，所以改成「_數字」
+      const safeReason =
+        String(reason).replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 40).replace(/-(\d+)$/, '_$1') || 'manual';
       const base = `snapshot-${timeStamp(now())}-${safeReason}`;
       let target = path.join(backupDir, `${base}.json`);
       for (let i = 2; existsSync(target); i++) {
@@ -350,8 +398,16 @@ export function createStorage({
     return snapshot(reason);
   };
 
+  // 只在上次讀檔失敗時才能用：資料檔好好的時候還原，會把一份健康的資料檔改名成 .corrupt、改用較舊的備份
   const restoreLatestBackup = () =>
     enqueue(async () => {
+      if (lastLoadStatus !== 'error') {
+        return {
+          status: 'error',
+          code: 'RESTORE_NOT_ALLOWED',
+          error: `資料沒有讀檔失敗（狀態：${lastLoadStatus ?? '尚未載入'}），不需要也不允許從備份還原`,
+        };
+      }
       const candidates = [...listBackupFiles(DAILY_BACKUP_RE), ...listBackupFiles(SNAPSHOT_RE)]
         .map((name) => {
           const full = path.join(backupDir, name);
