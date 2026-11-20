@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, CheckCircle2, Star, Search, RotateCw } from 'lucide-react';
 import { RARITY_STYLES } from '../../constants';
@@ -7,7 +7,8 @@ import IpcImage from '../Shared/IpcImage';
 
 const MultiRewardReveal = ({ results, onClaimAll, onCancel, setLightboxImage }) => {
   const [revealedIndices, setRevealedIndices] = useState([]);
-  const [isAllRevealed, setIsAllRevealed] = useState(false);
+  // 全部翻開與否直接由已翻開的數量算出來，不必另外存一份狀態再用 effect 同步
+  const isAllRevealed = revealedIndices.length === results.length;
 
   const revealOne = (index) => {
     if (revealedIndices.includes(index)) return;
@@ -16,14 +17,7 @@ const MultiRewardReveal = ({ results, onClaimAll, onCancel, setLightboxImage }) 
 
   const revealAll = () => {
     setRevealedIndices(results.map((_, i) => i));
-    setIsAllRevealed(true);
   };
-
-  useEffect(() => {
-    if (revealedIndices.length === results.length) {
-      setIsAllRevealed(true);
-    }
-  }, [revealedIndices, results.length]);
 
   return (
     <div className="fixed inset-0 z-[300] flex flex-col items-center bg-sky-950/95 backdrop-blur-3xl p-4 sm:p-6 overflow-y-auto custom-scrollbar">

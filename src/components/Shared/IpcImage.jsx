@@ -5,43 +5,25 @@ import React, { useState, useEffect } from 'react';
  * Falls back to API endpoint in web environment.
  */
 const IpcImage = ({ src, className, alt = "", ...props }) => {
-  const [imageSrc, setImageSrc] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  // 只記住「哪一個 src 載入的結果」；其他狀態都在畫面重繪時直接算出來，
+  // 不在 effect 裡同步改狀態（React 規則不建議這樣做，會多重畫一次）
+  const [loaded, setLoaded] = useState({ src: null, imageSrc: null, error: false });
+  const useIpc = !!src && !!window.electronAPI;
 
   useEffect(() => {
-    if (!src) {
-      setImageSrc(null);
-      setLoading(false);
-      return;
-    }
-
-    if (!window.electronAPI) {
-      // Web environment fallback
-      setImageSrc(`/api/rewards/image?imagePath=${encodeURIComponent(src)}`);
-      setLoading(false);
-      return;
-    }
+    if (!src || !window.electronAPI) return;
 
     let isMounted = true;
     const loadImage = async () => {
-      setLoading(true);
-      setError(false);
       try {
         const base64 = await window.electronAPI.readImageBase64(src);
         if (isMounted) {
-          if (base64) {
-            setImageSrc(base64);
-          } else {
-            setError(true);
-          }
-          setLoading(false);
+          setLoaded({ src, imageSrc: base64 || null, error: !base64 });
         }
       } catch (err) {
         console.error('[IpcImage] Error loading image:', err);
         if (isMounted) {
-          setError(true);
-          setLoading(false);
+          setLoaded({ src, imageSrc: null, error: true });
         }
       }
     };
@@ -49,6 +31,22 @@ const IpcImage = ({ src, className, alt = "", ...props }) => {
     loadImage();
     return () => { isMounted = false; };
   }, [src]);
+
+  let imageSrc = null;
+  let loading = false;
+  let error = false;
+  if (!src) {
+    // 沒有圖片路徑：顯示「載入失敗」
+  } else if (!useIpc) {
+    // 瀏覽器模式：改向開發伺服器要圖片
+    imageSrc = `/api/rewards/image?imagePath=${encodeURIComponent(src)}`;
+  } else if (loaded.src !== src) {
+    // 這個 src 還沒載入完成
+    loading = true;
+  } else {
+    imageSrc = loaded.imageSrc;
+    error = loaded.error;
+  }
 
   if (loading) {
     return (

@@ -5,19 +5,12 @@ import { Trophy, Clock, CheckCircle2, Zap, Timer, X, Calendar, ArrowRight, Spark
 import { formatFlowTime, calculatePomodoroStats } from '../../utils';
 
 const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
-  if (!stats) return null;
-
-  const {
-    startTime,
-    endTime,
-    totalDuration,
-    focusDuration,
-    flowDuration,
-    breakDuration,
-    completedCycles,
-    timeline,
-    tasks
-  } = stats;
+  // hooks 必須在任何條件 return 之前呼叫，所以先用 ?. 取值，沒有 stats 時等 hooks 跑完才 return
+  const startTime = stats?.startTime;
+  const endTime = stats?.endTime;
+  const totalDuration = stats?.totalDuration;
+  const timeline = stats?.timeline;
+  const tasks = stats?.tasks;
 
   const formatTimeStr = (isoStr) => {
     const d = new Date(isoStr);
@@ -51,13 +44,15 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
   }, [statsSegments, totalDuration]);
 
   const taskMarkers = useMemo(() => {
-    return timeline
+    return (timeline || [])
       .filter(e => e.type === 'task_complete')
       .map(e => ({
         ...e,
         left: ((new Date(e.time) - new Date(startTime)) / (totalDuration * 1000)) * 100
       }));
   }, [timeline, startTime, totalDuration]);
+
+  if (!stats) return null;
 
   return createPortal(
     <div style={{ zIndex: 9999 }} className="fixed inset-0 flex items-center justify-center p-4">
