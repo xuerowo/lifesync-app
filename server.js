@@ -3,53 +3,51 @@ import cors from 'cors';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { createDefaultData } from './src/shared/defaultData.js';
+import { createStorage } from './electron/storage.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3001;
-const DATA_FILE = path.join(__dirname, 'data', 'lifesync-data.json');
+// 資料夾：設了 LIFESYNC_DATA_DIR（沙盒、測試用）就用它，否則用專案內的 data/
+const DATA_DIR = process.env.LIFESYNC_DATA_DIR
+  ? path.resolve(process.env.LIFESYNC_DATA_DIR)
+  : path.join(__dirname, 'data');
+
+// 與 Electron 版共用同一套存檔機制（安全寫入、每日備份、讀檔失敗就禁止存檔）。
+// 瀏覽器模式維持原本的行為：密碼不加密。
+const storage = createStorage({ dataDir: DATA_DIR });
 
 // 中間件
 app.use(cors());
 app.use(express.json({ limit: '50mb' })); // 支援大型圖片數據
 
-// 確保 data 目錄存在
-async function ensureDataDir() {
-  const dataDir = path.join(__dirname, 'data');
-  try {
-    await fs.access(dataDir);
-  } catch {
-    await fs.mkdir(dataDir, { recursive: true });
-  }
-}
-
 // 讀取數據
 app.get('/api/data', async (req, res) => {
   try {
-    await ensureDataDir();
-    const data = await fs.readFile(DATA_FILE, 'utf-8');
-    res.json(JSON.parse(data));
-  } catch (error) {
-    if (error.code === 'ENOENT') {
-      // 文件不存在，返回初始數據
-      res.json(createDefaultData());
-    } else {
-      console.error('讀取數據錯誤:', error);
-      res.status(500).json({ error: '讀取數據失敗' });
+    const result = await storage.load();
+    if (result.status === 'error') {
+      console.error('讀取數據錯誤（已停止存檔）:', result.code, result.error);
+      return res.status(500).json({ error: `讀取數據失敗（${result.code}）`, code: result.code });
     }
+    res.json(result.data);
+  } catch (error) {
+    console.error('讀取數據錯誤:', error);
+    res.status(500).json({ error: '讀取數據失敗' });
   }
 });
 
 // 保存數據
 app.post('/api/data', async (req, res) => {
   try {
-    await ensureDataDir();
-    await fs.writeFile(DATA_FILE, JSON.stringify(req.body, null, 2), 'utf-8');
+    await storage.save(req.body);
     res.json({ success: true, message: '數據已保存' });
   } catch (error) {
+    if (error.code === 'SAVE_BLOCKED') {
+      console.error('已拒絕存檔:', error.message);
+      return res.status(409).json({ error: error.message, code: error.code });
+    }
     console.error('保存數據錯誤:', error);
     res.status(500).json({ error: '保存數據失敗' });
   }
@@ -110,7 +108,7 @@ app.get('/api/rewards/image', async (req, res) => {
   try {
     await fs.access(imagePath);
     res.sendFile(imagePath);
-  } catch (error) {
+  } catch {
     res.status(404).json({ error: '圖片不存在' });
   }
 });
@@ -120,7 +118,14 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'LifeSync API 運行中' });
 });
 
+// 啟動時先讀一次，讓讀檔問題立刻顯示在主控台
+const initialLoad = await storage.load();
+if (initialLoad.status === 'error') {
+  console.error(`⚠️  資料檔讀取失敗（${initialLoad.code}）：${initialLoad.error}`);
+  console.error('   在問題排除前，所有存檔要求都會被拒絕，原檔不會被覆寫。');
+}
+
 app.listen(PORT, () => {
   console.log(`\n🚀 LifeSync API 服務器運行在 http://localhost:${PORT}`);
-  console.log(`📁 數據文件位置: ${DATA_FILE}\n`);
+  console.log(`📁 數據文件位置: ${storage.dataFile}\n`);
 });

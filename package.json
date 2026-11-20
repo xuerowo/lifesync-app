@@ -14,7 +14,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "sandbox": "node scripts/dev-sandbox.js"
   },
   "dependencies": {
     "@rollup/rollup-win32-x64-msvc": "^4.54.0",
