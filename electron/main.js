@@ -1,9 +1,10 @@
-import { app, BrowserWindow, ipcMain, Menu, safeStorage, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, safeStorage, dialog, session } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
 import { setupCloudHandlers, setAbortFlag } from './cloudManager.js';
 import { createStorage } from './storage.js';
+import { resolveImageReadPath } from './galleryFiles.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -58,6 +59,40 @@ async function ensureGalleryDir() {
   }
 }
 
+// 打包版載入的頁面
+const INDEX_HTML = path.join(__dirname, '../dist/index.html');
+
+/**
+ * 主視窗只能停留在程式自己的頁面：
+ * 開發時是 Vite 開發伺服器的同一個網站，打包後是本機的 dist/index.html。
+ * 重新整理（Ctrl+R）與 Vite 熱更新的整頁重載都是回到同一頁，不受影響。
+ */
+function isOwnPage(targetUrl) {
+  let url;
+  try {
+    url = new URL(targetUrl);
+  } catch {
+    return false;
+  }
+  if (process.env.VITE_DEV_SERVER_URL) {
+    try {
+      return url.origin === new URL(process.env.VITE_DEV_SERVER_URL).origin;
+    } catch {
+      return false;
+    }
+  }
+  if (url.protocol !== 'file:') return false;
+  try {
+    const target = path.resolve(fileURLToPath(url));
+    const index = path.resolve(INDEX_HTML);
+    return process.platform === 'win32'
+      ? target.toLowerCase() === index.toLowerCase()
+      : target === index;
+  } catch {
+    return false;
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -73,11 +108,20 @@ function createWindow() {
     icon: path.join(__dirname, '../public/app-icon.png'),
   });
 
+  // 禁止畫面被導到別的網址（例如把檔案拖進視窗、點到沒開新視窗的外部連結）
+  mainWindow.webContents.on('will-navigate', (event, legacyUrl) => {
+    const targetUrl = event.url ?? legacyUrl;
+    if (!isOwnPage(targetUrl)) {
+      event.preventDefault();
+      console.warn('[security] 已阻止頁面跳轉:', targetUrl);
+    }
+  });
+
   // 開發環境使用 Vite 開發伺服器，生產環境加載打包後的 index.html
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadFile(INDEX_HTML);
   }
 }
 
@@ -106,6 +150,11 @@ app.whenReady().then(() => {
   ];
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
+
+  // 程式沒有用到相機、麥克風、通知、剪貼簿等需要權限的功能，網頁提出的權限要求一律拒絕
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    callback(false);
+  });
 
   createWindow();
 
@@ -211,13 +260,13 @@ ipcMain.handle('sync-images', async (event, imagePaths) => {
 
 // 備援機制：直接透過 IPC 讀取圖片 Base64
 ipcMain.handle('read-image-base64', async (event, filePath) => {
+  // 只讀圖片檔；相對路徑（圖庫）以資料資料夾為基準，且不能跳出資料資料夾
+  const absolutePath = resolveImageReadPath(DATA_DIR, filePath);
+  if (!absolutePath) {
+    console.warn('[IPC Image] 不允許讀取:', filePath);
+    return null;
+  }
   try {
-    let absolutePath = filePath;
-    // 如果不是絕對路徑，則認為是相對於 DATA_DIR 的路徑
-    if (!path.isAbsolute(filePath)) {
-      absolutePath = path.join(DATA_DIR, filePath);
-    }
-
     const ext = path.extname(absolutePath).toLowerCase().replace('.', '');
     const buffer = await fs.readFile(absolutePath);
     const base64 = buffer.toString('base64');
