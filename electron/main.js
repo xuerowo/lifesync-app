@@ -94,6 +94,34 @@ function isOwnPage(targetUrl) {
   }
 }
 
+/**
+ * 除錯輸出（只在設定 LIFESYNC_DEBUG=1 時啟用）：
+ * 把畫面的主控台訊息（含 CSP 違規）、載入失敗，以及載入完成後的畫面概況印到主程序的輸出。
+ */
+function attachDebugOutput(webContents) {
+  webContents.on('console-message', (event) => {
+    const { level, message, lineNumber, sourceId } = event;
+    console.log(`[debug][console:${level}] ${message}${sourceId ? ` (${sourceId}:${lineNumber})` : ''}`);
+  });
+  webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    console.log(`[debug][did-fail-load] ${errorCode} ${errorDescription} ${validatedURL} mainFrame=${isMainFrame}`);
+  });
+  const printSummary = (label) =>
+    webContents
+      .executeJavaScript(
+        "JSON.stringify({ textLength: document.body.innerText.length, styleTags: document.querySelectorAll('style').length })",
+      )
+      .then((summary) => console.log(`[debug][${label}] ${summary}`))
+      .catch((error) => console.log(`[debug][${label}] executeJavaScript 失敗: ${error.message}`));
+  webContents.on('did-finish-load', () => {
+    printSummary('did-finish-load');
+    // 資料是非同步載入的，幾秒後再看一次實際畫面
+    setTimeout(() => {
+      if (!webContents.isDestroyed()) printSummary('did-finish-load+3s');
+    }, 3000);
+  });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -117,6 +145,8 @@ function createWindow() {
       console.warn('[security] 已阻止頁面跳轉:', targetUrl);
     }
   });
+
+  if (process.env.LIFESYNC_DEBUG === '1') attachDebugOutput(mainWindow.webContents);
 
   // 開發環境使用 Vite 開發伺服器，生產環境加載打包後的 index.html
   if (process.env.VITE_DEV_SERVER_URL) {
