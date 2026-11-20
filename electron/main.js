@@ -8,6 +8,7 @@ import { createStorage } from './storage.js';
 import { resolveImageReadPath, copyImageIntoGallery } from './galleryFiles.js';
 import { stripCloudSecrets } from '../src/shared/cloudSecrets.js';
 import { decideWindowOpen } from './windowOpen.js';
+import { setupSingleInstance } from './singleInstance.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,6 +30,14 @@ const DATA_DIR = SANDBOX_DATA_DIR
     ? path.join(app.getPath('userData'), 'data')
     : path.join(app.getAppPath(), 'data');
 const GALLERY_DIR = path.join(DATA_DIR, 'gallery');
+
+// 打包版同時只能開一個程式，第二次開啟時把已開的視窗叫到前面（開發版不限制，原因見 singleInstance.js）。
+// 必須在上面換掉 userData 之後才申請：鎖是依 userData 區分的，沙盒才會有自己的一把鎖。
+const isPrimaryInstance = setupSingleInstance(app, () => mainWindow);
+if (!isPrimaryInstance) {
+  // 已經有一個在跑了：這個程序不開視窗、不讀寫資料，直接結束
+  app.quit();
+}
 
 // 密碼的加密方式與舊版相同（safeStorage + base64），舊資料可以照常解開。
 // safeStorage 要在 app ready 之後才能用；這兩個函式只會在 IPC 呼叫時執行，那時視窗已建立。
@@ -174,6 +183,8 @@ function createWindow() {
 
 
 app.whenReady().then(() => {
+  if (!isPrimaryInstance) return;
+
   // 定義基本的快速鍵選單，保留全螢幕與開發者工具功能
   const template = [
     {
