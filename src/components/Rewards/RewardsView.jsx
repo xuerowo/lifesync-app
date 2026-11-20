@@ -81,11 +81,20 @@ const RewardsView = ({
           return;
         }
 
+        const scannedCount = finalImages.length;
+        let failedCount = 0;
+
         // 如果在 Electron 環境，進行同步下載到 app 資料夾
         if (window.electronAPI) {
           const syncResult = await window.electronAPI.syncImages(finalImages);
           if (syncResult.success) {
-            finalImages = syncResult.images.map(img => img.path);
+            // 以主程序實際複製成功的圖片為準，而不是掃描到的張數
+            finalImages = Array.isArray(syncResult.images) ? syncResult.images.map(img => img.path) : [];
+            failedCount = Math.max(0, scannedCount - finalImages.length);
+            if (finalImages.length === 0) {
+              alert(`圖片全部複製失敗（共 ${scannedCount} 張），未加入卡池。`);
+              return;
+            }
           } else {
             console.error('同步圖片失敗:', syncResult.error);
             // 失敗時仍保留原始路徑作為備援，或視情況報錯
@@ -94,7 +103,11 @@ const RewardsView = ({
 
         const imagePoolPrize = { id: crypto.randomUUID(), type: 'image-pool', content: finalImages, folderPath: folderPath.trim() };
         updateData(prev => ({ ...prev, rewardFolderPath: folderPath.trim(), lotteryPrizes: { ...prev.lotteryPrizes, [targetRarity]: [...prev.lotteryPrizes[targetRarity], imagePoolPrize] } }));
-        alert(`成功載入並同步圖片池 (${result.count} 張) 到 ${targetRarity} 級卡池！`);
+        if (failedCount > 0) {
+          alert(`已加入 ${targetRarity} 級卡池，但有部分圖片複製失敗：成功 ${finalImages.length} 張，失敗 ${failedCount} 張。`);
+        } else {
+          alert(`成功載入並同步圖片池 (${finalImages.length} 張) 到 ${targetRarity} 級卡池！`);
+        }
       } else { alert(`掃描失敗：${result.error}`); }
     } catch (error) { alert(`掃描失敗: ${error.message}`); } finally { setIsScanning(false); }
   };
