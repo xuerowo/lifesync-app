@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, safeStorage, dialog, session } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, safeStorage, dialog, session, shell } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
@@ -7,6 +7,7 @@ import { setupCloudHandlers, setAbortFlag } from './cloudManager.js';
 import { createStorage } from './storage.js';
 import { resolveImageReadPath, copyImageIntoGallery } from './galleryFiles.js';
 import { stripCloudSecrets } from '../src/shared/cloudSecrets.js';
+import { decideWindowOpen } from './windowOpen.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -145,6 +146,20 @@ function createWindow() {
       event.preventDefault();
       console.warn('[security] 已阻止頁面跳轉:', targetUrl);
     }
+  });
+
+  // 攔截所有「開新視窗」（設定頁的外部連結、window.open）：
+  // http／https 網址交給系統預設的瀏覽器開，看得到網址；其他一律不開，也從不開新的 Electron 視窗
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    const decision = decideWindowOpen(url);
+    if (decision.action === 'external') {
+      shell.openExternal(decision.url).catch((error) => {
+        console.error('[security] 無法用瀏覽器開啟連結:', decision.url, error.message);
+      });
+    } else {
+      console.warn('[security] 已阻止開新視窗:', url);
+    }
+    return { action: 'deny' };
   });
 
   if (process.env.LIFESYNC_DEBUG === '1') attachDebugOutput(mainWindow.webContents);
