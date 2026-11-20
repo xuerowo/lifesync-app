@@ -375,7 +375,15 @@ export const AppDataProvider = ({ children }) => {
     return { ...prev, subTasks: newSubTasks.filter(t => t.id !== id), archivedSubTasks: [...prev.archivedSubTasks, { ...task, completed: true, completedAt: new Date().toISOString(), isPriority: false, priorityOrder: 0 }] };
   });
 
-  const completeSubTaskData = (id) => {
+  /**
+   * 完成一個子任務：寫完成紀錄、更新次數或歸檔。被拒絕（今日已完成、有未完成的優先任務）時回傳 null。
+   * 這裡不發券，券由呼叫端發。
+   * @param {string} id
+   * @param {{ rewardTickets?: number }} [options] rewardTickets：完成紀錄要記下的實際發券數。
+   *   不給就用任務設定的張數。番茄鐘結算是每個完成任務固定給 1 張，所以番茄鐘會傳 1，
+   *   之後撤銷時才會扣回正確的張數。
+   */
+  const completeSubTaskData = (id, options = {}) => {
     const task = data.subTasks.find(t => t.id === id);
     if (!task) return null;
 
@@ -415,7 +423,7 @@ export const AppDataProvider = ({ children }) => {
         indicatorId: task.indicatorId,
         completedAt: new Date().toISOString(),
         type: task.type,
-        rewardTickets: task.rewardTickets || 1
+        rewardTickets: options.rewardTickets ?? task.rewardTickets ?? 1
       };
 
       if (task.type === 'daily' || task.type === 'weekly' || task.type === 'infinite') {

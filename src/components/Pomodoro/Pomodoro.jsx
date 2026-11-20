@@ -176,10 +176,16 @@ const Pomodoro = ({
     const task = sessionTasks.find(t => t.id === taskId);
     if (!task) return;
 
-    if (task.type === 'infinite') {
-      onTaskComplete(taskId);
+    // onTaskComplete 回傳 null 表示這次完成被拒絕（有未完成的優先任務、今天已完成等），
+    // 這時不可標記完成、不寫時間軸，否則結算會多給券，再點一次還會撤銷到以前的真實紀錄
+    const markCompleted = () => {
+      if (!onTaskComplete(taskId)) return;
       setCompletedSessionTaskIds(prev => [...prev, taskId]);
       addTimelineEvent('task_complete', { taskId, taskTitle: task?.title });
+    };
+
+    if (task.type === 'infinite') {
+      markCompleted();
     } else {
       if (completedSessionTaskIds.includes(taskId)) {
         onTaskRevert(taskId);
@@ -191,9 +197,7 @@ const Pomodoro = ({
           return prev.filter((_, i) => i !== actualIdx);
         });
       } else {
-        onTaskComplete(taskId);
-        setCompletedSessionTaskIds(prev => [...prev, taskId]);
-        addTimelineEvent('task_complete', { taskId, taskTitle: task?.title });
+        markCompleted();
       }
     }
   };

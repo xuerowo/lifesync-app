@@ -438,7 +438,7 @@ const App = () => {
               {taskSubTab === 'pomodoro' && (
                 <Pomodoro
                   subTasks={data.subTasks}
-                  onTaskComplete={(taskId) => completeSubTaskData(taskId)}
+                  onTaskComplete={(taskId) => completeSubTaskData(taskId, { rewardTickets: 1 })}
                   onTaskRevert={(taskId) => revertTaskCompletion(taskId, true)}
                   status={pomodoroStatus} setStatus={setPomodoroStatus}
                   settings={pomodoroSettings} setSettings={setPomodoroSettings}
