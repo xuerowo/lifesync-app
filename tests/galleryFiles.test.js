@@ -1,8 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import path from 'path';
+import fs from 'fs';
+import os from 'os';
+import crypto from 'crypto';
 import {
   toSafeLocalName, resolveInsideDir, pushError, MAX_ERROR_DETAILS,
-  resolveImageReadPath, hasImageExtension, IMAGE_EXTENSIONS,
+  resolveImageReadPath, hasImageExtension, IMAGE_EXTENSIONS, copyImageIntoGallery, sha256File,
 } from '../electron/galleryFiles.js';
 
 describe('toSafeLocalName', () => {
@@ -148,5 +151,117 @@ describe('hasImageExtension', () => {
     expect(hasImageExtension('a.txt')).toBe(false);
     expect(hasImageExtension('a')).toBe(false);
     expect(hasImageExtension(null)).toBe(false);
+  });
+});
+
+describe('copyImageIntoGallery', () => {
+  let root;
+  let gallery;
+  let source;
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'lifesync-gallery-test-'));
+    gallery = path.join(root, 'gallery');
+    source = path.join(root, 'source');
+    fs.mkdirSync(gallery);
+    fs.mkdirSync(source);
+  });
+
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  const write = (dir, name, content) => {
+    const p = path.join(dir, name);
+    fs.writeFileSync(p, content);
+    return p;
+  };
+  const hash8 = (content) => crypto.createHash('sha256').update(content).digest('hex').slice(0, 8);
+
+  it('圖庫裡沒有同名檔案時直接複製', async () => {
+    const src = write(source, 'cat.png', 'AAA');
+    const result = await copyImageIntoGallery(src, gallery);
+    expect(result).toEqual({ name: 'cat.png', targetPath: path.join(gallery, 'cat.png'), reused: false });
+    expect(fs.readFileSync(path.join(gallery, 'cat.png'), 'utf8')).toBe('AAA');
+  });
+
+  it('同名且內容相同時直接沿用，不再複製', async () => {
+    write(gallery, 'cat.png', 'AAA');
+    const before = fs.statSync(path.join(gallery, 'cat.png')).mtimeMs;
+    const src = write(source, 'cat.png', 'AAA');
+    const result = await copyImageIntoGallery(src, gallery);
+    expect(result.name).toBe('cat.png');
+    expect(result.reused).toBe(true);
+    expect(fs.readdirSync(gallery)).toEqual(['cat.png']);
+    expect(fs.statSync(path.join(gallery, 'cat.png')).mtimeMs).toBe(before);
+  });
+
+  it('同名、大小相同但內容不同時改名，原檔不被蓋掉', async () => {
+    write(gallery, 'cat.png', 'AAA');
+    const src = write(source, 'cat.png', 'BBB');
+    const result = await copyImageIntoGallery(src, gallery);
+    const expected = `cat-${hash8('BBB')}.png`;
+    expect(result).toEqual({ name: expected, targetPath: path.join(gallery, expected), reused: false });
+    expect(fs.readFileSync(path.join(gallery, 'cat.png'), 'utf8')).toBe('AAA');
+    expect(fs.readFileSync(path.join(gallery, expected), 'utf8')).toBe('BBB');
+  });
+
+  it('同名但大小不同時改名', async () => {
+    write(gallery, 'cat.png', 'AAA');
+    const src = write(source, 'cat.png', 'BBBBBB');
+    const result = await copyImageIntoGallery(src, gallery);
+    expect(result.name).toBe(`cat-${hash8('BBBBBB')}.png`);
+    expect(fs.readFileSync(path.join(gallery, 'cat.png'), 'utf8')).toBe('AAA');
+  });
+
+  it('改名後的名稱已存在且內容相同時沿用（同一張圖再加入一次）', async () => {
+    write(gallery, 'cat.png', 'AAA');
+    const src = write(source, 'cat.png', 'BBB');
+    const first = await copyImageIntoGallery(src, gallery);
+    const second = await copyImageIntoGallery(src, gallery);
+    expect(second).toEqual({ ...first, reused: true });
+    expect(fs.readdirSync(gallery).sort()).toEqual(['cat.png', first.name].sort());
+  });
+
+  it('改名後的名稱也被不同內容占用時，再加上序號', async () => {
+    write(gallery, 'cat.png', 'AAA');
+    write(gallery, `cat-${hash8('BBB')}.png`, 'CCC');
+    const src = write(source, 'cat.png', 'BBB');
+    const result = await copyImageIntoGallery(src, gallery);
+    expect(result.name).toBe(`cat-${hash8('BBB')}-2.png`);
+    expect(fs.readFileSync(path.join(gallery, result.name), 'utf8')).toBe('BBB');
+    expect(fs.readFileSync(path.join(gallery, `cat-${hash8('BBB')}.png`), 'utf8')).toBe('CCC');
+  });
+
+  it('來源就是圖庫裡的那個檔案時直接沿用', async () => {
+    const inGallery = write(gallery, 'cat.png', 'AAA');
+    const result = await copyImageIntoGallery(inGallery, gallery);
+    expect(result).toEqual({ name: 'cat.png', targetPath: inGallery, reused: true });
+    expect(fs.readFileSync(inGallery, 'utf8')).toBe('AAA');
+  });
+
+  it('沒有副檔名或含多個點的檔名也能正確改名', async () => {
+    write(gallery, 'photo.final.jpg', 'AAA');
+    const src = write(source, 'photo.final.jpg', 'BBB');
+    expect((await copyImageIntoGallery(src, gallery)).name).toBe(`photo.final-${hash8('BBB')}.jpg`);
+  });
+
+  it('來源不存在時丟出錯誤', async () => {
+    await expect(copyImageIntoGallery(path.join(source, 'none.png'), gallery)).rejects.toThrow();
+    expect(fs.readdirSync(gallery)).toEqual([]);
+  });
+});
+
+describe('sha256File', () => {
+  it('與一次讀完計算的結果相同', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lifesync-hash-test-'));
+    try {
+      const content = Buffer.alloc(300 * 1024, 7);
+      const p = path.join(dir, 'big.bin');
+      fs.writeFileSync(p, content);
+      expect(await sha256File(p)).toBe(crypto.createHash('sha256').update(content).digest('hex'));
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

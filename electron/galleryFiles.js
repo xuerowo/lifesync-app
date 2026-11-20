@@ -1,4 +1,7 @@
 import path from 'path';
+import fs from 'fs/promises';
+import { createReadStream, constants as fsConstants } from 'fs';
+import crypto from 'crypto';
 
 /** 雲端加密檔的副檔名 */
 export const ENCRYPTED_EXT = '.e2ee';
@@ -91,6 +94,73 @@ export function resolveImageReadPath(dataDir, filePath) {
   const rel = path.relative(root, target);
   if (rel === '' || rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) return null;
   return target;
+}
+
+/** 計算檔案內容的 sha256（十六進位字串），用串流讀取以免大檔吃光記憶體 */
+export function sha256File(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = createReadStream(filePath);
+    stream.on('error', reject);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+  });
+}
+
+/** 同名檔案的內容不同、改用的檔名最多試幾次 */
+const MAX_NAME_ATTEMPTS = 100;
+
+/**
+ * 把一張圖片複製進圖庫，且不蓋掉圖庫裡原有的同名圖片。
+ *
+ * 1. 圖庫裡沒有同名檔案：直接複製。
+ * 2. 有同名檔案而且內容相同（先比大小，再比 sha256）：直接沿用，不再複製。
+ * 3. 有同名檔案但內容不同：改用 `<原檔名>-<內容 sha256 前 8 碼><副檔名>`；
+ *    該名稱也存在時，內容相同就沿用，不同就再加上 `-2`、`-3`…（幾乎不會發生）。
+ *
+ * 複製時使用「目標已存在就失敗」的模式，所以絕不會覆寫圖庫裡的檔案。
+ *
+ * @param {string} sourcePath 原始圖片的路徑
+ * @param {string} galleryDir 圖庫資料夾（需已存在）
+ * @returns {Promise<{ name: string, targetPath: string, reused: boolean }>}
+ *   name 是圖庫裡實際使用的檔名；reused 表示沿用了內容相同的既有檔案
+ */
+export async function copyImageIntoGallery(sourcePath, galleryDir) {
+  const baseName = path.basename(sourcePath);
+  const ext = path.extname(baseName);
+  const stem = baseName.slice(0, baseName.length - ext.length);
+
+  let sourceStat = null;
+  let sourceHash = null;
+  const getSourceHash = async () => (sourceHash ??= await sha256File(sourcePath));
+
+  const hasSameContent = async (targetPath) => {
+    sourceStat ??= await fs.stat(sourcePath);
+    const targetStat = await fs.stat(targetPath);
+    if (!targetStat.isFile() || targetStat.size !== sourceStat.size) return false;
+    return (await sha256File(targetPath)) === (await getSourceHash());
+  };
+
+  for (let attempt = 0; attempt < MAX_NAME_ATTEMPTS; attempt++) {
+    let name = baseName;
+    if (attempt > 0) {
+      const shortHash = (await getSourceHash()).slice(0, 8);
+      name = attempt === 1 ? `${stem}-${shortHash}${ext}` : `${stem}-${shortHash}-${attempt}${ext}`;
+    }
+    const targetPath = path.join(galleryDir, name);
+
+    try {
+      await fs.copyFile(sourcePath, targetPath, fsConstants.COPYFILE_EXCL);
+      return { name, targetPath, reused: false };
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+    }
+
+    if (await hasSameContent(targetPath)) {
+      return { name, targetPath, reused: true };
+    }
+  }
+  throw new Error(`圖庫裡同名的檔案太多，無法加入 ${baseName}`);
 }
 
 /**

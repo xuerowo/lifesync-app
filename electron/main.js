@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
 import { setupCloudHandlers, setAbortFlag } from './cloudManager.js';
 import { createStorage } from './storage.js';
-import { resolveImageReadPath } from './galleryFiles.js';
+import { resolveImageReadPath, copyImageIntoGallery } from './galleryFiles.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -231,11 +231,9 @@ ipcMain.handle('sync-images', async (event, imagePaths) => {
     const syncedImages = [];
 
     for (const sourcePath of imagePaths) {
-      const fileName = path.basename(sourcePath);
-      const targetPath = path.join(GALLERY_DIR, fileName);
-      
       try {
-        await fs.copyFile(sourcePath, targetPath);
+        // 同名但內容不同時自動改名，不會蓋掉舊卡池在用的圖片；內容相同就直接沿用
+        const { name: fileName } = await copyImageIntoGallery(sourcePath, GALLERY_DIR);
         // 返回相對路徑，增加數據的可移植性
         syncedImages.push({
           originalPath: sourcePath,
