@@ -363,6 +363,8 @@ export const AppDataProvider = ({ children }) => {
 
   const applyRevertTaskCompletion = (id, skipTicketUpdate, recordId) => updateData(prev => {
     const targetArchivedTask = prev.archivedSubTasks.find(t => t.id === id);
+    // 跟著計畫一起收起來的任務（計畫已完成）：撤銷不把它單獨拉回進行中，否則恢復計畫時會漏掉它；要改請先恢復計畫
+    if (targetArchivedTask?.archivedWithPlanId) return prev;
     const isRestoringRepetitive = targetArchivedTask && (targetArchivedTask.type === 'daily' || targetArchivedTask.type === 'weekly');
     const historyIndex = isRestoringRepetitive ? -1 : prev.taskHistory.findIndex(h => (recordId ? h.id === recordId : h.taskId === id));
     if (recordId && !isRestoringRepetitive && historyIndex === -1) return prev;
@@ -417,6 +419,7 @@ export const AppDataProvider = ({ children }) => {
     oneTimeCompletionGuard.clear(id);
     updateData(prev => {
       const task = prev.archivedSubTasks.find(t => t.id === id);
+      if (task?.archivedWithPlanId) return prev;
       if (task) return { ...prev, archivedSubTasks: prev.archivedSubTasks.filter(t => t.id !== id), subTasks: [...prev.subTasks, { ...task, completed: false }] };
       return prev;
     });

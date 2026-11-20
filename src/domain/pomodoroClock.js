@@ -16,6 +16,8 @@ const RUNNING_STATUSES = new Set(['focus', 'flow', 'break']);
 export const RELOAD_GRACE_MS = 10 * 1000;
 
 const toMs = (time) => {
+  // null、空字串、布林值不是時間（new Date(null) 會變成 1970 年，整段番茄鐘會被算成好幾十年）
+  if (time == null || time === '' || typeof time === 'boolean') return null;
   const ms = new Date(time).getTime();
   return Number.isFinite(ms) ? ms : null;
 };

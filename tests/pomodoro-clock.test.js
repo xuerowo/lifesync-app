@@ -376,3 +376,21 @@ describe('loadPomodoroState：開啟程式時讀回番茄鐘狀態', () => {
     expect(loadPomodoroState(throwing, ms(0)).status).toBe('idle')
   })
 })
+
+describe('loadPomodoroState：存檔壞掉時不會把開始時間算成 1970 年', () => {
+  it('進行中但沒有開始事件、也沒有開始時間：從現在開始算，不會一開就時間到', () => {
+    const s = loadPomodoroState(fakeStorage({
+      pomodoroStatus: 'focus',
+      pomodoroSettings: JSON.stringify(settings),
+      pomodoroIsPaused: 'false',
+      pomodoroTimeline: JSON.stringify([{ type: 'pause_start', time: null }]),
+      pomodoroSessionStartTime: '',
+      pomodoroPhaseLength: '1500',
+    }), ms(0))
+    expect(s.timeline.every((e) => e.time != null)).toBe(true)
+    const start = s.timeline.find((e) => e.type === 'focus_start')
+    expect(new Date(start.time).getTime()).toBe(ms(0))
+    const c = pomodoroClock({ timeline: s.timeline, phaseLength: s.phaseLength, nowMs: ms(0) })
+    expect(c.timeLeft).toBe(1500)
+  })
+})
