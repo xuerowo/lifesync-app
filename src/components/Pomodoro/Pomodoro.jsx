@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import {
-  Timer, Settings2, Target, CheckCircle2, ChevronUp, ChevronDown, Play, Square, Pause, FastForward, Trophy, Gift, Infinity as InfinityIcon, Plus, Trash2, X, RotateCcw
+  Timer, Settings2, Target, CheckCircle2, ChevronUp, ChevronDown, Play, Square, Pause, FastForward, Trophy, Gift, Infinity as InfinityIcon, Plus, Trash2, X, RotateCcw, BellOff, BellRing, Coffee
 } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
 import { formatTime, formatFlowTime, calculatePomodoroStats, pomodoroWorkSeconds } from '../../utils';
@@ -9,7 +9,7 @@ import { isPausedByAppClose, pomodoroClock } from '../../domain/pomodoroClock';
 import PomodoroSummary from './PomodoroSummary';
 import PomodoroHistory from './PomodoroHistory';
 import { completionRewardTickets } from '../../domain/tasks';
-import { addableSessionTasks, pomodoroCandidateTasks, pomodoroSettlementTickets, settlePomodoroTickets } from '../../domain/pomodoro';
+import { addableSessionTasks, nextBreakInfo, pomodoroCandidateTasks, pomodoroSettlementTickets, settlePomodoroTickets } from '../../domain/pomodoro';
 import AddSessionTaskPicker from './AddSessionTaskPicker';
 
 const Pomodoro = ({
@@ -37,7 +37,12 @@ const Pomodoro = ({
   // 階段切換（由 App 層提供，與「時間到」自動切換共用）
   startFocus: startSharedFocus,
   startBreak,
-  enterFlow
+  enterFlow,
+  // 時間到、等你按「開始休息／開始專注」：{ next: 'break'|'focus' }，沒有在等就是 null
+  awaiting = null,
+  silenceAlarm,
+  alarmMuted = false,
+  setAlarmMuted,
 }) => {
   const { data, updateData, addPomodoroRecord } = useAppData();
 
@@ -154,13 +159,15 @@ const Pomodoro = ({
     setShowSettlement(false);
     setShowSummary(false);
     setSelectedTaskIds([]);
+    setAlarmMuted?.(false);
     // Clear local storage on settlement
     const keysToRemove = [
       'pomodoroStatus', 'pomodoroPhaseLength', 'pomodoroTimeLeft', 'pomodoroSelectedTaskIds',
       'pomodoroSessionTasks', 'pomodoroCompletedSessionTaskIds', 'pomodoroIsPaused',
       'pomodoroTotalAccumulated', 'pomodoroCurrentSessionDuration', 'pomodoroCycles',
       'pomodoroShowSettlement', 'pomodoroTimeline', 'pomodoroCurrentCycleWorkDuration',
-      'pomodoroShowSummary', 'pomodoroSessionStats', 'pomodoroSessionStartTime', 'lastPomodoroTick'
+      'pomodoroShowSummary', 'pomodoroSessionStats', 'pomodoroSessionStartTime', 'lastPomodoroTick',
+      'pomodoroAlarmMuted'
     ];
     keysToRemove.forEach(k => localStorage.removeItem(k));
   };
@@ -480,7 +487,7 @@ const Pomodoro = ({
             status === 'flow' ? 'text-indigo-800' :
             'text-sky-800'
           }`}>
-            {status === 'break' ? '休息時間' : status === 'flow' ? '心流中' : '專注中'}
+            {awaiting ? (status === 'break' ? '休息結束' : '專注結束') : status === 'break' ? '休息時間' : status === 'flow' ? '心流中' : '專注中'}
           </h2>
         </div>
         <div className="text-right">
@@ -502,7 +509,9 @@ const Pomodoro = ({
             status === 'flow' ? 'text-indigo-600/60' :
             'text-sky-600/60'
         }`}>
-          {status === 'flow' ? '享受心流時刻' : status === 'break' ? '深呼吸，放鬆一下' : '保持專注，你做得到'}
+          {awaiting
+            ? (status === 'break' ? '休息時間到了，準備好就開始專注' : `時間到！完成第 ${cycles} 個番茄`)
+            : status === 'flow' ? '享受心流時刻' : status === 'break' ? '深呼吸，放鬆一下' : '保持專注，你做得到'}
         </p>
         {isPausedByAppClose(sessionTimeline, isPaused) && (
           <p className="mt-2 px-4 py-2 rounded-2xl bg-white/70 border border-amber-200 text-[11px] md:text-xs font-bold text-amber-700 text-center">
@@ -597,6 +606,76 @@ const Pomodoro = ({
         </div>
       </div>
 
+      {awaiting ? (
+        // 時間到：停在 00:00 等你按。等待的時間不算專注也不算休息，按下去才開始下一段
+        <div className="relative z-10 flex flex-col items-center gap-3 md:gap-4 w-full max-w-sm md:max-w-md">
+          <div className="flex items-center gap-3 md:gap-4 w-full">
+            <button
+              onClick={stopTimer}
+              title="結束這次番茄鐘"
+              aria-label="結束這次番茄鐘"
+              className="p-3.5 md:p-4 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded-2xl md:rounded-[24px] shadow-lg border border-transparent transition-all hover:scale-110 active:scale-95 shrink-0"
+            >
+              <Square className="w-5 h-5 md:w-6 md:h-6 fill-current" />
+            </button>
+            {awaiting.next === 'break' ? (() => {
+              const info = nextBreakInfo(cycles, settings);
+              return (
+                <button
+                  onClick={() => startBreak(cycles)}
+                  autoFocus
+                  className="flex-grow flex items-center justify-center gap-2 px-5 py-4 md:py-5 rounded-[24px] md:rounded-[32px] shadow-xl text-white font-black text-base md:text-lg bg-emerald-500 hover:bg-emerald-600 transition-all hover:scale-[1.02] active:scale-95"
+                >
+                  <Coffee className="w-5 h-5 md:w-6 md:h-6" />
+                  {info.isLong ? '開始長休息' : '開始休息'}（{Math.round(info.seconds / 60)} 分鐘）
+                </button>
+              );
+            })() : (
+              <button
+                onClick={skipToFocus}
+                autoFocus
+                className="flex-grow flex items-center justify-center gap-2 px-5 py-4 md:py-5 rounded-[24px] md:rounded-[32px] shadow-xl text-white font-black text-base md:text-lg bg-sky-500 hover:bg-sky-600 transition-all hover:scale-[1.02] active:scale-95"
+              >
+                <Play className="w-5 h-5 md:w-6 md:h-6 fill-current" />
+                開始專注（{settings.focus} 分鐘）
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {alarmMuted ? (
+              <span className="px-3 py-2 text-[11px] md:text-xs font-bold text-slate-400">鈴聲已關掉，按上面的按鈕繼續</span>
+            ) : (
+              <button
+                onClick={silenceAlarm}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/80 hover:bg-white text-[11px] md:text-xs font-bold text-slate-500 hover:text-slate-700 shadow-sm transition-all"
+              >
+                <BellOff className="w-3.5 h-3.5" /> 先關掉鈴聲
+              </button>
+            )}
+            {awaiting.next === 'break' && (
+              <>
+                <button
+                  onClick={() => startFocus()}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/80 hover:bg-white text-[11px] md:text-xs font-bold text-slate-500 hover:text-sky-600 shadow-sm transition-all"
+                >
+                  <FastForward className="w-3.5 h-3.5 fill-current" /> 跳過休息，直接專注
+                </button>
+                <button
+                  onClick={enterFlow}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/80 hover:bg-white text-[11px] md:text-xs font-bold text-slate-500 hover:text-indigo-600 shadow-sm transition-all"
+                >
+                  <InfinityIcon className="w-3.5 h-3.5" /> 繼續心流
+                </button>
+              </>
+            )}
+          </div>
+          {!alarmMuted && (
+            <p className="flex items-center gap-1 text-[10px] md:text-[11px] font-bold text-amber-600/80">
+              <BellRing className="w-3 h-3" /> 鈴聲會一直響，直到按下按鈕
+            </p>
+          )}
+        </div>
+      ) : (
       <div className="relative z-10 flex items-center gap-4 md:gap-6">
         <button
           onClick={stopTimer}
@@ -642,6 +721,7 @@ const Pomodoro = ({
           </button>
         )}
       </div>
+      )}
 
       {/* 進行中加入目標任務（專注、心流、休息都可以）；只是畫面上的清單，不影響計時 */}
       {isAddingTask && !showSummary && !showSettlement && (

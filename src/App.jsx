@@ -35,7 +35,7 @@ import NoticeBar from './components/Shared/NoticeBar';
 import SaveErrorBanner from './components/Shared/SaveErrorBanner';
 import { describeRestoreSuccess, describeSecretsUnavailable } from './domain/loadError';
 import { completionRewardTickets } from './domain/tasks';
-import { LEGACY_POMODORO_KEYS, lastEventMs, loadPomodoroState, pomodoroClock } from './domain/pomodoroClock';
+import { LEGACY_POMODORO_KEYS, awaitingOf, lastEventMs, loadPomodoroState, pomodoroClock } from './domain/pomodoroClock';
 
 
 const App = () => {
@@ -92,8 +92,13 @@ const App = () => {
   const pomodoroSessionStartTimeRef = useRef(initialPomodoro.sessionStartTime);
   // 畫面用的「現在」，計時中每秒更新一次
   const [pomodoroNowMs, setPomodoroNowMs] = useState(() => Date.now());
+  // 時間到、等待按按鈕時，鈴聲是否已經按「先關掉鈴聲」關掉
+  const [pomodoroAlarmMuted, setPomodoroAlarmMuted] = useState(initialPomodoro.alarmMuted);
+  // 時間到、等你按「開始休息／開始專注」（從時間軸的 await_start 判斷）
+  const pomodoroAwaiting = pomodoroStatus !== 'idle' ? awaitingOf(pomodoroTimeline) : null;
 
-  const pomodoroRunning = pomodoroStatus !== 'idle' && !pomodoroIsPaused && !pomodoroShowSettlement && !pomodoroShowSummary;
+  // 等待中不算計時：不必每秒更新，也不記「還活著」的時間（等待的時間本來就不算，重開程式後照樣停在等待）
+  const pomodoroRunning = pomodoroStatus !== 'idle' && !pomodoroIsPaused && !pomodoroAwaiting && !pomodoroShowSettlement && !pomodoroShowSummary;
 
   // Persist UI State
   useEffect(() => {
@@ -128,13 +133,14 @@ const App = () => {
     else localStorage.setItem('pomodoroPhaseLength', pomodoroPhaseLength);
     localStorage.setItem('pomodoroShowSummary', pomodoroShowSummary);
     localStorage.setItem('pomodoroSessionStats', JSON.stringify(pomodoroSessionStats));
+    localStorage.setItem('pomodoroAlarmMuted', pomodoroAlarmMuted);
     if (pomodoroSessionStartTimeRef.current) localStorage.setItem('pomodoroSessionStartTime', pomodoroSessionStartTimeRef.current);
     localStorage.setItem('lastPomodoroTick', new Date().getTime());
   }, [
     pomodoroStatus, pomodoroSettings, pomodoroSelectedTaskIds,
     pomodoroSessionTasks, pomodoroCompletedSessionTaskIds, pomodoroIsPaused,
     pomodoroCycles, pomodoroShowSettlement, pomodoroTimeline, pomodoroPhaseLength,
-    pomodoroShowSummary, pomodoroSessionStats
+    pomodoroShowSummary, pomodoroSessionStats, pomodoroAlarmMuted
   ]);
 
   // 計時中：每秒更新畫面上的「現在」，同時記下「程式還活著」的時間（lastPomodoroTick）。
@@ -168,13 +174,14 @@ const App = () => {
     phaseLength: pomodoroPhaseLength,
     nowMs: pomodoroClockNowMs,
   });
-  const pomodoroTimeLeft = (pomodoroStatus === 'focus' || pomodoroStatus === 'break') ? pomodoroClockState.timeLeft : 0;
+  const pomodoroTimeLeft = (pomodoroStatus === 'focus' || pomodoroStatus === 'break') && !pomodoroAwaiting ? pomodoroClockState.timeLeft : 0;
 
   // 「時間到」的處理與階段切換放在這一層，切到別的分頁也照常運作
   const {
     startFocus: pomodoroStartFocus,
     startBreak: pomodoroStartBreak,
     enterFlow: pomodoroEnterFlow,
+    silenceAlarm: pomodoroSilenceAlarm,
   } = usePomodoroAutoAdvance({
     status: pomodoroStatus, setStatus: setPomodoroStatus,
     settings: pomodoroSettings,
@@ -185,6 +192,7 @@ const App = () => {
     showSettlement: pomodoroShowSettlement, setShowSettlement: setPomodoroShowSettlement,
     showSummary: pomodoroShowSummary, setShowSummary: setPomodoroShowSummary,
     timeline: pomodoroTimeline, setTimeline: setPomodoroTimeline,
+    alarmMuted: pomodoroAlarmMuted, setAlarmMuted: setPomodoroAlarmMuted,
   });
 
   const skipLottery = () => {
@@ -298,14 +306,14 @@ const App = () => {
             className="fixed top-2 md:top-4 left-1/2 z-[100] px-4 md:px-6 py-1.5 md:py-2 bg-white/80 backdrop-blur-xl rounded-full border border-white shadow-2xl flex items-center gap-3 md:gap-4 cursor-pointer hover:bg-white transition-colors"
             onClick={() => { setActiveTab('tasks'); setTaskSubTab('pomodoro'); }}
           >
-            <div className={`w-2 h-2 md:w-3 md:h-3 rounded-full ${pomodoroIsPaused ? 'bg-slate-300' : (pomodoroStatus === 'break' ? 'bg-emerald-400' : 'bg-sky-400')} ${!pomodoroIsPaused && 'animate-pulse'}`} />
+            <div className={`w-2 h-2 md:w-3 md:h-3 rounded-full ${pomodoroAwaiting ? 'bg-amber-400' : pomodoroIsPaused ? 'bg-slate-300' : (pomodoroStatus === 'break' ? 'bg-emerald-400' : 'bg-sky-400')} ${!pomodoroIsPaused && 'animate-pulse'}`} />
             <div className="flex flex-col">
-              <span className="text-[6px] md:text-[8px] font-black text-slate-400 uppercase leading-none">{pomodoroStatus === 'break' ? '休息中' : '專注中'}</span>
+              <span className="text-[6px] md:text-[8px] font-black text-slate-400 uppercase leading-none">{pomodoroAwaiting ? (pomodoroStatus === 'break' ? '休息結束' : '專注結束') : (pomodoroStatus === 'break' ? '休息中' : '專注中')}</span>
               <span className="text-xs md:text-sm font-black text-sky-900 font-mono leading-none mt-0.5">
-                {pomodoroStatus === 'flow' ? '心流中' : (Math.floor(pomodoroTimeLeft / 60) + ':' + (pomodoroTimeLeft % 60).toString().padStart(2, '0'))}
+                {pomodoroAwaiting ? '時間到，點這裡繼續' : pomodoroStatus === 'flow' ? '心流中' : (Math.floor(pomodoroTimeLeft / 60) + ':' + (pomodoroTimeLeft % 60).toString().padStart(2, '0'))}
               </span>
             </div>
-            {pomodoroStatus === 'focus' && (
+            {pomodoroStatus === 'focus' && !pomodoroAwaiting && (
               <div className="w-12 md:w-20 h-1 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-sky-500 transition-all duration-1000"
@@ -464,6 +472,10 @@ const App = () => {
                   startFocus={pomodoroStartFocus}
                   startBreak={pomodoroStartBreak}
                   enterFlow={pomodoroEnterFlow}
+                  awaiting={pomodoroAwaiting}
+                  silenceAlarm={pomodoroSilenceAlarm}
+                  alarmMuted={pomodoroAlarmMuted}
+                  setAlarmMuted={setPomodoroAlarmMuted}
                 />
               )}
               {taskSubTab === 'history' && <TasksHistory setEditingTaskHistory={setEditingTaskHistory} />}

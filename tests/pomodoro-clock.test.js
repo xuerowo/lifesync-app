@@ -4,12 +4,13 @@ import {
   isPausedByAppClose,
   lastEventMs,
   loadPomodoroState,
-  planTimeout,
+  planPhaseEnd,
+  awaitingOf,
   pomodoroClock,
   RELOAD_GRACE_MS,
 } from '../src/domain/pomodoroClock.js'
 import { calculatePomodoroStats, pomodoroWorkSeconds } from '../src/utils/index.js'
-import { focusTicketsFor } from '../src/domain/pomodoro.js'
+import { focusTicketsFor, nextBreakInfo, shouldHandleTimeout } from '../src/domain/pomodoro.js'
 
 const BASE = Date.UTC(2026, 10, 20, 9, 0, 0)
 const MIN = 60 * 1000
@@ -102,6 +103,7 @@ describe('pomodoroClock：從時間軸算出目前的計時', () => {
     '心流': tl(['focus_start', 0], ['flow_start', 25], ['pause_start', 40], ['pause_end', 45], ['break_start', 60], ['end', 70]),
     '暫停中跳到休息（舊紀錄沒有 pause_end）': tl(['focus_start', 0], ['pause_start', 10], ['break_start', 12], ['focus_start', 17], ['end', 42]),
     '任務完成事件': tl(['focus_start', 0], ['task_complete', 3], ['pause_start', 5], ['task_complete', 6], ['pause_end', 8], ['end', 20]),
+    '時間到後等待再開始休息': tl(['focus_start', 0], ['await_start', 25, { next: 'break' }], ['break_start', 40], ['await_start', 45, { next: 'focus' }], ['focus_start', 50], ['end', 60]),
     '程式關閉的暫停': [...tl(['focus_start', 0]), { type: 'pause_start', time: at(10), reason: 'app_closed' }, ...tl(['pause_end', 600], ['end', 615])],
   }
 
@@ -122,71 +124,96 @@ describe('pomodoroClock：從時間軸算出目前的計時', () => {
   })
 })
 
-describe('planTimeout：倒數歸零後怎麼接下一階段（只切換一次）', () => {
+describe('planPhaseEnd：倒數歸零後停下來，等使用者按「開始休息／開始專注」', () => {
   const plan = (status, timeline, phaseLength, nowMinute, cycles = 0, s = settings) => {
     const nowMs = ms(nowMinute)
     const clock = pomodoroClock({ timeline, phaseLength, nowMs })
-    return { result: planTimeout({ status, cycles, settings: s, clock, phaseLength, nowMs }), nowMs }
+    return { result: planPhaseEnd({ status, cycles, settings: s, clock, nowMs }), nowMs }
   }
 
-  it('醒著時：專注在原定時間結束，休息從那一刻開始', () => {
+  it('專注時間到：在原定時間點寫一筆 await_start，番茄數 +1，不自動開始休息', () => {
     const timeline = tl(['focus_start', 0])
     const { result } = plan('focus', timeline, 1500, 25 + 0.2 / 60)
-    expect(result.status).toBe('break')
+    expect(result.next).toBe('break')
     expect(result.cyclesIncrement).toBe(1)
-    expect(result.events).toEqual([{ type: 'break_start', time: at(25) }])
-    expect(result.phaseLength).toBe(300)
+    expect(result.events).toEqual([{ type: 'await_start', time: at(25), next: 'break' }])
   })
 
-  it('專注中休眠 2 分鐘才醒：專注只算 25 分鐘，休息已經過 2 分鐘', () => {
+  it('休息時間到：等著開始專注，番茄數不變', () => {
+    const timeline = tl(['focus_start', 0], ['await_start', 25, { next: 'break' }], ['break_start', 26])
+    const { result } = plan('break', timeline, 300, 31, 1)
+    expect(result.next).toBe('focus')
+    expect(result.cyclesIncrement).toBe(0)
+    expect(result.events).toEqual([{ type: 'await_start', time: at(31), next: 'focus' }])
+  })
+
+  it('等待的時間不算專注也不算休息；按下「開始休息」那一刻休息才開始', () => {
     const timeline = tl(['focus_start', 0])
-    const { result, nowMs } = plan('focus', timeline, 1500, 27)
-    const next = insertChronologically(timeline, result.events)
-    const c = pomodoroClock({ timeline: next, phaseLength: result.phaseLength, nowMs })
-    expect(c.workSeconds).toBe(1500)
+    const { result } = plan('focus', timeline, 1500, 25)
+    const waiting = insertChronologically(timeline, result.events)
+    const during = pomodoroClock({ timeline: waiting, phaseLength: 1500, nowMs: ms(40) })
+    expect(during.isAwaiting).toBe(true)
+    expect(during.timeLeft).toBe(0)
+    expect(during.workSeconds).toBe(1500)
+    expect(during.breakSeconds).toBe(0)
+    // 等了 15 分鐘才按「開始休息」
+    const resumed = [...waiting, ...tl(['break_start', 40])]
+    const c = pomodoroClock({ timeline: resumed, phaseLength: 300, nowMs: ms(42) })
+    expect(c.isAwaiting).toBe(false)
     expect(c.timeLeft).toBe(180)
+    expect(c.breakSeconds).toBe(120)
+    expect(c.workSeconds).toBe(1500)
   })
 
-  it('專注中休眠 2 小時：專注只算 25 分鐘，其餘算休息，休息倒數從現在給完整 5 分鐘', () => {
+  it('專注中休眠 2 小時才醒：專注只算 25 分鐘，醒來後停在等待，睡著的時間不算任何一種', () => {
     const timeline = tl(['focus_start', 0])
     const { result, nowMs } = plan('focus', timeline, 1500, 145)
-    expect(result.events).toEqual([{ type: 'break_start', time: at(25) }])
+    expect(result.events).toEqual([{ type: 'await_start', time: at(25), next: 'break' }])
     const next = insertChronologically(timeline, result.events)
-    const c = pomodoroClock({ timeline: next, phaseLength: result.phaseLength, nowMs })
+    const c = pomodoroClock({ timeline: next, phaseLength: 1500, nowMs })
     expect(c.workSeconds).toBe(1500)
-    expect(c.timeLeft).toBe(300)
-    expect(c.breakSeconds).toBe(120 * 60)
+    expect(c.breakSeconds).toBe(0)
+    expect(c.isAwaiting).toBe(true)
   })
 
-  it('休息中休眠 10 分鐘：專注從休息結束那一刻開始（休眠時間照算），剩 15 分鐘', () => {
-    const timeline = tl(['focus_start', 0], ['break_start', 25])
-    const { result, nowMs } = plan('break', timeline, 300, 40, 1)
-    expect(result.status).toBe('focus')
-    expect(result.cyclesIncrement).toBe(0)
-    expect(result.events).toEqual([{ type: 'focus_start', time: at(30) }])
-    const next = insertChronologically(timeline, result.events)
-    expect(pomodoroClock({ timeline: next, phaseLength: result.phaseLength, nowMs }).timeLeft).toBe(900)
-  })
-
-  it('休息中休眠一整晚：不會把睡著的時間算成專注，專注從現在開始', () => {
-    const timeline = tl(['focus_start', 0], ['break_start', 25])
+  it('休息中休眠一整晚：休息只算設定的 5 分鐘，醒來後等著開始專注', () => {
+    const timeline = tl(['focus_start', 0], ['await_start', 25, { next: 'break' }], ['break_start', 25])
     const { result, nowMs } = plan('break', timeline, 300, 600, 1)
-    expect(result.events).toEqual([{ type: 'focus_start', time: at(600) }])
-    const next = insertChronologically(timeline, result.events)
-    const c = pomodoroClock({ timeline: next, phaseLength: result.phaseLength, nowMs })
+    expect(result.events).toEqual([{ type: 'await_start', time: at(30), next: 'focus' }])
+    const c = pomodoroClock({ timeline: insertChronologically(timeline, result.events), phaseLength: 300, nowMs })
+    expect(c.breakSeconds).toBe(300)
     expect(c.workSeconds).toBe(1500)
-    expect(c.timeLeft).toBe(1500)
   })
 
-  it('第 4 輪專注結束接長休息', () => {
-    const timeline = tl(['focus_start', 0])
-    const { result } = plan('focus', timeline, 1500, 25, 3)
-    expect(result.phaseLength).toBe(20 * 60)
+  it('等待後改進入心流：本輪工作時長從心流開始重新算（剛完成的番茄不會被算兩次）', () => {
+    const timeline = tl(['focus_start', 0], ['await_start', 25, { next: 'break' }], ['flow_start', 27])
+    const c = pomodoroClock({ timeline, nowMs: ms(37) })
+    expect(c.cycleWork).toBe(600)
+    expect(c.workSeconds).toBe(1500 + 600)
   })
 
   it('心流沒有時間到', () => {
     const { result } = plan('flow', tl(['flow_start', 0]), null, 30)
     expect(result).toBeNull()
+  })
+
+  it('awaitingOf：最後一個階段事件是 await_start 才算在等待', () => {
+    expect(awaitingOf(tl(['focus_start', 0], ['await_start', 25, { next: 'break' }], ['task_complete', 26])))
+      .toEqual({ next: 'break', since: at(25) })
+    expect(awaitingOf(tl(['focus_start', 0], ['await_start', 25, { next: 'break' }], ['break_start', 26]))).toBeNull()
+    expect(awaitingOf(tl(['focus_start', 0]))).toBeNull()
+    expect(awaitingOf(null)).toBeNull()
+  })
+
+  it('等待中不會再觸發一次「時間到」', () => {
+    const base = { timeLeft: 0, status: 'focus', isPaused: false, showSettlement: false, showSummary: false }
+    expect(shouldHandleTimeout(base)).toBe(true)
+    expect(shouldHandleTimeout({ ...base, awaiting: { next: 'break' } })).toBe(false)
+  })
+
+  it('等待畫面的按鈕：第 4 個番茄後是長休息 20 分鐘，其他是一般休息', () => {
+    expect(nextBreakInfo(1, settings)).toEqual({ seconds: 300, isLong: false })
+    expect(nextBreakInfo(4, settings)).toEqual({ seconds: 1200, isLong: true })
   })
 })
 
@@ -308,6 +335,29 @@ describe('loadPomodoroState：開啟程式時讀回番茄鐘狀態', () => {
     expect(s.timeline.some(e => e.type === 'break_start')).toBe(true)
     expect(s.phaseLength).toBe(300)
     expect(Number.isFinite(pomodoroClock({ timeline: s.timeline, phaseLength: s.phaseLength, nowMs: ms(1) }).timeLeft)).toBe(true)
+  })
+
+  it('時間到、等待中關閉程式再開：照樣停在等待，不補暫停，關閉的時間不算', () => {
+    const s = loadPomodoroState(fakeStorage(running({
+      pomodoroTimeline: JSON.stringify(tl(['focus_start', 0], ['await_start', 25, { next: 'break' }])),
+      pomodoroCycles: '1',
+      lastPomodoroTick: ms(25),
+      pomodoroAlarmMuted: 'true',
+    })), ms(300))
+    expect(s.isPaused).toBe(false)
+    expect(s.closedGap).toBeNull()
+    expect(s.timeline).toHaveLength(2)
+    expect(s.cycles).toBe(1)
+    expect(s.alarmMuted).toBe(true)
+    expect(awaitingOf(s.timeline)).toEqual({ next: 'break', since: at(25) })
+    const c = pomodoroClock({ timeline: s.timeline, phaseLength: s.phaseLength, nowMs: ms(300) })
+    expect(c.workSeconds).toBe(1500)
+    expect(c.breakSeconds).toBe(0)
+  })
+
+  it('不在等待時，舊的「已關掉鈴聲」不會帶到下一次', () => {
+    const s = loadPomodoroState(fakeStorage(running({ pomodoroAlarmMuted: 'true', lastPomodoroTick: ms(1) })), ms(1) + 1000)
+    expect(s.alarmMuted).toBe(false)
   })
 
   it('看不懂的狀態當成待機', () => {

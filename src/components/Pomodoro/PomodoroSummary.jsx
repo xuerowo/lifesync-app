@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { Trophy, Clock, CheckCircle2, Zap, Timer, X, Calendar, ArrowRight, Sparkles, Pause, Play, Coffee, Flag, Target } from 'lucide-react';
+import { Trophy, Clock, CheckCircle2, Zap, Timer, X, Calendar, ArrowRight, Sparkles, Pause, Play, Coffee, Flag, Target, BellRing } from 'lucide-react';
 import { formatFlowTime, calculatePomodoroStats, pomodoroWorkSeconds } from '../../utils';
 
 const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
@@ -34,6 +34,8 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
         if (seg.mode === 'focus') color = 'bg-sky-400';
         else if (seg.mode === 'flow') color = 'bg-indigo-400';
         else if (seg.mode === 'break') color = 'bg-emerald-400';
+        // 時間到、等你按「開始休息／開始專注」的時間：不算專注也不算休息
+        else if (seg.mode === 'await') color = 'bg-amber-300';
       }
       return {
         width: (seg.duration / totalDuration) * 100,
@@ -128,6 +130,10 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
                   <span className="text-[10px] font-bold text-slate-500">休息</span>
                 </div>
                 <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-amber-300" />
+                  <span className="text-[10px] font-bold text-slate-500">時間到、等待</span>
+                </div>
+                <div className="flex items-center gap-1.5">
                   <div className="w-2 h-2 rounded-full bg-slate-300" />
                   <span className="text-[10px] font-bold text-slate-500">暫停</span>
                 </div>
@@ -151,7 +157,7 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
                 {/* Time Labels */}
                 {[
                   { time: startTime, type: 'edge' },
-                  ...timeline.filter((e, idx) => idx > 0 && ['focus_start', 'flow_start', 'break_start', 'pause_start', 'pause_end'].includes(e.type)),
+                  ...timeline.filter((e, idx) => idx > 0 && ['focus_start', 'flow_start', 'break_start', 'pause_start', 'pause_end', 'await_start'].includes(e.type)),
                   { time: endTime, type: 'edge' }
                 ].map((e, i) => {
                   const left = e.type === 'edge' && i === 0 ? 0 :
@@ -165,6 +171,7 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
                   const isFocus = e.type === 'focus_start';
                   const isFlow = e.type === 'flow_start';
                   const isBreak = e.type === 'break_start';
+                  const isAwait = e.type === 'await_start';
                   const isEdge = e.type === 'edge';
                   
                   return (
@@ -185,6 +192,7 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
                         isFocus ? 'bg-sky-50 border-sky-200 group-hover/time:bg-sky-100' :
                         isFlow ? 'bg-indigo-50 border-indigo-200 group-hover/time:bg-indigo-100' :
                         isBreak ? 'bg-emerald-50 border-emerald-200 group-hover/time:bg-emerald-100' :
+                        isAwait ? 'bg-amber-50 border-amber-200 group-hover/time:bg-amber-100' :
                         'bg-white/30 backdrop-blur-md border-white/40 group-hover/time:bg-white/60'
                       }`}>
                         {isPause && <Pause className="w-2 h-2 text-rose-500" />}
@@ -192,6 +200,7 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
                         {isFocus && <Target className="w-2 h-2 text-sky-500" />}
                         {isFlow && <Sparkles className="w-2 h-2 text-indigo-500" />}
                         {isBreak && <Coffee className="w-2 h-2 text-emerald-500" />}
+                        {isAwait && <BellRing className="w-2 h-2 text-amber-500" />}
                         {isEdge && (i === 0 ? <Flag className="w-2 h-2 text-slate-400" /> : <CheckCircle2 className="w-2 h-2 text-slate-400" />)}
                         
                         <span className={`text-[9px] font-black whitespace-nowrap leading-none ${
@@ -200,6 +209,7 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
                           isFocus ? 'text-sky-600' :
                           isFlow ? 'text-indigo-600' :
                           isBreak ? 'text-emerald-600' :
+                          isAwait ? 'text-amber-600' :
                           'text-slate-600 group-hover/time:text-sky-700'
                         }`}>{formatTimeStr(e.time)}</span>
                       </div>

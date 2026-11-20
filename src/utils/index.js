@@ -110,6 +110,10 @@ export const calculatePomodoroStats = (timeline) => {
     } else if (startEvent.type === 'break_start') {
       currentMode = 'break';
       isPaused = false;
+    } else if (startEvent.type === 'await_start') {
+      // 時間到、等使用者按「開始休息／開始專注」：等待的時間不算專注也不算休息（2026-11-20 起）
+      currentMode = 'await';
+      isPaused = false;
     } else if (startEvent.type === 'pause_start') {
       isPaused = true;
     } else if (startEvent.type === 'pause_end') {

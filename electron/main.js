@@ -291,6 +291,19 @@ ipcMain.on('save-data-sync', (event, data) => {
   }
 });
 
+// 番茄鐘時間到、等使用者按「開始休息／開始專注」：讓工作列的圖示閃爍，提醒回到程式。
+// 視窗已經在最前面時不閃；使用者切回視窗時 Windows 會自動停止閃爍，畫面端按下按鈕後也會送 false 停止。
+// 只接受布林值，只作用在送出訊息的那個視窗，不做其他事。
+ipcMain.on('pomodoro-attention', (event, on) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return;
+  if (on === true) {
+    if (!win.isFocused()) win.flashFrame(true);
+  } else {
+    win.flashFrame(false);
+  }
+});
+
 // 覆蓋本機資料（雲端還原、匯入 JSON、還原完整備份）之前，先在 backups\ 拍一份快照。
 // data 是畫面上目前的資料：先存好再拍，快照才不會漏掉最後幾秒的修改。
 // 回傳 { success, path?, code?, error? }；失敗時畫面端不可繼續覆蓋。

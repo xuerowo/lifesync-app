@@ -30,4 +30,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('cloud-progress', handler);
   },
   cancelCloudSync: () => ipcRenderer.invoke('cloud-cancel-sync'),
+  // 番茄鐘時間到、等你按按鈕時：true 讓工作列圖示閃爍（視窗已在前面就不閃），false 停止閃爍
+  setAttention: (on) => ipcRenderer.send('pomodoro-attention', on === true),
 });

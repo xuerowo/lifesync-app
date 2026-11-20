@@ -18,13 +18,23 @@ export const breakSecondsFor = (cycles, settings) => {
 };
 
 /**
- * 「時間到」是否該被處理。條件與原本番茄鐘頁面裡的監聽完全相同。
+ * 下一次休息的長度，以及是不是長休息（等待畫面的按鈕要寫「開始長休息（20 分鐘）」）。
+ * @param {number} cycles 進入這次休息時「已完成」的番茄數
  */
-export const shouldHandleTimeout = ({ timeLeft, status, isPaused, showSettlement, showSummary }) =>
+export const nextBreakInfo = (cycles, settings) => {
+  const seconds = breakSecondsFor(cycles, settings);
+  return { seconds, isLong: seconds !== settings.break * 60 };
+};
+
+/**
+ * 「時間到」是否該被處理。已經在等使用者按「開始休息／開始專注」時（awaiting）不再處理。
+ */
+export const shouldHandleTimeout = ({ timeLeft, status, isPaused, showSettlement, showSummary, awaiting = null }) =>
   timeLeft <= 0 &&
   status !== 'idle' &&
   status !== 'flow' &&
   !isPaused &&
+  !awaiting &&
   !showSettlement &&
   !showSummary;
 
