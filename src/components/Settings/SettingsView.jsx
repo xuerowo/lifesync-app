@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Settings2, Download, Upload, Cloud, ShieldCheck, RefreshCw, Image as ImageIcon, FolderOpen, HelpCircle, ChevronUp, ExternalLink, Lock, User, Link2, Info, AlertTriangle, Zap, Server, Shield, Eye, EyeOff } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
 import { encryptData, decryptData } from '../../utils/crypto';
+import { normalizeData } from '../../shared/defaultData';
 
 const SettingsView = () => {
   const { data, setData, updateData, isSyncing, setIsSyncing, setSyncProgress } = useAppData();
@@ -55,12 +56,7 @@ const SettingsView = () => {
             if (result.aborted) {
                 alert('還原已中斷');
             } else {
-                setData(prev => ({
-                    ...prev,
-                    ...result.data,
-                    lotteryPrizes: { ...{ N: [], R: [], SR: [], SSR: [], UR: [] }, ...result.data.lotteryPrizes },
-                    lotteryProbability: { ...{ N: 50, R: 25, SR: 15, SSR: 8, UR: 2 }, ...result.data.lotteryProbability }
-                }));
+                setData(prev => normalizeData({ ...prev, ...result.data }));
                 alert('完整數據與圖庫還原成功！');
             }
         } else {
@@ -80,14 +76,9 @@ const SettingsView = () => {
     reader.onload = (ev) => {
       try {
         const imported = JSON.parse(ev.target.result);
-        setData(prev => ({
-          ...prev,
-          ...imported,
-          lotteryPrizes: { ...{ N: [], R: [], SR: [], SSR: [], UR: [] }, ...imported.lotteryPrizes },
-          lotteryProbability: { ...{ N: 50, R: 25, SR: 15, SSR: 8, UR: 2 }, ...imported.lotteryProbability }
-        }));
+        setData(prev => normalizeData({ ...prev, ...imported }));
         alert('JSON 數據導入成功！');
-      } catch (err) {
+      } catch {
         alert('導入失敗');
       }
     };
@@ -158,7 +149,7 @@ const SettingsView = () => {
       if (result.success) {
         const decryptedJson = await decryptData(result.data, data.cloudConfig.masterPassword);
         const imported = JSON.parse(decryptedJson);
-        setData(prev => ({ ...prev, ...imported }));
+        setData(prev => normalizeData({ ...prev, ...imported }));
         alert('加密數據還原成功！');
       } else {
         alert(`下載失敗: ${result.error}`);

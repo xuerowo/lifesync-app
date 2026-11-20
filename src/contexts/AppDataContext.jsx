@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { getTodayStr, getLocalISOString } from '../utils';
+import { createDefaultData, normalizeData } from '../shared/defaultData';
 
 const AppDataContext = createContext();
 
@@ -37,32 +38,7 @@ export const AppDataProvider = ({ children }) => {
     };
   }, [ticketNotification]);
 
-  const [data, setData] = useState({
-    goals: { learning: [], health: [], happiness: [] },
-    majorTasks: [],
-    subTasks: [],
-    archivedTasks: [],
-    archivedSubTasks: [],
-    rewardFolderPath: '',
-    lotteryPrizes: { N: [], R: [], SR: [], SSR: [], UR: [] },
-    lotteryProbability: { N: 50, R: 25, SR: 15, SSR: 8, UR: 2 },
-    rewardHistory: [],
-    archivedGoals: [],
-    achievements: [],
-    notes: [],
-    rules: [],
-    pomodoroHistory: [],
-    lotteryTickets: 0,
-    taskHistory: [],
-    cloudConfig: {
-      type: 'webdav',
-      url: '',
-      username: '',
-      password: '',
-      masterPassword: '',
-      enabled: false
-    }
-  });
+  const [data, setData] = useState(createDefaultData);
   const [isLoading, setIsLoading] = useState(true);
 
   // Load data
@@ -87,32 +63,7 @@ export const AppDataProvider = ({ children }) => {
         }
 
         if (loadedData) {
-          if ('rewards' in loadedData) {
-            delete loadedData.rewards;
-          }
-          setData({
-            ...loadedData,
-            archivedSubTasks: loadedData.archivedSubTasks || [],
-            rewardFolderPath: loadedData.rewardFolderPath || '',
-            lotteryPrizes: { ...{ N: [], R: [], SR: [], SSR: [], UR: [] }, ...loadedData.lotteryPrizes },
-            lotteryProbability: { ...{ N: 50, R: 25, SR: 15, SSR: 8, UR: 2 }, ...loadedData.lotteryProbability },
-            rewardHistory: loadedData.rewardHistory || [],
-            archivedGoals: loadedData.archivedGoals || [],
-            achievements: loadedData.achievements || [],
-            notes: loadedData.notes || (loadedData.diaries ? loadedData.diaries.map(d => ({ ...d, title: d.title || d.date || '無主題' })) : []),
-            rules: loadedData.rules || [],
-            pomodoroHistory: loadedData.pomodoroHistory || [],
-            lotteryTickets: loadedData.lotteryTickets || 0,
-            taskHistory: loadedData.taskHistory || [],
-            cloudConfig: loadedData.cloudConfig || {
-              type: 'webdav',
-              url: '',
-              username: '',
-              password: '',
-              masterPassword: '',
-              enabled: false
-            }
-          });
+          setData(normalizeData(loadedData));
         }
       } catch (error) {
         console.error('Failed to load data:', error);

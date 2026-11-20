@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
 import { setupCloudHandlers, setAbortFlag } from './cloudManager.js';
+import { createDefaultData } from '../src/shared/defaultData.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -108,24 +109,7 @@ ipcMain.handle('get-data', async () => {
     return JSON.parse(data);
   } catch (error) {
     if (error.code === 'ENOENT') {
-      return {
-        goals: { learning: [], health: [], happiness: [] },
-        majorTasks: [],
-        subTasks: [],
-        archivedTasks: [],
-        archivedSubTasks: [],
-        rewardFolderPath: '',
-        lotteryPrizes: { N: [], R: [], SR: [], SSR: [], UR: [] },
-        lotteryProbability: { N: 50, R: 25, SR: 15, SSR: 8, UR: 2 },
-        rewardHistory: [],
-        archivedGoals: [],
-        achievements: [],
-        notes: [],
-        rules: [],
-        pomodoroHistory: [],
-        lotteryTickets: 0,
-        taskHistory: []
-      };
+      return createDefaultData();
     }
     throw error;
   }

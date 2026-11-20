@@ -3,6 +3,7 @@ import cors from 'cors';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createDefaultData } from './src/shared/defaultData.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,17 +35,7 @@ app.get('/api/data', async (req, res) => {
   } catch (error) {
     if (error.code === 'ENOENT') {
       // 文件不存在，返回初始數據
-      const initialData = {
-        goals: { learning: [], health: [], happiness: [] },
-        majorTasks: [],
-        subTasks: [],
-        archivedTasks: [],
-        archivedSubTasks: [],
-        rewardFolderPath: '',
-        lotteryPrizes: { N: [], R: [], SR: [], SSR: [], UR: [] },
-        lotteryProbability: { N: 50, R: 25, SR: 15, SSR: 8, UR: 2 }
-      };
-      res.json(initialData);
+      res.json(createDefaultData());
     } else {
       console.error('讀取數據錯誤:', error);
       res.status(500).json({ error: '讀取數據失敗' });
