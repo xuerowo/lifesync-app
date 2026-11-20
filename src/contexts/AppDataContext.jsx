@@ -21,12 +21,14 @@ export const AppDataProvider = ({ children }) => {
 
   // 監聽全局同步進度
   useEffect(() => {
-    if (window.electronAPI && window.electronAPI.onCloudProgress) {
-        window.electronAPI.onCloudProgress((progress) => {
-            setSyncProgress(progress);
-            setIsSyncing(true);
-        });
-    }
+    if (!window.electronAPI?.onCloudProgress) return;
+    const unsubscribe = window.electronAPI.onCloudProgress((progress) => {
+      setSyncProgress(progress);
+      setIsSyncing(true);
+    });
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
   }, []);
 
   // 通知自動關閉處理

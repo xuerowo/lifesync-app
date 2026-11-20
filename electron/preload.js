@@ -18,6 +18,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
   exportFullBackup: (payload) => ipcRenderer.invoke('export-full-backup', payload),
   importFullBackup: (backupDir) => ipcRenderer.invoke('import-full-backup', backupDir),
-  onCloudProgress: (callback) => ipcRenderer.on('cloud-progress', (event, data) => callback(data)),
+  // 回傳取消監聽的函式；畫面卸載（或開發模式重跑 effect）時呼叫，監聽才不會越積越多
+  onCloudProgress: (callback) => {
+    const handler = (event, data) => callback(data);
+    ipcRenderer.on('cloud-progress', handler);
+    return () => ipcRenderer.removeListener('cloud-progress', handler);
+  },
   cancelCloudSync: () => ipcRenderer.invoke('cloud-cancel-sync'),
 });
