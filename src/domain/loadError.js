@@ -67,6 +67,23 @@ export function describeLoadError(loadError) {
   };
 }
 
+/**
+ * 檔案被鎖住或沒有權限（EBUSY、EPERM、EACCES）時，資料檔本身多半是好的，只是暫時打不開。
+ * 這時「載入最近一次自動備份」會把這份好的資料檔改名成 .corrupt、改用比較舊的備份，
+ * 所以錯誤畫面把這個按鈕收起來，按下去還要再確認一次。
+ * @param {{ code?: string }} loadError
+ * @returns {string|null} 要再確認時的文字；不需要多確認時回傳 null
+ */
+export function restoreConfirmMessage(loadError) {
+  if (!LOCKED_CODES.has(loadError?.code || '')) return null;
+  return (
+    '資料檔目前只是被別的程式鎖住、或沒有讀取的權限，檔案本身很可能是好的。\n\n' +
+    '從備份載入會把它改名成 lifesync-data.corrupt-時間.json（不會刪除），改用比較舊的自動備份；' +
+    '備份之後做的修改不會在裡面。\n\n' +
+    '建議先關掉防毒軟體或雲端硬碟同步軟體，等幾分鐘再按「重試」。確定還是要從備份載入嗎？'
+  );
+}
+
 /** 錯誤畫面最下面那句「你的資料沒事」的保證 */
 export const LOAD_ERROR_SAFETY_NOTE =
   '你的資料檔沒有被改動。在資料成功讀出來之前，程式會暫停存檔，不會用空白資料蓋掉它。';

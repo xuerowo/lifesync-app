@@ -3,7 +3,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
   describeLoadError, describeRestoreFailure, describeRestoreSuccess, describeSecretsUnavailable,
-  formatLocalDateTime, baseName, LOAD_ERROR_SAFETY_NOTE,
+  formatLocalDateTime, baseName, LOAD_ERROR_SAFETY_NOTE, restoreConfirmMessage,
 } from '../src/domain/loadError.js';
 import LoadErrorScreen from '../src/components/Shared/LoadErrorScreen.jsx';
 
@@ -31,6 +31,19 @@ describe('describeLoadError', () => {
     expect(describeLoadError({ code: 'HTTP_500' }).reason).toContain('server.js');
     expect(describeLoadError({ code: 'WHATEVER' }).reason).toContain('預料之外');
     expect(describeLoadError(null).reason).toContain('預料之外');
+  });
+});
+
+describe('restoreConfirmMessage：檔案被鎖住時，從備份載入要再確認', () => {
+  it.each(['EBUSY', 'EPERM', 'EACCES'])('%s：要確認，並說明檔案多半沒壞、會改用比較舊的資料', (code) => {
+    const text = restoreConfirmMessage({ code });
+    expect(text).toContain('很可能是好的');
+    expect(text).toContain('比較舊');
+    expect(text).toContain('重試');
+  });
+
+  it.each(['PARSE_ERROR', 'INVALID_FORMAT', 'MISSING_WITH_BACKUPS', 'HTTP_500', undefined])('%s：不必多確認', (code) => {
+    expect(restoreConfirmMessage({ code })).toBeNull();
   });
 });
 
@@ -127,6 +140,18 @@ describe('LoadErrorScreen', () => {
 
   it('沒有備份時顯示原因', () => {
     expect(render({ restoreFailure: { code: 'NO_BACKUP' } })).toContain('沒有可以用的自動備份');
+  });
+
+  it('檔案被鎖住時：重試在前面，從備份載入收進「重試一直不行？」裡', () => {
+    const html = render({ loadError: { code: 'EBUSY', error: 'resource busy or locked' } });
+    expect(html).toContain('<details');
+    expect(html).toContain('重試一直不行？');
+    expect(html.indexOf('重試</button>')).toBeLessThan(html.indexOf('<details'));
+    expect(html.indexOf('載入最近一次自動備份</button>')).toBeGreaterThan(html.indexOf('<details'));
+  });
+
+  it('檔案壞掉時：兩個按鈕並排，沒有收起來', () => {
+    expect(render()).not.toContain('<details');
   });
 
   it('進行中時按鈕停用並顯示進度文字', () => {

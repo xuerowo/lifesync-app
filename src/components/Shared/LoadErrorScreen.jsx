@@ -1,7 +1,7 @@
 // 測試環境（Vitest）用的是傳統 JSX 轉換，需要 React 在作用域內
 import React from 'react';
 import { AlertTriangle, RotateCcw, History, RefreshCw } from 'lucide-react';
-import { describeLoadError, describeRestoreFailure, LOAD_ERROR_SAFETY_NOTE } from '../../domain/loadError';
+import { describeLoadError, describeRestoreFailure, restoreConfirmMessage, LOAD_ERROR_SAFETY_NOTE } from '../../domain/loadError';
 
 /** 「09:30:05」；看不懂就回傳 null */
 const formatLocalTime = (iso) => {
@@ -33,6 +33,24 @@ const clip = (text) => {
 const LoadErrorScreen = ({ loadError, busy = null, canRestore, restoreFailure = null, onRetry, onRestore }) => {
   const { reason, suggestRetryFirst } = describeLoadError(loadError);
   const detail = clip(loadError?.error);
+  // 檔案被鎖住時，資料檔本身多半是好的：從備份載入的按鈕收起來，按下去還要再確認一次
+  const restoreWarning = restoreConfirmMessage(loadError);
+  const handleRestore = () => {
+    if (restoreWarning && !window.confirm(restoreWarning)) return;
+    onRestore();
+  };
+
+  const restoreButton = (
+    <button
+      type="button"
+      onClick={handleRestore}
+      disabled={busy !== null}
+      className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white hover:bg-emerald-50 text-emerald-700 border-2 border-emerald-400 font-black rounded-2xl shadow-sm transition-colors disabled:opacity-50"
+    >
+      {busy === 'restore' ? <RefreshCw className="w-5 h-5 animate-spin" /> : <History className="w-5 h-5" />}
+      {busy === 'restore' ? '載入備份中…' : '載入最近一次自動備份'}
+    </button>
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-300 via-sky-100 to-white flex items-center justify-center p-6 text-sky-950">
@@ -47,7 +65,9 @@ const LoadErrorScreen = ({ loadError, busy = null, canRestore, restoreFailure = 
         <div className="text-sm text-sky-800 mb-5 space-y-1 leading-relaxed">
           <p className="font-black">你可以：</p>
           <p>・按「重試」：重新讀一次資料檔。{suggestRetryFirst ? '建議先試這個。' : ''}</p>
-          {canRestore ? (
+          {canRestore && restoreWarning ? (
+            <p>・重試好幾次、等了幾分鐘還是不行，才考慮從備份載入（在下面的「重試一直不行？」裡）。資料檔本身很可能沒壞，從備份載入會改用比較舊的資料。</p>
+          ) : canRestore ? (
             <p>・按「載入最近一次自動備份」：改用程式自動存下的最近一份備份。讀不出來的資料檔會先改名保留，不會被刪除；備份之後做的修改不會在裡面。</p>
           ) : (
             <p>・瀏覽器模式不能從這裡載入備份。請改用桌面版程式，或自己把 backups 資料夾裡的備份檔複製回來。</p>
@@ -70,18 +90,18 @@ const LoadErrorScreen = ({ loadError, busy = null, canRestore, restoreFailure = 
             {busy === 'retry' ? <RefreshCw className="w-5 h-5 animate-spin" /> : <RotateCcw className="w-5 h-5" />}
             {busy === 'retry' ? '重新讀取中…' : '重試'}
           </button>
-          {canRestore && (
-            <button
-              type="button"
-              onClick={onRestore}
-              disabled={busy !== null}
-              className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white hover:bg-emerald-50 text-emerald-700 border-2 border-emerald-400 font-black rounded-2xl shadow-sm transition-colors disabled:opacity-50"
-            >
-              {busy === 'restore' ? <RefreshCw className="w-5 h-5 animate-spin" /> : <History className="w-5 h-5" />}
-              {busy === 'restore' ? '載入備份中…' : '載入最近一次自動備份'}
-            </button>
-          )}
+          {canRestore && !restoreWarning && restoreButton}
         </div>
+
+        {canRestore && restoreWarning && (
+          <details className="text-sm text-sky-800 bg-sky-50 border border-sky-100 rounded-xl p-3 mb-6">
+            <summary className="font-black cursor-pointer">重試一直不行？</summary>
+            <p className="mt-2 mb-3 leading-relaxed">
+              可以改用程式自動存下的最近一份備份。但這次的資料檔很可能沒壞，只是暫時打不開：從備份載入會把它改名保留（不會刪除），改用比較舊的資料，備份之後做的修改不會在裡面。按下去之後還會再問你一次。
+            </p>
+            <div className="flex justify-center">{restoreButton}</div>
+          </details>
+        )}
 
         <div className="text-left text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-3 break-all whitespace-pre-wrap font-mono space-y-1">
           <p>錯誤代碼：{loadError?.code || '未知'}</p>
