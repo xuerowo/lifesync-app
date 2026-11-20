@@ -6,6 +6,9 @@
 const ITERATIONS = 100000;
 const ALGO = 'AES-GCM';
 
+/** decryptData 解不開時，丟出的錯誤所帶的 code */
+export const DECRYPT_FAILED = 'DECRYPT_FAILED';
+
 /**
  * 從密碼與鹽值衍生加密金鑰
  */
@@ -84,6 +87,7 @@ export async function decryptData(encryptedBuffer, password) {
     const dec = new TextDecoder();
     return dec.decode(decrypted);
   } catch (e) {
-    throw new Error('解密失敗，可能是密碼錯誤或數據損壞');
+    // 帶上錯誤碼，讓畫面自己決定怎麼說明（訊息本身已經以「解密失敗」開頭，畫面不要再加一次）
+    throw Object.assign(new Error('解密失敗，可能是主密碼錯誤或數據損壞'), { code: DECRYPT_FAILED, cause: e });
   }
 }

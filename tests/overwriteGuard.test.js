@@ -5,6 +5,7 @@ import {
   snapshotFailedMessage,
   snapshotSavedNote,
   confirmJsonImportMessage,
+  canSnapshot,
 } from '../src/domain/overwriteGuard.js';
 
 describe('snapshotBeforeOverwrite：覆蓋本機資料前先拍快照', () => {
@@ -24,6 +25,13 @@ describe('snapshotBeforeOverwrite：覆蓋本機資料前先拍快照', () => {
   it('主程序回報失敗時不可繼續', async () => {
     const snapshotData = vi.fn().mockResolvedValue({ success: false, error: '磁碟已滿' });
     expect(await snapshotBeforeOverwrite({ snapshotData }, { reason: 'x' })).toEqual({ ok: false, error: '磁碟已滿' });
+  });
+
+  it('主程序有帶錯誤碼時一起傳回', async () => {
+    const snapshotData = vi.fn().mockResolvedValue({ success: false, code: 'ENOSPC', error: 'ENOSPC: no space left on device' });
+    expect(await snapshotBeforeOverwrite({ snapshotData }, { reason: 'x' })).toEqual({
+      ok: false, code: 'ENOSPC', error: 'ENOSPC: no space left on device',
+    });
   });
 
   it('呼叫本身丟錯時也視為失敗', async () => {
@@ -53,6 +61,40 @@ describe('提示文字', () => {
   it('匯入 JSON 的確認文字包含檔名', () => {
     expect(confirmJsonImportMessage('a.json')).toContain('「a.json」');
     expect(confirmJsonImportMessage('')).toContain('這個 JSON 檔');
+  });
+
+  it('能拍快照時才承諾會自動備份；瀏覽器模式改成提醒自己先備份', () => {
+    expect(confirmJsonImportMessage('a.json', { canSnapshot: true })).toContain('覆蓋前會先自動把目前的資料備份一份');
+    const browser = confirmJsonImportMessage('a.json', { canSnapshot: false });
+    expect(browser).not.toContain('自動把目前的資料備份');
+    expect(browser).toContain('瀏覽器模式不會在覆蓋前自動備份');
+    expect(canSnapshot(undefined)).toBe(false);
+    expect(canSnapshot({})).toBe(false);
+    expect(canSnapshot({ snapshotData: () => {} })).toBe(true);
+  });
+
+  it.each([
+    ['EEXIST', 'EEXIST: file already exists, mkdir \'C:\\d\\backups\'', '叫 backups 的「檔案」'],
+    ['EPERM', 'EPERM: operation not permitted, copyfile', '沒有寫入備份資料夾的權限'],
+    ['EACCES', 'EACCES: permission denied', '沒有寫入備份資料夾的權限'],
+    ['ENOSPC', 'ENOSPC: no space left on device', '磁碟空間不足'],
+    ['EBUSY', 'EBUSY: resource busy or locked', '正被別的程式'],
+  ])('常見錯誤碼 %s：先寫白話原因，原始訊息放在技術細節', (code, raw, expected) => {
+    const msg = snapshotFailedMessage({ ok: false, code, error: raw });
+    expect(msg).toContain('沒有覆蓋');
+    expect(msg).toContain(expected);
+    expect(msg).toContain(`技術細節：${raw}`);
+    expect(msg.indexOf(expected)).toBeLessThan(msg.indexOf(raw));
+  });
+
+  it('沒帶錯誤碼時，從訊息開頭認出錯誤碼', () => {
+    expect(snapshotFailedMessage({ ok: false, error: 'EEXIST: file already exists, mkdir x' })).toContain('叫 backups 的「檔案」');
+  });
+
+  it('不認得的錯誤只顯示原始訊息', () => {
+    const msg = snapshotFailedMessage({ ok: false, code: 'WEIRD', error: 'something odd' });
+    expect(msg).toContain('原因：something odd');
+    expect(msg).not.toContain('技術細節');
   });
 
   it('快照原因只用檔名允許的字元（storage 會原樣放進檔名）', () => {

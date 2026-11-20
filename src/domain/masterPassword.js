@@ -15,13 +15,17 @@
  *   needs-confirm：改了主密碼，確認欄還沒填
  *   mismatch：兩次輸入不一樣
  *   empty：把主密碼改成空白
- *   match：改了主密碼，兩次相同（應該立刻儲存）
+ *   match：改了主密碼，兩次相同（可以按「確認主密碼」儲存；按之前還沒存，雲端功能仍會擋下）
+ *
+ * 不會在打字途中自動儲存：兩欄「剛好」一樣的那一刻（例如確認欄先打好 abcd，主密碼欄打 abcde 打到一半），
+ * 不代表使用者打完了。所以一律等使用者按「確認主密碼」才存，取消修改時也才能改回原本的主密碼。
  */
 
 /**
  * @param {{ saved: string, draft: string|null, confirm: string }} input
  *   saved：已經存起來的主密碼；draft：主密碼欄正在輸入的內容（null＝沒有在改，顯示已存的）；confirm：確認欄
- * @returns {{ status: MasterPasswordStatus, value: string, changed: boolean, blocksCloud: boolean, shouldCommit: boolean, message: string|null, tone: 'ok'|'warning'|'error'|null }}
+ * @returns {{ status: MasterPasswordStatus, value: string, changed: boolean, blocksCloud: boolean, canCommit: boolean, message: string|null, tone: 'ok'|'warning'|'error'|null }}
+ *   canCommit：可以儲存（只有 match 時為 true），由使用者按「確認主密碼」觸發
  */
 export function evaluateMasterPassword({ saved, draft, confirm }) {
   const savedValue = saved || '';
@@ -29,7 +33,7 @@ export function evaluateMasterPassword({ saved, draft, confirm }) {
   const value = draft ?? savedValue;
   const changed = draft !== null && draft !== undefined && draft !== savedValue;
 
-  const result = (status, extra) => ({ status, value, changed, blocksCloud: false, shouldCommit: false, message: null, tone: null, ...extra });
+  const result = (status, extra) => ({ status, value, changed, blocksCloud: false, canCommit: false, message: null, tone: null, ...extra });
 
   if (changed) {
     if (value === '') {
@@ -43,7 +47,7 @@ export function evaluateMasterPassword({ saved, draft, confirm }) {
       return result('needs-confirm', {
         blocksCloud: true,
         tone: 'warning',
-        message: '主密碼改過了，請在「再輸入一次主密碼」填入一模一樣的內容；兩次一樣才會儲存。',
+        message: '主密碼改過了，請在「再輸入一次主密碼」填入一模一樣的內容，再按「確認主密碼」才會儲存。',
       });
     }
     if (confirmValue !== value) {
@@ -53,7 +57,12 @@ export function evaluateMasterPassword({ saved, draft, confirm }) {
         message: '兩次輸入的主密碼不一樣，新的主密碼還沒有儲存。請重新輸入，或按「取消修改」改回原本的主密碼。',
       });
     }
-    return result('match', { shouldCommit: true, tone: 'ok', message: '兩次輸入相同，新的主密碼已儲存。' });
+    return result('match', {
+      canCommit: true,
+      blocksCloud: true,
+      tone: 'warning',
+      message: '兩次輸入相同。按「確認主密碼」才會儲存新的主密碼；沒按就離開設定頁，這次修改會被放棄。',
+    });
   }
 
   if (confirmValue === '') return result('unchanged');
@@ -66,6 +75,9 @@ export function evaluateMasterPassword({ saved, draft, confirm }) {
     message: '「再輸入一次」和目前存著的主密碼不一樣。請確認哪一個才是正確的主密碼：用錯的主密碼上傳，之後就解不開了。',
   });
 }
+
+/** 按「確認主密碼」儲存後顯示的訊息 */
+export const MASTER_PASSWORD_SAVED_MESSAGE = '新的主密碼已儲存。';
 
 /**
  * 主密碼還沒確認好時，按雲端按鈕要跳出的說明。

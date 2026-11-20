@@ -8,7 +8,8 @@ import {
   IV_LENGTH,
   TAG_LENGTH,
 } from '../electron/galleryCrypto.js';
-import { encryptData, decryptData } from '../src/utils/crypto.js';
+import { encryptData, decryptData, DECRYPT_FAILED } from '../src/utils/crypto.js';
+import { cloudRestoreFailureMessage } from '../src/domain/cloudUpload.js';
 
 const PASSWORD = 'correct horse battery staple';
 
@@ -108,5 +109,35 @@ describe('與畫面端 src/utils/crypto.js 格式相容', () => {
     const arrayBuffer = await encryptData(bytes, PASSWORD);
     const decrypted = await decryptBuffer(Buffer.from(arrayBuffer), PASSWORD);
     expect(Buffer.compare(decrypted, Buffer.from(bytes))).toBe(0);
+  });
+});
+
+describe('雲端還原失敗的訊息（主密碼錯誤時不會出現兩次「解密失敗」）', () => {
+  it('主密碼錯誤：decryptData 丟出帶 DECRYPT_FAILED 的錯誤，訊息只有一次「解密失敗」', async () => {
+    const encrypted = await encryptData('{"a":1}', 'right-password');
+    const error = await decryptData(encrypted, 'wrong-password').catch((e) => e);
+    expect(error.code).toBe(DECRYPT_FAILED);
+    const msg = cloudRestoreFailureMessage(error);
+    expect(msg.match(/解密失敗/g)).toHaveLength(1);
+    expect(msg).toContain('主密碼');
+    expect(msg).toContain('資料沒有變動');
+  });
+
+  it('解密成功但內容不是 JSON：說明檔案可能損壞', () => {
+    let error;
+    try {
+      JSON.parse('not json');
+    } catch (e) {
+      error = e;
+    }
+    const msg = cloudRestoreFailureMessage(error);
+    expect(msg).toContain('檔案可能損壞');
+    expect(msg).not.toContain('解密失敗');
+  });
+
+  it('其他錯誤附上原因，不說成解密失敗', () => {
+    const msg = cloudRestoreFailureMessage(new Error('雲端上的檔案不是 LifeSync 的資料格式'));
+    expect(msg).toContain('還原失敗：雲端上的檔案不是 LifeSync 的資料格式');
+    expect(msg).not.toContain('解密失敗');
   });
 });

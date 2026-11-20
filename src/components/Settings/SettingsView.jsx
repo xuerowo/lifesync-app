@@ -5,15 +5,16 @@ import { encryptData, decryptData } from '../../utils/crypto';
 import { mergeIncomingData, stripCloudSecrets, isImportableData } from '../../shared/cloudSecrets';
 import {
   SNAPSHOT_REASONS, CONFIRM_BACKUP_RESTORE, CONFIRM_CLOUD_RESTORE, confirmJsonImportMessage,
-  snapshotBeforeOverwrite, snapshotFailedMessage, snapshotSavedNote
+  snapshotBeforeOverwrite, snapshotFailedMessage, snapshotSavedNote, canSnapshot
 } from '../../domain/overwriteGuard';
-import { cloudUploadSuccessMessage } from '../../domain/cloudUpload';
+import { cloudUploadSuccessMessage, cloudRestoreFailureMessage } from '../../domain/cloudUpload';
 import {
-  evaluateMasterPassword, masterPasswordBlockMessage, isInsecureWebdavUrl, INSECURE_URL_WARNING
+  evaluateMasterPassword, masterPasswordBlockMessage, isInsecureWebdavUrl, INSECURE_URL_WARNING,
+  MASTER_PASSWORD_SAVED_MESSAGE
 } from '../../domain/masterPassword';
 
 const SettingsView = () => {
-  const { data, setData, updateData, isSyncing, setIsSyncing, setSyncProgress } = useAppData();
+  const { data, setData, updateData, isSyncing, setIsSyncing, setSyncProgress, markSecretReentered } = useAppData();
   const [testResult, setTestResult] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
   
@@ -21,7 +22,7 @@ const SettingsView = () => {
   const [showAppPassword, setShowAppPassword] = useState(false);
   const [showMasterPassword, setShowMasterPassword] = useState(false);
 
-  // 主密碼（H11）：修改時要輸入兩次，兩次一樣才存進資料。
+  // 主密碼（H11）：修改時要輸入兩次，兩次一樣、而且按了「確認主密碼」才存進資料（打字途中不會自動存）。
   // masterDraft 是主密碼欄正在改的內容（null＝沒有在改，顯示已存的主密碼）；masterConfirm 是「再輸入一次」欄。
   // 沒確認就離開設定頁，修改會被放棄，保留原本的主密碼。
   const [masterDraft, setMasterDraft] = useState(null);
@@ -31,22 +32,29 @@ const SettingsView = () => {
     saved: data.cloudConfig.masterPassword, draft: masterDraft, confirm: masterConfirm
   });
   const masterMessage = masterState.status === 'verified' && masterJustSaved
-    ? '兩次輸入相同，新的主密碼已儲存。'
+    ? MASTER_PASSWORD_SAVED_MESSAGE
     : masterState.message;
 
+  // 打字時只更新畫面上的兩欄，不儲存
   const applyMasterInput = (nextDraft, nextConfirm) => {
     const next = evaluateMasterPassword({
       saved: data.cloudConfig.masterPassword, draft: nextDraft, confirm: nextConfirm
     });
-    if (next.shouldCommit) {
-      updateData(prev => ({ ...prev, cloudConfig: { ...prev.cloudConfig, masterPassword: next.value } }));
-      setMasterDraft(null);
-      setMasterJustSaved(true);
-    } else {
-      setMasterDraft(next.changed ? nextDraft : null);
-      setMasterJustSaved(false);
-    }
+    setMasterDraft(next.changed ? nextDraft : null);
+    setMasterJustSaved(false);
     setMasterConfirm(nextConfirm);
+  };
+  // 「確認主密碼」按鈕（或在兩欄按 Enter）：兩次一樣才儲存
+  const commitMasterPassword = () => {
+    if (!masterState.canCommit) return;
+    const value = masterState.value;
+    updateData(prev => ({ ...prev, cloudConfig: { ...prev.cloudConfig, masterPassword: value } }));
+    markSecretReentered('masterPassword');
+    setMasterDraft(null);
+    setMasterJustSaved(true);
+  };
+  const commitMasterOnEnter = (e) => {
+    if (e.key === 'Enter') commitMasterPassword();
   };
   const cancelMasterEdit = () => {
     setMasterDraft(null);
@@ -102,7 +110,7 @@ const SettingsView = () => {
         // 覆蓋前先拍快照；失敗就整個取消，連圖庫也不動
         const snapshot = await snapshotBeforeOverwrite(window.electronAPI, { reason: SNAPSHOT_REASONS.backupRestore, data });
         if (!snapshot.ok) {
-            alert(snapshotFailedMessage(snapshot.error));
+            alert(snapshotFailedMessage(snapshot));
             return;
         }
         setSyncProgress({ message: '準備還原...' });
@@ -144,11 +152,12 @@ const SettingsView = () => {
         alert('導入失敗：檔案內容不是 LifeSync 的資料格式');
         return;
       }
-      if (!confirm(confirmJsonImportMessage(file.name))) return;
+      // 瀏覽器模式不能拍快照，確認文字不能承諾會自動備份
+      if (!confirm(confirmJsonImportMessage(file.name, { canSnapshot: canSnapshot(window.electronAPI) }))) return;
       // 覆蓋前先拍快照；失敗就不匯入
       const snapshot = await snapshotBeforeOverwrite(window.electronAPI, { reason: SNAPSHOT_REASONS.jsonImport, data });
       if (!snapshot.ok) {
-        alert(snapshotFailedMessage(snapshot.error));
+        alert(snapshotFailedMessage(snapshot));
         return;
       }
       // 雲端設定保留這台電腦目前的，不用檔案裡的（檔案裡的密碼可能是加密過、這台解不開的字串）
@@ -162,6 +171,8 @@ const SettingsView = () => {
 
   const handleCloudConfigChange = (e) => {
     const { name, value, type, checked } = e.target;
+    // 重新輸入了這台電腦解不開的密碼：上方「解不開」的提示就不再適用
+    if (name === 'password' && value !== '') markSecretReentered('password');
     updateData(prev => ({
       ...prev,
       cloudConfig: {
@@ -231,7 +242,7 @@ const SettingsView = () => {
         setSyncProgress({ message: '正在備份目前的資料...' });
         const snapshot = await snapshotBeforeOverwrite(window.electronAPI, { reason: SNAPSHOT_REASONS.cloudRestore, data });
         if (!snapshot.ok) {
-          alert(snapshotFailedMessage(snapshot.error));
+          alert(snapshotFailedMessage(snapshot));
           return;
         }
         // 雲端設定保留這台電腦目前的，不用雲端那份的
@@ -241,7 +252,7 @@ const SettingsView = () => {
         alert(`下載失敗: ${result.error}`);
       }
     } catch (err) {
-      alert(`解密失敗: ${err.message} (請檢查密碼是否正確)`);
+      alert(cloudRestoreFailureMessage(err));
     } finally {
       setIsSyncing(false);
       setSyncProgress(null);
@@ -562,6 +573,7 @@ const SettingsView = () => {
                     name="masterPassword"
                     value={masterState.value}
                     onChange={(e) => applyMasterInput(e.target.value, masterConfirm)}
+                    onKeyDown={commitMasterOnEnter}
                     placeholder="遺失此密碼將無法救回數據"
                     className="w-full px-5 md:px-6 py-3 md:py-4 pr-12 md:pr-14 rounded-2xl md:rounded-3xl bg-sky-900 text-white placeholder:text-sky-400 border-2 border-sky-900 focus:border-sky-400 outline-none transition-all font-medium text-sm shadow-lg"
                 />
@@ -580,6 +592,7 @@ const SettingsView = () => {
                   name="masterPasswordConfirm"
                   value={masterConfirm}
                   onChange={(e) => applyMasterInput(masterDraft, e.target.value)}
+                  onKeyDown={commitMasterOnEnter}
                   placeholder={masterState.changed ? "修改主密碼時必填，兩次要一樣" : "修改主密碼時才需要填"}
                   autoComplete="off"
                   className="w-full px-5 md:px-6 py-3 md:py-4 rounded-2xl md:rounded-3xl bg-sky-900 text-white placeholder:text-sky-400 border-2 border-sky-900 focus:border-sky-400 outline-none transition-all font-medium text-sm shadow-lg"
@@ -597,13 +610,23 @@ const SettingsView = () => {
                 </p>
               )}
               {masterState.changed && (
-                <button
-                  type="button"
-                  onClick={cancelMasterEdit}
-                  className="ml-2 text-[11px] md:text-xs font-black text-sky-500 hover:text-sky-700 underline"
-                >
-                  取消修改（改回原本的主密碼）
-                </button>
+                <div className="flex flex-wrap items-center gap-3 mx-2">
+                  <button
+                    type="button"
+                    onClick={commitMasterPassword}
+                    disabled={!masterState.canCommit}
+                    className="px-4 py-2 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white text-[11px] md:text-xs font-black shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    確認主密碼
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelMasterEdit}
+                    className="text-[11px] md:text-xs font-black text-sky-500 hover:text-sky-700 underline"
+                  >
+                    取消修改（改回原本的主密碼）
+                  </button>
+                </div>
               )}
             </div>
           </div>

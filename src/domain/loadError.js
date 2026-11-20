@@ -135,3 +135,15 @@ export function describeSecretsUnavailable(fields) {
     '請到「設定」頁重新輸入一次。原本加密的內容沒有被刪除，重新輸入之前也不會被清掉。'
   );
 }
+
+/**
+ * 使用者在設定頁重新輸入了某個解不開的密碼後，剩下還要提示的欄位。
+ * 輸入的新密碼一存檔就會取代原本解不開的加密內容，提示裡「原本加密的內容沒有被刪除」也就不再成立，所以把它拿掉。
+ * @param {string[]} fields 目前解不開的欄位
+ * @param {string} reenteredField 剛重新輸入的欄位（password、masterPassword）
+ * @returns {string[]} 沒有變化時回傳原本的陣列
+ */
+export function withoutReenteredSecret(fields, reenteredField) {
+  if (!Array.isArray(fields) || !fields.includes(reenteredField)) return fields;
+  return fields.filter((f) => f !== reenteredField);
+}

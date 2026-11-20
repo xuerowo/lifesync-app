@@ -3,7 +3,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
   describeLoadError, describeRestoreFailure, describeRestoreSuccess, describeSecretsUnavailable,
-  formatLocalDateTime, baseName, LOAD_ERROR_SAFETY_NOTE, restoreConfirmMessage,
+  formatLocalDateTime, baseName, LOAD_ERROR_SAFETY_NOTE, restoreConfirmMessage, withoutReenteredSecret,
 } from '../src/domain/loadError.js';
 import LoadErrorScreen from '../src/components/Shared/LoadErrorScreen.jsx';
 
@@ -89,6 +89,20 @@ describe('describeSecretsUnavailable', () => {
     const text = describeSecretsUnavailable(['password', 'masterPassword']);
     expect(text).toContain('WebDAV 應用程式密碼和數據加密主密碼');
     expect(text).toContain('重新輸入');
+  });
+});
+
+describe('withoutReenteredSecret：重新輸入密碼後，提示不再列那個欄位', () => {
+  it('只拿掉重新輸入的那一個', () => {
+    expect(withoutReenteredSecret(['password', 'masterPassword'], 'password')).toEqual(['masterPassword']);
+    expect(withoutReenteredSecret(['masterPassword'], 'masterPassword')).toEqual([]);
+    expect(describeSecretsUnavailable(withoutReenteredSecret(['password'], 'password'))).toBeNull();
+  });
+
+  it('沒有這個欄位時回傳原本的陣列（畫面不必重繪）', () => {
+    const fields = ['masterPassword'];
+    expect(withoutReenteredSecret(fields, 'password')).toBe(fields);
+    expect(withoutReenteredSecret(undefined, 'password')).toBeUndefined();
   });
 });
 

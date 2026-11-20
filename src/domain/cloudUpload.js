@@ -14,3 +14,20 @@ export function cloudUploadSuccessMessage(result) {
   if (result?.warning) lines.push('', `注意：${result.warning}`);
   return lines.join('\n');
 }
+
+/**
+ * 雲端「還原數據」失敗時的訊息（這時本機資料一定還沒被覆蓋）。
+ * 解密失敗的錯誤（code 為 DECRYPT_FAILED）本身就以「解密失敗」開頭，這裡不再重複加前綴。
+ * @param {Error & { code?: string }} error
+ */
+export function cloudRestoreFailureMessage(error) {
+  const unchanged = '這台電腦上的資料沒有變動。';
+  if (error?.code === 'DECRYPT_FAILED') {
+    return `解密失敗：雲端上的備份解不開。最可能的原因是主密碼和上傳時用的不一樣，請檢查主密碼是否正確；也可能是雲端上的檔案損壞。\n\n${unchanged}`;
+  }
+  if (error instanceof SyntaxError) {
+    return `還原失敗：雲端上的備份解密後不是正確的資料格式，檔案可能損壞了。\n\n${unchanged}`;
+  }
+  const detail = error?.message || String(error || '未知的錯誤');
+  return `還原失敗：${detail}\n\n${unchanged}`;
+}

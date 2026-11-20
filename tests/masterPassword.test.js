@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   evaluateMasterPassword, masterPasswordBlockMessage, isInsecureWebdavUrl, INSECURE_URL_WARNING,
+  MASTER_PASSWORD_SAVED_MESSAGE,
 } from '../src/domain/masterPassword.js';
 
 const evaluate = (saved, draft, confirm) => evaluateMasterPassword({ saved, draft, confirm });
@@ -8,7 +9,7 @@ const evaluate = (saved, draft, confirm) => evaluateMasterPassword({ saved, draf
 describe('evaluateMasterPassword：已經存好主密碼的人', () => {
   it('沒有在改、確認欄空白：不擋任何雲端功能，也不顯示訊息', () => {
     const s = evaluate('old-secret', null, '');
-    expect(s).toMatchObject({ status: 'unchanged', value: 'old-secret', changed: false, blocksCloud: false, shouldCommit: false, message: null });
+    expect(s).toMatchObject({ status: 'unchanged', value: 'old-secret', changed: false, blocksCloud: false, canCommit: false, message: null });
   });
 
   it('主密碼欄改回和原本一樣：視為沒有在改', () => {
@@ -33,24 +34,38 @@ describe('evaluateMasterPassword：已經存好主密碼的人', () => {
 describe('evaluateMasterPassword：修改或第一次輸入主密碼', () => {
   it('第一次輸入、確認欄還沒填：要求再輸入一次，擋下雲端功能，不儲存', () => {
     const s = evaluate('', 'new-secret', '');
-    expect(s).toMatchObject({ status: 'needs-confirm', changed: true, blocksCloud: true, shouldCommit: false, tone: 'warning' });
+    expect(s).toMatchObject({ status: 'needs-confirm', changed: true, blocksCloud: true, canCommit: false, tone: 'warning' });
     expect(s.message).toContain('再輸入一次主密碼');
   });
 
   it('兩次不一樣：擋下且不儲存', () => {
     const s = evaluate('old-secret', 'new-secret', 'new-secrt');
-    expect(s).toMatchObject({ status: 'mismatch', blocksCloud: true, shouldCommit: false, tone: 'error' });
+    expect(s).toMatchObject({ status: 'mismatch', blocksCloud: true, canCommit: false, tone: 'error' });
     expect(s.message).toContain('還沒有儲存');
   });
 
-  it('兩次一樣：應該立刻儲存', () => {
+  it('兩次一樣：可以儲存，但要等使用者按「確認主密碼」；按之前仍擋下雲端功能', () => {
     const s = evaluate('old-secret', 'new-secret', 'new-secret');
-    expect(s).toMatchObject({ status: 'match', value: 'new-secret', blocksCloud: false, shouldCommit: true });
+    expect(s).toMatchObject({ status: 'match', value: 'new-secret', blocksCloud: true, canCommit: true });
+    expect(s.message).toContain('確認主密碼');
+  });
+
+  it('打字途中兩欄剛好一樣，只是「可以儲存」，不會自動儲存；繼續打又變回不一樣', () => {
+    // 確認欄先填好 abcd，主密碼欄要打 abcde：打到 abcd 時剛好一樣
+    expect(evaluate('orig', 'abcd', 'abcd')).toMatchObject({ status: 'match', canCommit: true });
+    const next = evaluate('orig', 'abcde', 'abcd');
+    expect(next).toMatchObject({ status: 'mismatch', canCommit: false, blocksCloud: true });
+    // 已存的仍是原本的主密碼，所以「取消修改」會改回 orig
+    expect(evaluate('orig', null, '').value).toBe('orig');
+  });
+
+  it('沒有在改時不能儲存（確認欄只是用來驗證）', () => {
+    expect(evaluate('old-secret', null, 'old-secret').canCommit).toBe(false);
   });
 
   it('把已存的主密碼刪成空白：不儲存，提示可以取消修改', () => {
     const s = evaluate('old-secret', '', '');
-    expect(s).toMatchObject({ status: 'empty', blocksCloud: true, shouldCommit: false });
+    expect(s).toMatchObject({ status: 'empty', blocksCloud: true, canCommit: false });
     expect(s.message).toContain('取消修改');
   });
 
@@ -68,6 +83,13 @@ describe('evaluateMasterPassword：修改或第一次輸入主密碼', () => {
 describe('masterPasswordBlockMessage', () => {
   it('不需要擋時回傳 null', () => {
     expect(masterPasswordBlockMessage(evaluate('a', null, ''), '上傳')).toBeNull();
+  });
+
+  it('兩次一樣但還沒按確認：擋下並提醒要按「確認主密碼」', () => {
+    const msg = masterPasswordBlockMessage(evaluate('a', 'b', 'b'), '上傳');
+    expect(msg).toContain('這次沒有上傳');
+    expect(msg).toContain('確認主密碼');
+    expect(MASTER_PASSWORD_SAVED_MESSAGE).toContain('已儲存');
   });
 
   it('需要擋時說明這次沒有做什麼，以及原因', () => {

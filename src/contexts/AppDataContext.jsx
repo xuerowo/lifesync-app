@@ -4,6 +4,7 @@ import { createDefaultData, normalizeData } from '../shared/defaultData';
 import { completionRewardTickets, computeActivePriorityTasks, createRecentGuard, isOneTimeTask, renumberPriorityTasks } from '../domain/tasks';
 import { localStampedIsoFromUtcIso, parseLocalDate } from '../domain/dates';
 import { saveResultError, toSaveFailure } from '../domain/saveRetry';
+import { withoutReenteredSecret } from '../domain/loadError';
 
 const AppDataContext = createContext();
 
@@ -613,6 +614,8 @@ export const AppDataProvider = ({ children }) => {
     dismissRestoreNotice: () => setRestoreNotice(null),
     secretsUnavailable,
     dismissSecretsNotice: () => setSecretsUnavailable([]),
+    // 設定頁重新輸入了解不開的密碼（WebDAV 密碼、確認後的主密碼）時呼叫，提示裡就不再列這個欄位
+    markSecretReentered: (field) => setSecretsUnavailable((prev) => withoutReenteredSecret(prev, field)),
     saveError,
     isRetryingSave,
     retrySaveNow,
