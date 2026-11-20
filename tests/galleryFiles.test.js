@@ -178,6 +178,20 @@ describe('copyImageIntoGallery', () => {
   };
   const hash8 = (content) => crypto.createHash('sha256').update(content).digest('hex').slice(0, 8);
 
+  it('只複製圖片檔：其他副檔名一律拒絕，圖庫裡不會多出檔案', async () => {
+    for (const name of ['evil.exe', 'data.json', 'notes.txt', 'noext', 'photo.png.exe', 'archive.png.zip']) {
+      const src = write(source, name, 'X');
+      await expect(copyImageIntoGallery(src, gallery)).rejects.toMatchObject({ code: 'NOT_IMAGE' });
+    }
+    await expect(copyImageIntoGallery(undefined, gallery)).rejects.toMatchObject({ code: 'NOT_IMAGE' });
+    expect(fs.readdirSync(gallery)).toEqual([]);
+  });
+
+  it('圖片副檔名不分大小寫都可以複製', async () => {
+    const src = write(source, 'CAT.JPEG', 'AAA');
+    expect((await copyImageIntoGallery(src, gallery)).name).toBe('CAT.JPEG');
+  });
+
   it('圖庫裡沒有同名檔案時直接複製', async () => {
     const src = write(source, 'cat.png', 'AAA');
     const result = await copyImageIntoGallery(src, gallery);

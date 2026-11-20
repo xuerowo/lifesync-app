@@ -119,6 +119,7 @@ const MAX_NAME_ATTEMPTS = 100;
  *    該名稱也存在時，內容相同就沿用，不同就再加上 `-2`、`-3`…（幾乎不會發生）。
  *
  * 複製時使用「目標已存在就失敗」的模式，所以絕不會覆寫圖庫裡的檔案。
+ * 副檔名不是圖片（IMAGE_EXTENSIONS）的檔案一律拒絕，丟出 code 為 NOT_IMAGE 的錯誤。
  *
  * @param {string} sourcePath 原始圖片的路徑
  * @param {string} galleryDir 圖庫資料夾（需已存在）
@@ -126,6 +127,11 @@ const MAX_NAME_ATTEMPTS = 100;
  *   name 是圖庫裡實際使用的檔名；reused 表示沿用了內容相同的既有檔案
  */
 export async function copyImageIntoGallery(sourcePath, galleryDir) {
+  // 只複製圖片檔（和讀圖片、掃描卡池資料夾用同一份副檔名清單）：
+  // 畫面傳來的路徑不一定是掃描結果，不能讓任意檔案（例如 .exe、.json）被複製進圖庫
+  if (!hasImageExtension(sourcePath) || sourcePath.includes('\0')) {
+    throw Object.assign(new Error(`不是允許的圖片格式，不加入圖庫：${sourcePath}`), { code: 'NOT_IMAGE' });
+  }
   const baseName = path.basename(sourcePath);
   const ext = path.extname(baseName);
   const stem = baseName.slice(0, baseName.length - ext.length);
