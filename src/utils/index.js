@@ -42,13 +42,6 @@ export const formatForDateTimeLocal = (isoStr) => {
   return new Date(d.getTime() - offset).toISOString().slice(0, 16);
 };
 
-export const getNextHourStr = (plusHours = 1) => {
-  const d = new Date();
-  d.setHours(d.getHours() + plusHours);
-  d.setMinutes(0);
-  return d.toISOString().slice(0, 16);
-};
-
 export const formatTaskTime = (task, isCompact = false) => {
   if (task.type === 'daily') {
     if (task.noTime) return isCompact ? '' : '每日 (不限時間)';
