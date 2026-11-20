@@ -3,6 +3,10 @@ import { Settings2, Download, Upload, Cloud, ShieldCheck, RefreshCw, Image as Im
 import { useAppData } from '../../contexts/AppDataContext';
 import { encryptData, decryptData } from '../../utils/crypto';
 import { normalizeData } from '../../shared/defaultData';
+import {
+  SNAPSHOT_REASONS, CONFIRM_BACKUP_RESTORE, CONFIRM_CLOUD_RESTORE, confirmJsonImportMessage,
+  snapshotBeforeOverwrite, snapshotFailedMessage, snapshotSavedNote
+} from '../../domain/overwriteGuard';
 
 const SettingsView = () => {
   const { data, setData, updateData, isSyncing, setIsSyncing, setSyncProgress } = useAppData();
@@ -46,18 +50,25 @@ const SettingsView = () => {
     const backupDir = await window.electronAPI.selectDirectory();
     if (!backupDir) return;
 
-    if (!confirm('導入備份將覆蓋目前所有數據與圖庫，確定要繼續嗎？')) return;
+    if (!confirm(CONFIRM_BACKUP_RESTORE)) return;
 
     setIsSyncing(true);
-    setSyncProgress({ message: '準備還原...' });
+    setSyncProgress({ message: '正在備份目前的資料...' });
     try {
+        // 覆蓋前先拍快照；失敗就整個取消，連圖庫也不動
+        const snapshot = await snapshotBeforeOverwrite(window.electronAPI, { reason: SNAPSHOT_REASONS.backupRestore, data });
+        if (!snapshot.ok) {
+            alert(snapshotFailedMessage(snapshot.error));
+            return;
+        }
+        setSyncProgress({ message: '準備還原...' });
         const result = await window.electronAPI.importFullBackup(backupDir);
         if (result.success) {
             if (result.aborted) {
                 alert('還原已中斷');
             } else {
                 setData(prev => normalizeData({ ...prev, ...result.data }));
-                alert('完整數據與圖庫還原成功！');
+                alert(`完整數據與圖庫還原成功！${snapshotSavedNote(snapshot)}`);
             }
         } else {
             alert(`還原失敗: ${result.error}`);
@@ -71,18 +82,30 @@ const SettingsView = () => {
   };
 
   const handleJsonImportOnly = (e) => {
-    if (!e.target.files[0]) return;
+    const file = e.target.files[0];
+    // 清空選取，取消後再選同一個檔案時才會再觸發
+    e.target.value = '';
+    if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
+      let imported;
       try {
-        const imported = JSON.parse(ev.target.result);
-        setData(prev => normalizeData({ ...prev, ...imported }));
-        alert('JSON 數據導入成功！');
+        imported = JSON.parse(ev.target.result);
       } catch {
         alert('導入失敗');
+        return;
       }
+      if (!confirm(confirmJsonImportMessage(file.name))) return;
+      // 覆蓋前先拍快照；失敗就不匯入
+      const snapshot = await snapshotBeforeOverwrite(window.electronAPI, { reason: SNAPSHOT_REASONS.jsonImport, data });
+      if (!snapshot.ok) {
+        alert(snapshotFailedMessage(snapshot.error));
+        return;
+      }
+      setData(prev => normalizeData({ ...prev, ...imported }));
+      alert(`JSON 數據導入成功！${snapshotSavedNote(snapshot)}`);
     };
-    reader.readAsText(e.target.files[0]);
+    reader.readAsText(file);
   };
 
   // --- 雲端備份處理 ---
@@ -139,6 +162,7 @@ const SettingsView = () => {
       return;
     }
     if (!window.electronAPI) return;
+    if (!confirm(CONFIRM_CLOUD_RESTORE)) return;
     setIsSyncing(true);
     setSyncProgress({ message: '正在從雲端獲取數據...' });
     try {
@@ -149,8 +173,15 @@ const SettingsView = () => {
       if (result.success) {
         const decryptedJson = await decryptData(result.data, data.cloudConfig.masterPassword);
         const imported = JSON.parse(decryptedJson);
+        // 下載、解密都成功了，覆蓋前先拍快照；失敗就不覆蓋
+        setSyncProgress({ message: '正在備份目前的資料...' });
+        const snapshot = await snapshotBeforeOverwrite(window.electronAPI, { reason: SNAPSHOT_REASONS.cloudRestore, data });
+        if (!snapshot.ok) {
+          alert(snapshotFailedMessage(snapshot.error));
+          return;
+        }
         setData(prev => normalizeData({ ...prev, ...imported }));
-        alert('加密數據還原成功！');
+        alert(`加密數據還原成功！${snapshotSavedNote(snapshot)}`);
       } else {
         alert(`下載失敗: ${result.error}`);
       }

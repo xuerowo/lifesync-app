@@ -230,6 +230,19 @@ ipcMain.on('save-data-sync', (event, data) => {
   }
 });
 
+// 覆蓋本機資料（雲端還原、匯入 JSON、還原完整備份）之前，先在 backups\ 拍一份快照。
+// data 是畫面上目前的資料：先存好再拍，快照才不會漏掉最後幾秒的修改。
+// 回傳 { success, path? , error? }；失敗時畫面端不可繼續覆蓋。
+ipcMain.handle('snapshot-data', async (event, { reason, data } = {}) => {
+  try {
+    const snapshotPath = await storage.snapshotCurrent(reason, data);
+    return { success: true, path: snapshotPath };
+  } catch (e) {
+    console.error('[storage] 覆蓋前快照失敗:', e.message);
+    return { success: false, error: e.message };
+  }
+});
+
 // 掃描資料夾
 ipcMain.handle('scan-folder', async (event, folderPath) => {
   if (!folderPath) throw new Error('請提供資料夾路徑');

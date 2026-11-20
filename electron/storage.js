@@ -342,6 +342,14 @@ export function createStorage({
       return target;
     });
 
+  // 覆蓋本機資料（雲端還原、匯入）之前使用：有傳 data 時先把它存好再拍快照，
+  // 快照才會包含畫面上最新、存檔排程還沒寫進檔案的修改。
+  // 存檔或快照失敗都會丟錯，呼叫端必須因此取消覆蓋。
+  const snapshotCurrent = async (reason, data) => {
+    if (data !== undefined && data !== null) await save(data);
+    return snapshot(reason);
+  };
+
   const restoreLatestBackup = () =>
     enqueue(async () => {
       const candidates = [...listBackupFiles(DAILY_BACKUP_RE), ...listBackupFiles(SNAPSHOT_RE)]
@@ -393,6 +401,7 @@ export function createStorage({
     save,
     saveSync,
     snapshot,
+    snapshotCurrent,
     restoreLatestBackup,
   };
 }

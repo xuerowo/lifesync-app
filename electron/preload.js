@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveData: (data) => ipcRenderer.invoke('save-data', data),
   // 關窗或重新整理前使用：同步等到寫入完成，回傳 { success, error? }
   saveDataSync: (data) => ipcRenderer.sendSync('save-data-sync', data),
+  // 覆蓋本機資料前先存好目前資料並拍快照，回傳 { success, path?, error? }
+  snapshotData: (payload) => ipcRenderer.invoke('snapshot-data', payload),
   scanFolder: (folderPath) => ipcRenderer.invoke('scan-folder', folderPath),
   syncImages: (imagePaths) => ipcRenderer.invoke('sync-images', imagePaths),
   readImageBase64: (filePath) => ipcRenderer.invoke('read-image-base64', filePath),

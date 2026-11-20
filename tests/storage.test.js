@@ -348,6 +348,41 @@ describe('快照', () => {
   })
 })
 
+describe('snapshotCurrent：覆蓋前先存好畫面上的資料再拍快照', () => {
+  it('快照包含傳入的最新資料（還沒被存檔排程寫入的修改）', async () => {
+    writeJson(dataFile, { lotteryTickets: 1 })
+    const storage = makeStorage()
+    const { data } = await storage.load()
+    const snap = await storage.snapshotCurrent('before-cloud-restore', { ...data, lotteryTickets: 7 })
+    expect(path.basename(snap)).toBe('snapshot-20261120-093000-before-cloud-restore.json')
+    expect(readJson(snap).lotteryTickets).toBe(7)
+    expect(readJson(dataFile).lotteryTickets).toBe(7)
+  })
+
+  it('密碼在快照裡和資料檔一樣是加密的', async () => {
+    writeJson(dataFile, { lotteryTickets: 1 })
+    const storage = makeStorage()
+    const { data } = await storage.load()
+    const snap = await storage.snapshotCurrent('x', { ...data, cloudConfig: { ...data.cloudConfig, password: 'pw' } })
+    expect(readJson(snap).cloudConfig.password).toBe('enc:pw')
+  })
+
+  it('沒傳資料時只拍現有檔案', async () => {
+    writeJson(dataFile, { lotteryTickets: 4 })
+    const storage = makeStorage()
+    await storage.load()
+    expect(readJson(await storage.snapshotCurrent('x')).lotteryTickets).toBe(4)
+  })
+
+  it('資料沒成功載入時存檔被擋下，丟錯而且不拍快照', async () => {
+    fs.writeFileSync(dataFile, '{ broken', 'utf-8')
+    const storage = makeStorage()
+    await storage.load()
+    await expect(storage.snapshotCurrent('x', { lotteryTickets: 9 })).rejects.toMatchObject({ code: 'SAVE_BLOCKED' })
+    expect(listDir(backupDir)).toEqual([])
+  })
+})
+
 describe('restoreLatestBackup', () => {
   it('保留壞檔並用最新可用的備份還原', async () => {
     fs.mkdirSync(backupDir)
