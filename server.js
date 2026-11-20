@@ -1,15 +1,19 @@
 import express from 'express';
-import cors from 'cors';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createStorage } from './electron/storage.js';
+import { resolveImageReadPath } from './electron/galleryFiles.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3001;
+// 只接受本機連線：同一個網路上的其他裝置連不進來
+const HOST = '127.0.0.1';
+// 允許的 Host 標頭（擋下「DNS 重新綁定」：惡意網站把自己的網域指到 127.0.0.1 來讀資料）
+const ALLOWED_HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
 // 資料夾：設了 LIFESYNC_DATA_DIR（沙盒、測試用）就用它，否則用專案內的 data/
 const DATA_DIR = process.env.LIFESYNC_DATA_DIR
   ? path.resolve(process.env.LIFESYNC_DATA_DIR)
@@ -20,7 +24,13 @@ const DATA_DIR = process.env.LIFESYNC_DATA_DIR
 const storage = createStorage({ dataDir: DATA_DIR });
 
 // 中間件
-app.use(cors());
+// 不開放跨網站呼叫（不使用 cors）：開發時畫面經由 Vite 的 /api 轉送，屬於同一個網站，不需要。
+app.use((req, res, next) => {
+  if (!ALLOWED_HOSTS.has(String(req.headers.host || '').toLowerCase())) {
+    return res.status(403).json({ error: '只接受本機連線' });
+  }
+  next();
+});
 app.use(express.json({ limit: '50mb' })); // 支援大型圖片數據
 
 // 讀取數據
@@ -105,12 +115,18 @@ app.get('/api/rewards/image', async (req, res) => {
     return res.status(400).json({ error: '請提供圖片路徑' });
   }
 
-  try {
-    await fs.access(imagePath);
-    res.sendFile(imagePath);
-  } catch {
-    res.status(404).json({ error: '圖片不存在' });
+  // 只讀圖片檔；相對路徑（圖庫）以資料資料夾為基準，且不能跳出資料資料夾
+  const absolutePath = resolveImageReadPath(DATA_DIR, String(imagePath));
+  if (!absolutePath) {
+    return res.status(403).json({ error: '不允許讀取這個檔案' });
   }
+
+  // sendFile 需要絕對路徑；路徑已檢查過，允許路徑中有以「.」開頭的資料夾
+  res.sendFile(absolutePath, { dotfiles: 'allow' }, (err) => {
+    if (err && !res.headersSent) {
+      res.status(404).json({ error: '圖片不存在' });
+    }
+  });
 });
 
 // 健康檢查
@@ -125,7 +141,7 @@ if (initialLoad.status === 'error') {
   console.error('   在問題排除前，所有存檔要求都會被拒絕，原檔不會被覆寫。');
 }
 
-app.listen(PORT, () => {
-  console.log(`\n🚀 LifeSync API 服務器運行在 http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`\n🚀 LifeSync API 服務器運行在 http://${HOST}:${PORT}（只限本機）`);
   console.log(`📁 數據文件位置: ${storage.dataFile}\n`);
 });

@@ -33,7 +33,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        // server.js 只監聽 127.0.0.1；寫 localhost 可能被解析成 IPv6 的 ::1 而連不上
+        target: 'http://127.0.0.1:3001',
         changeOrigin: true,
       }
     }

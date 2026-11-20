@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import path from 'path';
-import { toSafeLocalName, resolveInsideDir, pushError, MAX_ERROR_DETAILS } from '../electron/galleryFiles.js';
+import {
+  toSafeLocalName, resolveInsideDir, pushError, MAX_ERROR_DETAILS,
+  resolveImageReadPath, hasImageExtension, IMAGE_EXTENSIONS,
+} from '../electron/galleryFiles.js';
 
 describe('toSafeLocalName', () => {
   it('正常名稱只去掉結尾的 .e2ee', () => {
@@ -87,5 +90,63 @@ describe('pushError', () => {
     for (let i = 0; i < 30; i++) pushError(errors, `f${i}`, 'x');
     expect(errors).toHaveLength(MAX_ERROR_DETAILS);
     expect(errors[0]).toEqual({ name: 'f0', reason: 'x' });
+  });
+});
+
+describe('resolveImageReadPath', () => {
+  const dataDir = path.resolve('some', 'data');
+
+  it('圖庫的相對路徑以資料資料夾為基準', () => {
+    expect(resolveImageReadPath(dataDir, path.join('gallery', 'a.png'))).toBe(path.join(dataDir, 'gallery', 'a.png'));
+    expect(resolveImageReadPath(dataDir, 'gallery/b.JPG')).toBe(path.join(dataDir, 'gallery', 'b.JPG'));
+    expect(resolveImageReadPath(dataDir, 'c.webp')).toBe(path.join(dataDir, 'c.webp'));
+  });
+
+  it('相對路徑不能跳出資料資料夾', () => {
+    expect(resolveImageReadPath(dataDir, '../a.png')).toBeNull();
+    expect(resolveImageReadPath(dataDir, 'gallery/../../a.png')).toBeNull();
+    expect(resolveImageReadPath(dataDir, '..\\..\\Windows\\a.png')).toBeNull();
+  });
+
+  it('資料夾內以「..」開頭的檔名仍可讀', () => {
+    expect(resolveImageReadPath(dataDir, '..a.png')).toBe(path.join(dataDir, '..a.png'));
+  });
+
+  it('絕對路徑只要是圖片檔就允許（舊卡池直接指向原始資料夾）', () => {
+    const abs = path.resolve('pictures', '原圖', 'x.jpeg');
+    expect(resolveImageReadPath(dataDir, abs)).toBe(abs);
+    for (const ext of IMAGE_EXTENSIONS) {
+      expect(resolveImageReadPath(dataDir, path.resolve('p', `x${ext.toUpperCase()}`))).not.toBeNull();
+    }
+  });
+
+  it('不是圖片副檔名一律拒絕', () => {
+    expect(resolveImageReadPath(dataDir, 'lifesync-data.json')).toBeNull();
+    expect(resolveImageReadPath(dataDir, path.join(dataDir, 'lifesync-data.json'))).toBeNull();
+    expect(resolveImageReadPath(dataDir, path.resolve('Windows', 'win.ini'))).toBeNull();
+    expect(resolveImageReadPath(dataDir, path.resolve('p', 'a.png.exe'))).toBeNull();
+    expect(resolveImageReadPath(dataDir, path.resolve('p', 'png'))).toBeNull();
+  });
+
+  it('空值、非字串與含 NUL 字元的路徑拒絕', () => {
+    expect(resolveImageReadPath(dataDir, '')).toBeNull();
+    expect(resolveImageReadPath(dataDir, undefined)).toBeNull();
+    expect(resolveImageReadPath(dataDir, 42)).toBeNull();
+    expect(resolveImageReadPath(dataDir, 'a\u0000.png')).toBeNull();
+  });
+
+  it.runIf(process.platform === 'win32')('Windows 的「磁碟機相對路徑」（C:a.png）不會落到資料資料夾外', () => {
+    const other = dataDir.startsWith('C:') ? 'Z:a.png' : 'C:a.png';
+    expect(resolveImageReadPath(dataDir, other)).toBeNull();
+  });
+});
+
+describe('hasImageExtension', () => {
+  it('不分大小寫判斷圖片副檔名', () => {
+    expect(hasImageExtension('a.PNG')).toBe(true);
+    expect(hasImageExtension('a.svg')).toBe(true);
+    expect(hasImageExtension('a.txt')).toBe(false);
+    expect(hasImageExtension('a')).toBe(false);
+    expect(hasImageExtension(null)).toBe(false);
   });
 });

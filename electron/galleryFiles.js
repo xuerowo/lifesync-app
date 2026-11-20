@@ -59,6 +59,40 @@ export function resolveInsideDir(dir, name) {
   return target;
 }
 
+/** 允許讀取的圖片副檔名（與掃描卡池資料夾時篩選的格式相同） */
+export const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+
+/** 檔名（或路徑）的副檔名是不是允許的圖片格式，不分大小寫 */
+export function hasImageExtension(filePath) {
+  if (typeof filePath !== 'string') return false;
+  return IMAGE_EXTENSIONS.includes(path.extname(filePath).toLowerCase());
+}
+
+/**
+ * 決定「讀圖片」功能實際要讀哪個檔案；不允許讀的就回傳 null。
+ *
+ * - 一律只讀圖片副檔名的檔案（不論相對或絕對路徑）。
+ * - 相對路徑（例如圖庫的 `gallery\a.png`）以資料資料夾為基準，
+ *   解析後必須仍在資料資料夾裡面，不能用 `..` 跳出去。
+ * - 絕對路徑（舊卡池直接指向原始資料夾的圖片）照常允許。
+ *
+ * @param {string} dataDir 資料資料夾
+ * @param {string} filePath 畫面傳來的路徑
+ * @returns {string|null} 要讀取的絕對路徑
+ */
+export function resolveImageReadPath(dataDir, filePath) {
+  if (typeof filePath !== 'string' || filePath === '' || filePath.includes('\0')) return null;
+  if (!hasImageExtension(filePath)) return null;
+
+  if (path.isAbsolute(filePath)) return path.resolve(filePath);
+
+  const root = path.resolve(dataDir);
+  const target = path.resolve(root, filePath);
+  const rel = path.relative(root, target);
+  if (rel === '' || rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) return null;
+  return target;
+}
+
 /**
  * 記錄一筆失敗明細（最多 MAX_ERROR_DETAILS 筆）
  */
