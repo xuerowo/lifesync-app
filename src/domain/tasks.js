@@ -58,3 +58,31 @@ export function computeActivePriorityTasks(subTasks, now = new Date()) {
     })
     .sort((a, b) => a.priorityOrder - b.priorityOrder);
 }
+
+/** 一次性任務：不是每日、每週、隨時挑戰的任務 */
+export function isOneTimeTask(task) {
+  return !!task && task.type !== 'daily' && task.type !== 'weekly' && task.type !== 'infinite';
+}
+
+/**
+ * 防連點：記住「剛處理過的 id」，windowMs 毫秒內同一個 id 再來就擋下。
+ * 用法：guard.isBlocked(id) 為 true 就忽略；處理後呼叫 guard.mark(id)。
+ * now 參數方便測試，平常不用給。
+ */
+export function createRecentGuard(windowMs) {
+  const seen = new Map();
+  const prune = (now) => {
+    for (const [key, at] of seen) {
+      if (now - at >= windowMs) seen.delete(key);
+    }
+  };
+  return {
+    isBlocked(id, now = Date.now()) {
+      prune(now);
+      return seen.has(id);
+    },
+    mark(id, now = Date.now()) {
+      seen.set(id, now);
+    },
+  };
+}

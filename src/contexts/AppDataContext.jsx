@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { getTodayStr, getLocalISOString } from '../utils';
 import { createDefaultData, normalizeData } from '../shared/defaultData';
-import { computeActivePriorityTasks } from '../domain/tasks';
+import { computeActivePriorityTasks, createRecentGuard, isOneTimeTask } from '../domain/tasks';
 import { parseLocalDate } from '../domain/dates';
 
 const AppDataContext = createContext();
@@ -379,6 +379,12 @@ export const AppDataProvider = ({ children }) => {
     return { ...prev, subTasks: newSubTasks.filter(t => t.id !== id), archivedSubTasks: [...prev.archivedSubTasks, { ...task, completed: true, completedAt: new Date().toISOString(), isPriority: false, priorityOrder: 0 }] };
   });
 
+  // 防連點：一次性任務完成後，那一列會播放約 0.3 秒的淡出動畫。動畫期間它還點得到，
+  // 而且拿的是完成前的舊資料，連點會被完成兩次（兩筆紀錄、發兩次券、歸檔兩份）。
+  // 所以記住剛完成的一次性任務 id，1.5 秒內同一個 id 再呼叫就直接回傳 null。
+  // 選擇在這裡擋而不是在任務清單畫面擋：番茄鐘等所有呼叫入口都會一起受到保護，也不用改畫面。
+  const [oneTimeCompletionGuard] = useState(() => createRecentGuard(1500));
+
   /**
    * 完成一個子任務：寫完成紀錄、更新次數或歸檔。被拒絕（今日已完成、有未完成的優先任務）時回傳 null。
    * 這裡不發券，券由呼叫端發。
@@ -388,6 +394,9 @@ export const AppDataProvider = ({ children }) => {
    *   之後撤銷時才會扣回正確的張數。
    */
   const completeSubTaskData = (id, options = {}) => {
+    // 剛完成的一次性任務，在淡出動畫期間連點又被完成一次：直接忽略
+    if (oneTimeCompletionGuard.isBlocked(id)) return null;
+
     const task = data.subTasks.find(t => t.id === id);
     if (!task) return null;
 
@@ -406,6 +415,8 @@ export const AppDataProvider = ({ children }) => {
         return null;
       }
     }
+
+    if (isOneTimeTask(task)) oneTimeCompletionGuard.mark(id);
 
     const majorTask = data.majorTasks.find(m => m.id === task.majorTaskId) ||
                       data.archivedTasks.find(m => m.id === task.majorTaskId);

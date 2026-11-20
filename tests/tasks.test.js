@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   computeActivePriorityTasks,
+  createRecentGuard,
   isCompletedOnDate,
+  isOneTimeTask,
   renumberPriorityTasks,
 } from '../src/domain/tasks.js';
 
@@ -108,5 +110,31 @@ describe('renumberPriorityTasks：重排優先順序', () => {
       { id: 'y', isPriority: true, priorityOrder: 1 },
     ];
     expect(renumberPriorityTasks(tie).map(t => t.priorityOrder)).toEqual([1, 2]);
+  });
+});
+
+describe('createRecentGuard：一次性任務防連點', () => {
+  it('時間內同一個 id 被擋下，過了時間就放行', () => {
+    const guard = createRecentGuard(1500);
+    expect(guard.isBlocked('a', 0)).toBe(false);
+    guard.mark('a', 0);
+    expect(guard.isBlocked('a', 300)).toBe(true);
+    expect(guard.isBlocked('a', 1499)).toBe(true);
+    expect(guard.isBlocked('a', 1500)).toBe(false);
+  });
+
+  it('不同 id 互不影響', () => {
+    const guard = createRecentGuard(1500);
+    guard.mark('a', 0);
+    expect(guard.isBlocked('b', 100)).toBe(false);
+  });
+});
+
+describe('isOneTimeTask', () => {
+  it('只有每日、每週、隨時挑戰以外的任務算一次性', () => {
+    expect(isOneTimeTask({ type: 'precise' })).toBe(true);
+    expect(isOneTimeTask({ type: 'daily' })).toBe(false);
+    expect(isOneTimeTask({ type: 'weekly' })).toBe(false);
+    expect(isOneTimeTask({ type: 'infinite' })).toBe(false);
   });
 });
