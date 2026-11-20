@@ -6,6 +6,8 @@
  * 改了那邊的規則，這裡也要一起改（tests/confirmations.test.js 有對照）。
  */
 
+import { completionRewardTickets } from './tasks.js';
+
 const REPEATING_TYPES = ['daily', 'weekly', 'infinite'];
 const isCounted = (task) => REPEATING_TYPES.includes(task?.type);
 
@@ -14,8 +16,8 @@ const nameOf = (item, fallback) => {
   return title ? `「${title}」` : fallback;
 };
 
-/** 紀錄裡記的發券數；舊紀錄沒有這個欄位時當作 1 張（與刪除、撤銷時的算法相同） */
-const ticketsOf = (record) => record?.rewardTickets ?? 1;
+/** 紀錄裡記的發券數；舊紀錄沒有這個欄位時當作 1 張，負數或非數字當 0（與刪除、撤銷時的算法相同） */
+const ticketsOf = (record) => completionRewardTickets(record);
 
 /** 抽卡券最多扣到 0，所以實際扣掉的張數不會超過目前持有的張數 */
 export function actualTicketDeduction(ticketsToRecover, currentTickets) {

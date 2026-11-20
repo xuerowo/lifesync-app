@@ -34,6 +34,7 @@ import LoadErrorScreen from './components/Shared/LoadErrorScreen';
 import NoticeBar from './components/Shared/NoticeBar';
 import SaveErrorBanner from './components/Shared/SaveErrorBanner';
 import { describeRestoreSuccess, describeSecretsUnavailable } from './domain/loadError';
+import { completionRewardTickets } from './domain/tasks';
 
 
 const App = () => {
@@ -228,7 +229,7 @@ const App = () => {
   const handleCompleteSubTask = (id) => {
     const task = completeSubTaskData(id);
     if (task) {
-      const ticketsToAdd = task.rewardTickets ?? 1;
+      const ticketsToAdd = completionRewardTickets(task);
       if (ticketsToAdd > 0) {
         addLotteryTickets(ticketsToAdd);
         setTicketNotification({ count: ticketsToAdd, type: 'gain', id: crypto.randomUUID() });

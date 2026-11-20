@@ -226,3 +226,13 @@ describe('hasUnsavedNoteChanges', () => {
     expect(hasUnsavedNoteChanges({ title: 'a', content: 'b' }, { title: 'a', content: 'b!' })).toBe(true);
   });
 });
+
+describe('舊紀錄的負數或文字發券數', async () => {
+  const { completionRewardTickets } = await import('../src/domain/tasks.js');
+  it('讀紀錄時負數當 0、文字數字轉成數字、沒有欄位當 1', () => {
+    expect(completionRewardTickets({ rewardTickets: -3 })).toBe(0);
+    expect(completionRewardTickets({ rewardTickets: '3' })).toBe(3);
+    expect(completionRewardTickets({})).toBe(1);
+    expect(completionRewardTickets({ rewardTickets: 'abc' })).toBe(0);
+  });
+});

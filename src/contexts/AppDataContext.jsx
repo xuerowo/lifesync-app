@@ -385,7 +385,7 @@ export const AppDataProvider = ({ children }) => {
     let ticketsToRecover = 0;
     
     if (historyIndex !== -1) {
-      ticketsToRecover = newTaskHistory[historyIndex].rewardTickets ?? 1;
+      ticketsToRecover = completionRewardTickets(newTaskHistory[historyIndex]);
       newTaskHistory.splice(historyIndex, 1);
       if (!skipTicketUpdate && ticketsToRecover > 0) {
         setTicketNotification({ count: ticketsToRecover, type: 'loss', id: crypto.randomUUID() });
@@ -440,7 +440,7 @@ export const AppDataProvider = ({ children }) => {
   const deleteSubTask = (id) => updateData(prev => {
     const task = prev.subTasks.find(t => t.id === id) || prev.archivedSubTasks.find(t => t.id === id);
     const relevantHistory = prev.taskHistory.filter(h => h.taskId === id);
-    const ticketsToRecover = relevantHistory.reduce((acc, h) => acc + (h.rewardTickets ?? 1), 0);
+    const ticketsToRecover = relevantHistory.reduce((acc, h) => acc + completionRewardTickets(h), 0);
     const newTickets = Math.max(0, (prev.lotteryTickets || 0) - ticketsToRecover);
 
     if (ticketsToRecover > 0) {
@@ -466,7 +466,7 @@ export const AppDataProvider = ({ children }) => {
       ...prev.archivedSubTasks.filter(s => s.majorTaskId === id).map(s => s.id)
     ];
     const relevantHistory = prev.taskHistory.filter(h => subTaskIdsToDelete.includes(h.taskId));
-    const ticketsToRecover = relevantHistory.reduce((acc, h) => acc + (h.rewardTickets ?? 1), 0);
+    const ticketsToRecover = relevantHistory.reduce((acc, h) => acc + completionRewardTickets(h), 0);
     const newTickets = Math.max(0, (prev.lotteryTickets || 0) - ticketsToRecover);
 
     if (ticketsToRecover > 0) {
