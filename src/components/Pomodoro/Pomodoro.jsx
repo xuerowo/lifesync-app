@@ -7,6 +7,8 @@ import { useAppData } from '../../contexts/AppDataContext';
 import { formatTime, formatFlowTime, getTodayStr, calculatePomodoroStats } from '../../utils';
 import PomodoroSummary from './PomodoroSummary';
 import PomodoroHistory from './PomodoroHistory';
+import { completionRewardTickets } from '../../domain/tasks';
+import { pomodoroSettlementTickets, settlePomodoroTickets } from '../../domain/pomodoro';
 
 const Pomodoro = ({
   subTasks,
@@ -35,7 +37,7 @@ const Pomodoro = ({
   startBreak,
   enterFlow
 }) => {
-  const { addPomodoroRecord, addLotteryTickets } = useAppData();
+  const { data, updateData, addPomodoroRecord } = useAppData();
 
   const [isAddingTask, setIsAddingTask] = useState(false);
 
@@ -136,7 +138,24 @@ const Pomodoro = ({
     setIsPaused(true);
   };
 
-  const handleSettlement = () => {
+  // 結算畫面上的券數：時間的券 + 這次完成的任務照各自設定的張數（紀錄已被撤銷或刪除的不算）
+  const settlementTickets = pomodoroSettlementTickets({
+    workSeconds: totalAccumulated,
+    timeline: sessionTimeline,
+    taskHistory: data.taskHistory,
+  });
+
+  // claim：true 是「領取」，false 是「結束」不領。兩種都要把這次的完成紀錄改成實際給的張數
+  const handleSettlement = ({ claim = false } = {}) => {
+    updateData(prev => {
+      // 用最新的資料重算一次，畫面算好之後才被撤銷的紀錄不會被加券
+      const { timeTickets, grants } = pomodoroSettlementTickets({
+        workSeconds: totalAccumulated,
+        timeline: sessionTimeline,
+        taskHistory: prev.taskHistory,
+      });
+      return settlePomodoroTickets(prev, { grants, timeTickets, claim });
+    });
     setStatus('idle');
     setTotalAccumulated(0);
     setCurrentSessionDuration(0);
@@ -158,18 +177,19 @@ const Pomodoro = ({
     keysToRemove.forEach(k => localStorage.removeItem(k));
   };
 
-  const handleLottery = () => {
-    // 獎勵上限為 300 分鐘 (6 個階段)
-    const cappedTime = Math.min(totalAccumulated, 300 * 60);
-    const n = Math.floor(cappedTime / (50 * 60));
-    const timeChances = (n * (n + 1)) / 2;
-    const taskChances = completedSessionTaskIds.length;
-    const totalTickets = timeChances + taskChances;
+  const handleLottery = () => handleSettlement({ claim: true });
 
-    if (totalTickets > 0) {
-      addLotteryTickets(totalTickets);
-    }
-    handleSettlement();
+  // 這個任務在這次番茄鐘裡最後一筆完成事件（撤銷時要撤的就是它）
+  const lastCompletionEvent = (taskId) =>
+    [...sessionTimeline].reverse().find(e => e.type === 'task_complete' && e.taskId === taskId);
+
+  const removeLastCompletionEvent = (taskId) => {
+    setSessionTimeline(prev => {
+      const lastIdx = [...prev].reverse().findIndex(e => e.type === 'task_complete' && e.taskId === taskId);
+      if (lastIdx === -1) return prev;
+      const actualIdx = prev.length - 1 - lastIdx;
+      return prev.filter((_, i) => i !== actualIdx);
+    });
   };
 
   const handleSessionTaskComplete = (taskId) => {
@@ -179,23 +199,27 @@ const Pomodoro = ({
     // onTaskComplete 回傳 null 表示這次完成被拒絕（有未完成的優先任務、今天已完成等），
     // 這時不可標記完成、不寫時間軸，否則結算會多給券，再點一次還會撤銷到以前的真實紀錄
     const markCompleted = () => {
-      if (!onTaskComplete(taskId)) return;
+      // 先產生完成紀錄的 id，記在時間軸上：結算時靠它找到這筆紀錄、改成實際給的張數
+      const recordId = crypto.randomUUID();
+      const completed = onTaskComplete(taskId, { recordId });
+      if (!completed) return;
       setCompletedSessionTaskIds(prev => [...prev, taskId]);
-      addTimelineEvent('task_complete', { taskId, taskTitle: task?.title });
+      addTimelineEvent('task_complete', {
+        taskId,
+        taskTitle: task?.title,
+        recordId,
+        // 照任務自己設定的張數（和在任務清單完成一樣），結算領取時才給
+        rewardTickets: completionRewardTickets(completed),
+      });
     };
 
     if (task.type === 'infinite') {
       markCompleted();
     } else {
       if (completedSessionTaskIds.includes(taskId)) {
-        onTaskRevert(taskId);
+        onTaskRevert(taskId, lastCompletionEvent(taskId)?.recordId);
         setCompletedSessionTaskIds(prev => prev.filter(id => id !== taskId));
-        setSessionTimeline(prev => {
-          const lastIdx = [...prev].reverse().findIndex(e => e.type === 'task_complete' && e.taskId === taskId);
-          if (lastIdx === -1) return prev;
-          const actualIdx = prev.length - 1 - lastIdx;
-          return prev.filter((_, i) => i !== actualIdx);
-        });
+        removeLastCompletionEvent(taskId);
       } else {
         markCompleted();
       }
@@ -210,8 +234,8 @@ const Pomodoro = ({
     const sessionCount = completedSessionTaskIds.filter(id => id === taskId).length;
     if (sessionCount <= 0) return;
 
-    onTaskRevert(taskId);
-    
+    onTaskRevert(taskId, lastCompletionEvent(taskId)?.recordId);
+
     // 從已完成 ID 清單中移除一個
     setCompletedSessionTaskIds(prev => {
       const idx = prev.lastIndexOf(taskId);
@@ -222,12 +246,7 @@ const Pomodoro = ({
     });
 
     // 從時間軸中移除最後一個相關事件
-    setSessionTimeline(prev => {
-      const lastIdx = [...prev].reverse().findIndex(e => e.type === 'task_complete' && e.taskId === taskId);
-      if (lastIdx === -1) return prev;
-      const actualIdx = prev.length - 1 - lastIdx;
-      return prev.filter((_, i) => i !== actualIdx);
-    });
+    removeLastCompletionEvent(taskId);
   };
 
   const skipToBreak = () => {
@@ -339,6 +358,8 @@ const Pomodoro = ({
                   滿 <span className="text-amber-600">150 分鐘</span>可獲得 <span className="text-amber-600">1+2+3 張</span>……以此類推。
                   <br />
                   <span className="text-rose-500 font-black">* 獎勵上限為 300 分鐘 (21 張券)</span>
+                  <br />
+                  <span className="text-amber-600">* 在番茄鐘裡完成任務，照任務設定的張數給券，結算時和時間的券一起領取</span>
                   <br />
                   <span className="text-[8px] md:text-[10px] text-sky-700 italic">* 休息時間不計入累積時長</span>
                 </p>
@@ -563,7 +584,8 @@ const Pomodoro = ({
                       </div>
                     </div>
                     
-                    {((!isInfinite && !isCompleted) || isInfinite) && (
+                    {/* 這次已經完成過的任務不能移出目標（要先撤銷），否則畫面上的完成數會和結算的券數對不上 */}
+                    {((!isInfinite && !isCompleted) || (isInfinite && sessionCount === 0)) && (
                       <div className="flex items-center gap-0.5 md:gap-1 opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0">
                         <button
                           onClick={() => removeSessionTask(task.id)}
@@ -661,31 +683,31 @@ const Pomodoro = ({
           </div>
 
           <div className="space-y-4 w-full max-w-sm">
-            {(() => {
-                const cappedTime = Math.min(totalAccumulated, 300 * 60);
-                const n = Math.floor(cappedTime / (50 * 60));
-                const timeChances = (n * (n + 1)) / 2;
-                const totalTickets = timeChances + completedSessionTaskIds.length;
-                
-                if (totalTickets > 0) {
-                  return (
-                  <button
-                    onClick={handleLottery}
-                    className="w-full py-4 md:py-5 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white rounded-2xl md:rounded-[24px] font-black text-lg md:text-xl shadow-xl shadow-amber-200 transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 md:gap-3"
-                  >
-                    <Gift className="w-5 h-5 md:w-6 md:h-6 animate-bounce" /> 領取 {totalTickets} 張抽卡券
-                  </button>
-                  );
-                }
-                return null;
-            })()}
-            
+            {settlementTickets.total > 0 && (
+              <div>
+                <button
+                  onClick={handleLottery}
+                  className="w-full py-4 md:py-5 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white rounded-2xl md:rounded-[24px] font-black text-lg md:text-xl shadow-xl shadow-amber-200 transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 md:gap-3"
+                >
+                  <Gift className="w-5 h-5 md:w-6 md:h-6 animate-bounce" /> 領取 {settlementTickets.total} 張抽卡券
+                </button>
+                <p className="text-center text-[10px] md:text-xs font-bold text-sky-600 mt-2">
+                  專注時間 {settlementTickets.timeTickets} 張 ＋ 完成任務 {settlementTickets.taskTickets} 張（照各任務設定的張數）
+                </p>
+              </div>
+            )}
+
             <button
-              onClick={handleSettlement}
+              onClick={() => handleSettlement({ claim: false })}
               className="w-full py-3 md:py-4 bg-sky-100 hover:bg-sky-200 text-sky-700 rounded-2xl md:rounded-[24px] font-black text-base md:text-lg transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 md:gap-3"
             >
               <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" /> 結束
             </button>
+            {settlementTickets.total > 0 && (
+              <p className="text-center text-[10px] md:text-xs font-bold text-rose-400">
+                按「結束」不會領券，這次的 {settlementTickets.total} 張抽卡券就不給了
+              </p>
+            )}
           </div>
         </div>
       )}

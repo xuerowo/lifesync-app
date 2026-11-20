@@ -475,8 +475,10 @@ const App = () => {
               {taskSubTab === 'pomodoro' && (
                 <Pomodoro
                   subTasks={data.subTasks}
-                  onTaskComplete={(taskId) => completeSubTaskData(taskId, { rewardTickets: 1 })}
-                  onTaskRevert={(taskId) => revertTaskCompletion(taskId, true)}
+                  // 番茄鐘裡完成的任務：紀錄先記 0 張，結算按「領取」時才照任務設定的張數給券並改紀錄
+                  onTaskComplete={(taskId, { recordId } = {}) => completeSubTaskData(taskId, { rewardTickets: 0, recordId })}
+                  // 券還沒給，撤銷時不扣券；有 recordId 就只撤銷那一筆
+                  onTaskRevert={(taskId, recordId) => revertTaskCompletion(taskId, true, { recordId })}
                   status={pomodoroStatus} setStatus={setPomodoroStatus}
                   settings={pomodoroSettings} setSettings={setPomodoroSettings}
                   timeLeft={pomodoroTimeLeft}

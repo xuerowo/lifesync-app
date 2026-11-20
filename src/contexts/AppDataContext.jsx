@@ -354,15 +354,18 @@ export const AppDataProvider = ({ children }) => {
   // 選擇在這裡擋而不是在任務清單畫面擋：番茄鐘等所有呼叫入口都會一起受到保護，也不用改畫面。
   const [oneTimeCompletionGuard] = useState(() => createRecentGuard(1500));
 
-  const revertTaskCompletion = (id, skipTicketUpdate = false) => {
+  // options.recordId：指定要撤銷哪一筆完成紀錄（番茄鐘用，避免撤銷到同一個任務別的紀錄）；
+  // 那筆紀錄已經不在（例如已在任務清單撤銷過）時什麼都不做
+  const revertTaskCompletion = (id, skipTicketUpdate = false, options = {}) => {
     oneTimeCompletionGuard.clear(id);
-    applyRevertTaskCompletion(id, skipTicketUpdate);
+    applyRevertTaskCompletion(id, skipTicketUpdate, options.recordId);
   };
 
-  const applyRevertTaskCompletion = (id, skipTicketUpdate) => updateData(prev => {
+  const applyRevertTaskCompletion = (id, skipTicketUpdate, recordId) => updateData(prev => {
     const targetArchivedTask = prev.archivedSubTasks.find(t => t.id === id);
     const isRestoringRepetitive = targetArchivedTask && (targetArchivedTask.type === 'daily' || targetArchivedTask.type === 'weekly');
-    const historyIndex = isRestoringRepetitive ? -1 : prev.taskHistory.findIndex(h => h.taskId === id);
+    const historyIndex = isRestoringRepetitive ? -1 : prev.taskHistory.findIndex(h => (recordId ? h.id === recordId : h.taskId === id));
+    if (recordId && !isRestoringRepetitive && historyIndex === -1) return prev;
     let newTaskHistory = [...prev.taskHistory];
     let ticketsToRecover = 0;
     
@@ -482,9 +485,10 @@ export const AppDataProvider = ({ children }) => {
    * 完成一個子任務：寫完成紀錄、更新次數或歸檔。被拒絕（今日已完成、有未完成的優先任務）時回傳 null。
    * 這裡不發券，券由呼叫端發。
    * @param {string} id
-   * @param {{ rewardTickets?: number }} [options] rewardTickets：完成紀錄要記下的實際發券數。
-   *   不給就用任務設定的張數。番茄鐘結算是每個完成任務固定給 1 張，所以番茄鐘會傳 1，
-   *   之後撤銷時才會扣回正確的張數。
+   * @param {{ rewardTickets?: number, recordId?: string }} [options]
+   *   rewardTickets：完成紀錄要記下的實際發券數，不給就用任務設定的張數。番茄鐘傳 0：
+   *   券要到結算按「領取」才給，領取時才把紀錄改成任務的張數（見 domain/pomodoro.js）。
+   *   recordId：完成紀錄要用的 id（番茄鐘先產生好，結算和撤銷時才找得到這一筆）。
    */
   const completeSubTaskData = (id, options = {}) => {
     // 剛完成的一次性任務，在淡出動畫期間連點又被完成一次：直接忽略
@@ -520,7 +524,7 @@ export const AppDataProvider = ({ children }) => {
       let newArchivedSubTasks = [...prev.archivedSubTasks];
 
       const completionRecord = {
-        id: crypto.randomUUID(),
+        id: options.recordId || crypto.randomUUID(),
         taskId: task.id,
         title: task.title,
         majorTaskTitle: majorTask?.title || '獨立任務',
