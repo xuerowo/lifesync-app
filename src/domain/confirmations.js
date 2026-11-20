@@ -85,33 +85,47 @@ export function deleteMajorTaskMessage(data, id) {
 
 /**
  * 「撤銷最近一次完成」會造成的變化，算法與 AppDataContext.revertTaskCompletion 相同：
- * - 已歸檔的每日／每週任務：只搬回進行中，不刪紀錄、不扣券
+ * - 已歸檔的每日／每週任務：不刪紀錄、不扣券
  * - 其他情況：刪掉這個任務最新的一筆完成紀錄，扣回那筆紀錄記的券
- * - 進行中的每日／每週／隨時挑戰任務：完成次數減 1
- * - 已歸檔的任務：搬回進行中
+ * - 進行中有這個任務、而且是每日／每週／隨時挑戰：只把進行中那一份的完成次數減 1
+ *   （舊資料裡同一個 id 同時在進行中和「已完成」區時，「已完成」那一份不動）
+ * - 否則，已歸檔的任務會搬回進行中的任務清單；但它的計畫若已經完成（歸檔），
+ *   要等計畫恢復後才會出現在進行中的清單
  */
 export function revertCompletionImpact(data, id) {
   const archived = (data?.archivedSubTasks || []).find((t) => t.id === id);
   const active = (data?.subTasks || []).find((t) => t.id === id);
-  const task = archived || active || null;
   const isRestoringRepetitive = !!archived && (archived.type === 'daily' || archived.type === 'weekly');
   const record = isRestoringRepetitive ? null : (data?.taskHistory || []).find((h) => h?.taskId === id) || null;
-  const countChange =
-    !archived && active && isCounted(active)
-      ? { from: active.completionCount || 0, to: Math.max(0, (active.completionCount || 0) - 1) }
-      : null;
+  const changesActiveCount = !!active && isCounted(active);
+  const countChange = changesActiveCount
+    ? { from: active.completionCount || 0, to: Math.max(0, (active.completionCount || 0) - 1) }
+    : null;
+  const movesBackToActive = !changesActiveCount && !!archived;
+  const task = (changesActiveCount ? active : archived || active) || null;
+
+  // 搬回去的任務所屬的計畫已經完成（只在「已完成的計畫」裡）
+  let archivedPlan = null;
+  if (movesBackToActive && archived.majorTaskId) {
+    const inActivePlans = (data?.majorTasks || []).some((m) => m.id === archived.majorTaskId);
+    if (!inActivePlans) archivedPlan = (data?.archivedTasks || []).find((m) => m.id === archived.majorTaskId) || null;
+  }
+
   return {
     task,
     records: record ? 1 : 0,
     tickets: record ? ticketsOf(record) : 0,
-    movesBackToActive: !!archived,
+    movesBackToActive,
     countChange,
+    archivedPlan,
+    // 舊資料裡同一個 id 同時在進行中和「已完成」區
+    duplicate: !!archived && !!active,
   };
 }
 
 /** 撤銷最近一次完成的確認文字 */
 export function revertCompletionMessage(data, id) {
-  const { task, records, tickets, movesBackToActive, countChange } = revertCompletionImpact(data, id);
+  const { task, records, tickets, movesBackToActive, countChange, archivedPlan, duplicate } = revertCompletionImpact(data, id);
   const lines = [`確定要撤銷${nameOf(task, '這個任務')}最近一次的完成嗎？`, ''];
   if (records > 0) {
     lines.push(`會刪除 1 筆完成紀錄，${ticketPhrase(tickets, data?.lotteryTickets)}。`);
@@ -121,8 +135,18 @@ export function revertCompletionMessage(data, id) {
   if (countChange && countChange.from !== countChange.to) {
     lines.push(`完成次數會從 ${countChange.from} 次變成 ${countChange.to} 次。`);
   }
-  if (movesBackToActive) {
+  if (movesBackToActive && archivedPlan) {
+    lines.push(
+      `這個任務會變回未完成，但它所屬的計畫${nameOf(archivedPlan, '')}已經完成：` +
+        '要先在「已完成的計畫」按「恢復計畫」，它才會出現在進行中的清單，才能重新完成。'
+    );
+  } else if (movesBackToActive) {
     lines.push('這個任務會回到進行中。');
+  }
+  if (duplicate && movesBackToActive) {
+    lines.push('注意：進行中已經有一個同樣的任務（舊資料重複留下的），撤銷後進行中會有兩份。');
+  } else if (duplicate) {
+    lines.push('「已完成」區裡還有一份同樣的任務（舊資料重複留下的），它不會變動；這次只改進行中那一份。');
   }
   return lines.join('\n');
 }

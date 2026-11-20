@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   computeActivePriorityTasks,
+  completionRewardTickets,
   createRecentGuard,
   isCompletedOnDate,
   isOneTimeTask,
@@ -127,6 +128,35 @@ describe('createRecentGuard：一次性任務防連點', () => {
     const guard = createRecentGuard(1500);
     guard.mark('a', 0);
     expect(guard.isBlocked('b', 100)).toBe(false);
+  });
+  it('撤銷後清掉 id：馬上重新完成不會被擋下，其他 id 不受影響', () => {
+    const guard = createRecentGuard(1500);
+    guard.mark('a', 0);
+    guard.mark('b', 0);
+    guard.clear('a');
+    expect(guard.isBlocked('a', 100)).toBe(false);
+    expect(guard.isBlocked('b', 100)).toBe(true);
+    // 清掉不存在的 id 也沒關係
+    expect(() => guard.clear('zzz')).not.toThrow();
+  });
+});
+
+describe('completionRewardTickets：完成紀錄記下的發券數', () => {
+  it('呼叫端指定的張數優先，否則用任務設定，都沒有就是 1 張', () => {
+    expect(completionRewardTickets({ rewardTickets: 5 }, { rewardTickets: 1 })).toBe(1);
+    expect(completionRewardTickets({ rewardTickets: 5 })).toBe(5);
+    expect(completionRewardTickets({ rewardTickets: 0 })).toBe(0);
+    expect(completionRewardTickets({})).toBe(1);
+    expect(completionRewardTickets(undefined, undefined)).toBe(1);
+  });
+
+  it('舊資料裡的負數一律記成 0（撤銷、刪除時才不會反而加券）', () => {
+    expect(completionRewardTickets({ rewardTickets: -3 })).toBe(0);
+    expect(completionRewardTickets({ rewardTickets: 2 }, { rewardTickets: -1 })).toBe(0);
+  });
+
+  it('不是數字時記成 0（完成時也不會發券）', () => {
+    expect(completionRewardTickets({ rewardTickets: 'abc' })).toBe(0);
   });
 });
 

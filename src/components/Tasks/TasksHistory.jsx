@@ -3,16 +3,21 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { History, Trash2, CheckCircle2, ChevronLeft, ChevronRight, Clock, Layers, Plus, Edit3 } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
 import { ITEMS_PER_PAGE, INDICATORS } from '../../constants/index.jsx';
+import { clampPage, getTotalPages } from '../../domain/pagination';
 
 const TasksHistory = ({ setEditingTaskHistory }) => {
   const { data, updateData } = useAppData();
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPageState, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState([]);
 
   // 取得所有任務完成紀錄並按時間排序
   const historyTasks = [...data.taskHistory].sort((a, b) =>
     new Date(b.completedAt) - new Date(a.completedAt)
   );
+
+  // 刪除紀錄使目前頁碼超過總頁數時，自動顯示最後一頁（在 render 時計算，不在 effect 裡改 state）
+  const totalPages = getTotalPages(historyTasks.length, ITEMS_PER_PAGE);
+  const currentPage = clampPage(currentPageState, historyTasks.length, ITEMS_PER_PAGE);
 
   const paginatedTasks = historyTasks.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
@@ -209,7 +214,7 @@ const TasksHistory = ({ setEditingTaskHistory }) => {
             </div>
             <div className="flex items-center gap-3">
               <button 
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} 
                 disabled={currentPage === 1} 
                 className="p-2.5 rounded-2xl bg-white/60 hover:bg-white disabled:opacity-30 text-sky-600 shadow-sm border border-white transition-all hover:-translate-x-1 active:scale-90"
               >
@@ -218,11 +223,11 @@ const TasksHistory = ({ setEditingTaskHistory }) => {
               <div className="flex items-center gap-1.5 px-4 py-2 bg-white/40 rounded-2xl border border-white/60 shadow-inner">
                 <span className="text-sm font-black text-sky-800">{currentPage}</span>
                 <span className="text-xs font-bold text-sky-300">/</span>
-                <span className="text-xs font-bold text-sky-400">{Math.ceil(historyTasks.length / ITEMS_PER_PAGE)}</span>
+                <span className="text-xs font-bold text-sky-400">{totalPages}</span>
               </div>
               <button 
-                onClick={() => setCurrentPage(p => Math.min(Math.ceil(historyTasks.length / ITEMS_PER_PAGE), p + 1))} 
-                disabled={currentPage >= Math.ceil(historyTasks.length / ITEMS_PER_PAGE)} 
+                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} 
+                disabled={currentPage >= totalPages} 
                 className="p-2.5 rounded-2xl bg-white/60 hover:bg-white disabled:opacity-30 text-sky-600 shadow-sm border border-white transition-all hover:translate-x-1 active:scale-90"
               >
                 <ChevronRight className="w-4 h-4" />

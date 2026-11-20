@@ -65,8 +65,22 @@ export function isOneTimeTask(task) {
 }
 
 /**
+ * 完成紀錄要記下的發券數：呼叫端指定的張數優先（番茄鐘固定 1 張），否則用任務設定的張數，都沒有就是 1 張。
+ * 舊資料裡可能有負數（以前沒有檢查輸入），一律當成 0：
+ * 完成時本來就不會發負數張券，紀錄若記成負數，之後撤銷或刪除反而會「加」券。
+ * @param {{ rewardTickets?: number }} task
+ * @param {{ rewardTickets?: number }} [options]
+ * @returns {number}
+ */
+export function completionRewardTickets(task, options = {}) {
+  const raw = Number(options?.rewardTickets ?? task?.rewardTickets ?? 1);
+  return Number.isFinite(raw) ? Math.max(0, raw) : 0;
+}
+
+/**
  * 防連點：記住「剛處理過的 id」，windowMs 毫秒內同一個 id 再來就擋下。
- * 用法：guard.isBlocked(id) 為 true 就忽略；處理後呼叫 guard.mark(id)。
+ * 用法：guard.isBlocked(id) 為 true 就忽略；處理後呼叫 guard.mark(id)；
+ * 撤銷之後要能馬上再處理同一個 id 時，呼叫 guard.clear(id)。
  * now 參數方便測試，平常不用給。
  */
 export function createRecentGuard(windowMs) {
@@ -83,6 +97,9 @@ export function createRecentGuard(windowMs) {
     },
     mark(id, now = Date.now()) {
       seen.set(id, now);
+    },
+    clear(id) {
+      seen.delete(id);
     },
   };
 }

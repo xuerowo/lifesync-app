@@ -128,10 +128,46 @@ describe('revertCompletionMessage', () => {
     expect(msg).toContain('扣回 2 張抽卡券');
     expect(msg).toContain('從 3 次變成 2 次');
   });
-  it('已歸檔的每週任務：說明紀錄與券都不變、會回到進行中', () => {
+  it('已歸檔的每週任務：說明紀錄與券都不變', () => {
     const msg = revertCompletionMessage(baseData(), 'aw');
     expect(msg).toContain('都不會變動');
-    expect(msg).toContain('回到進行中');
+  });
+});
+
+describe('revertCompletionMessage：計畫已完成、舊資料重複的情況', () => {
+  it('計畫還在進行中：說會回到進行中', () => {
+    const impact = revertCompletionImpact(baseData(), 'a1');
+    expect(impact.archivedPlan).toBeNull();
+    expect(revertCompletionMessage(baseData(), 'a1')).toContain('這個任務會回到進行中');
+  });
+
+  it('計畫已經完成：不說「回到進行中」，改說要先恢復計畫', () => {
+    const msg = revertCompletionMessage(baseData(), 'aw');
+    expect(revertCompletionImpact(baseData(), 'aw').archivedPlan).toMatchObject({ id: 'm2' });
+    expect(msg).toContain('「舊計畫」已經完成');
+    expect(msg).toContain('恢復計畫');
+    expect(msg).not.toContain('這個任務會回到進行中');
+  });
+
+  it('同一個 id 同時在進行中（每日任務）和「已完成」區：只改進行中那份的次數，已完成那份不動', () => {
+    const data = baseData();
+    data.archivedSubTasks.push({ id: 'd1', majorTaskId: 'm1', title: '每天讀書', type: 'daily', completed: true });
+    const impact = revertCompletionImpact(data, 'd1');
+    // 已歸檔那份是每日任務 → 和 revertTaskCompletion 一樣不刪紀錄、不扣券
+    expect(impact).toMatchObject({ records: 0, tickets: 0, movesBackToActive: false, countChange: { from: 3, to: 2 }, duplicate: true });
+    const msg = revertCompletionMessage(data, 'd1');
+    expect(msg).toContain('都不會變動');
+    expect(msg).toContain('從 3 次變成 2 次');
+    expect(msg).toContain('它不會變動');
+    expect(msg).not.toContain('回到進行中');
+  });
+
+  it('同一個 id 同時在進行中（一次性任務）和「已完成」區：已完成那份搬回去，進行中會有兩份', () => {
+    const data = baseData();
+    data.subTasks.push({ id: 'a1', majorTaskId: 'm1', title: '報名', type: 'precise', completed: false });
+    const impact = revertCompletionImpact(data, 'a1');
+    expect(impact).toMatchObject({ records: 1, tickets: 5, movesBackToActive: true, countChange: null, duplicate: true });
+    expect(revertCompletionMessage(data, 'a1')).toContain('撤銷後進行中會有兩份');
   });
 });
 
