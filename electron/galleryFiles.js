@@ -96,6 +96,81 @@ export function resolveImageReadPath(dataDir, filePath) {
   return target;
 }
 
+/** target 是不是在 root 資料夾裡面（不含 root 本身）；Windows 上不分大小寫 */
+function isInsideDir(root, target) {
+  const rel = path.relative(path.resolve(root), path.resolve(target));
+  return rel !== '' && rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
+}
+
+const samePath = (a, b) =>
+  process.platform === 'win32'
+    ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase()
+    : path.resolve(a) === path.resolve(b);
+
+const absoluteString = (v) => typeof v === 'string' && v !== '' && !v.includes('\0') && path.isAbsolute(v);
+
+/**
+ * 目前的資料裡，有哪些「資料資料夾以外」的圖片位置是程式自己在用的。
+ * - 資料夾：圖庫同步區填的 rewardFolderPath，以及每個圖庫卡池（image-pool）的 folderPath
+ * - 單一檔案：卡池裡的圖片路徑，和抽獎紀錄（rewardHistory）裡的圖片路徑
+ *   （卡池刪掉後，舊的抽獎紀錄仍指向原本的圖片）
+ * 只收絕對路徑；相對路徑一律以資料資料夾為基準，另外處理。
+ *
+ * @param {object|null|undefined} data 目前的資料
+ * @returns {{ dirs: string[], files: string[] }}
+ */
+export function collectReferencedImageLocations(data) {
+  const dirs = [];
+  const files = [];
+  if (!data || typeof data !== 'object') return { dirs, files };
+
+  if (absoluteString(data.rewardFolderPath)) dirs.push(data.rewardFolderPath);
+
+  const prizes = data.lotteryPrizes && typeof data.lotteryPrizes === 'object' ? data.lotteryPrizes : {};
+  for (const list of Object.values(prizes)) {
+    if (!Array.isArray(list)) continue;
+    for (const prize of list) {
+      if (prize?.type !== 'image-pool') continue;
+      if (absoluteString(prize.folderPath)) dirs.push(prize.folderPath);
+      if (Array.isArray(prize.content)) {
+        for (const p of prize.content) if (absoluteString(p)) files.push(p);
+      }
+    }
+  }
+
+  if (Array.isArray(data.rewardHistory)) {
+    for (const record of data.rewardHistory) {
+      if (record?.prize?.type === 'image' && absoluteString(record.prize.content)) files.push(record.prize.content);
+    }
+  }
+  return { dirs, files };
+}
+
+/**
+ * 開發伺服器（瀏覽器模式的 server.js）讀圖片時，實際要讀哪個檔案；不允許的回傳 null。
+ *
+ * 比 resolveImageReadPath 嚴格：除了只讀圖片檔，絕對路徑還必須在
+ * 資料資料夾（含圖庫）裡，或是目前資料裡卡池用到的資料夾／圖片（見 collectReferencedImageLocations）。
+ * 這樣瀏覽器模式的獎品圖片照常顯示，但不能拿它讀電腦上任意位置的圖片。
+ *
+ * Electron 的讀圖功能（read-image-base64）不用這個：安裝版的抽獎紀錄裡有指向原始資料夾的絕對路徑，必須照常能讀。
+ *
+ * @param {string} dataDir 資料資料夾
+ * @param {string} filePath 畫面傳來的路徑
+ * @param {object|null|undefined} data 伺服器目前的資料（還沒讀成功時傳 null，只允許資料資料夾）
+ * @returns {string|null}
+ */
+export function resolveDevServerImagePath(dataDir, filePath, data) {
+  const target = resolveImageReadPath(dataDir, filePath);
+  if (!target) return null;
+  if (isInsideDir(dataDir, target)) return target;
+
+  const { dirs, files } = collectReferencedImageLocations(data);
+  if (dirs.some((dir) => isInsideDir(dir, target))) return target;
+  if (files.some((file) => samePath(file, target))) return target;
+  return null;
+}
+
 /** 計算檔案內容的 sha256（十六進位字串），用串流讀取以免大檔吃光記憶體 */
 export function sha256File(filePath) {
   return new Promise((resolve, reject) => {

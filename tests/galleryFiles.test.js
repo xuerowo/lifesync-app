@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import {
   toSafeLocalName, resolveInsideDir, pushError, MAX_ERROR_DETAILS,
   resolveImageReadPath, hasImageExtension, IMAGE_EXTENSIONS, copyImageIntoGallery, sha256File,
+  resolveDevServerImagePath, collectReferencedImageLocations,
 } from '../electron/galleryFiles.js';
 
 describe('toSafeLocalName', () => {
@@ -93,6 +94,71 @@ describe('pushError', () => {
     for (let i = 0; i < 30; i++) pushError(errors, `f${i}`, 'x');
     expect(errors).toHaveLength(MAX_ERROR_DETAILS);
     expect(errors[0]).toEqual({ name: 'f0', reason: 'x' });
+  });
+});
+
+describe('resolveDevServerImagePath：開發伺服器只讀資料資料夾與卡池用到的圖片', () => {
+  const dataDir = path.resolve('some', 'data');
+  const poolDir = path.resolve('pictures', '卡池A');
+  const goneDir = path.resolve('pictures', '已刪除的卡池');
+  const data = {
+    rewardFolderPath: path.resolve('pictures', '正在輸入的資料夾'),
+    lotteryPrizes: {
+      R: [
+        { id: 'p1', type: 'image-pool', folderPath: poolDir, content: [path.join(poolDir, 'a.png')] },
+        { id: 't1', type: 'text', content: path.resolve('elsewhere', 'not-an-image-prize.png') },
+      ],
+      SR: [{ id: 'p2', type: 'image-pool', folderPath: 'relative-folder', content: ['gallery/b.png'] }],
+    },
+    rewardHistory: [
+      { id: 'h1', prize: { type: 'image', content: path.join(goneDir, 'old.png') } },
+      { id: 'h2', prize: { type: 'text', content: path.resolve('elsewhere', 'text.png') } },
+    ],
+  };
+
+  it('資料資料夾（含圖庫）裡的圖片：相對、絕對路徑都可以，沒有資料時也可以', () => {
+    expect(resolveDevServerImagePath(dataDir, 'gallery/a.png', null)).toBe(path.join(dataDir, 'gallery', 'a.png'));
+    expect(resolveDevServerImagePath(dataDir, path.join(dataDir, 'gallery', 'a.png'), null)).toBe(path.join(dataDir, 'gallery', 'a.png'));
+  });
+
+  it('卡池資料夾、圖庫同步區填的資料夾裡的圖片可以讀', () => {
+    expect(resolveDevServerImagePath(dataDir, path.join(poolDir, 'a.png'), data)).toBe(path.join(poolDir, 'a.png'));
+    expect(resolveDevServerImagePath(dataDir, path.join(poolDir, 'sub', 'c.jpg'), data)).not.toBeNull();
+    expect(resolveDevServerImagePath(dataDir, path.join(data.rewardFolderPath, 'x.webp'), data)).not.toBeNull();
+  });
+
+  it('抽獎紀錄裡的圖片（卡池已刪除）只允許那一張，同資料夾的其他圖片不行', () => {
+    expect(resolveDevServerImagePath(dataDir, path.join(goneDir, 'old.png'), data)).toBe(path.join(goneDir, 'old.png'));
+    expect(resolveDevServerImagePath(dataDir, path.join(goneDir, 'other.png'), data)).toBeNull();
+  });
+
+  it('其他位置的圖片一律拒絕（包括文字獎品、文字紀錄剛好像路徑的內容）', () => {
+    expect(resolveDevServerImagePath(dataDir, path.resolve('Users', 'me', 'Desktop', 'secret.png'), data)).toBeNull();
+    expect(resolveDevServerImagePath(dataDir, path.resolve('elsewhere', 'not-an-image-prize.png'), data)).toBeNull();
+    expect(resolveDevServerImagePath(dataDir, path.resolve('elsewhere', 'text.png'), data)).toBeNull();
+    expect(resolveDevServerImagePath(dataDir, path.join(poolDir, 'a.png'), null)).toBeNull();
+    // 卡池資料夾本身的上一層、名字很像的資料夾都不算在裡面
+    expect(resolveDevServerImagePath(dataDir, path.resolve('pictures', 'x.png'), data)).toBeNull();
+    expect(resolveDevServerImagePath(dataDir, path.resolve('pictures', '卡池A2', 'x.png'), data)).toBeNull();
+    expect(resolveDevServerImagePath(dataDir, `${poolDir}${path.sep}..${path.sep}x.png`, data)).toBeNull();
+  });
+
+  it('仍然只讀圖片副檔名，相對路徑仍不能跳出資料資料夾', () => {
+    expect(resolveDevServerImagePath(dataDir, path.join(poolDir, 'notes.txt'), data)).toBeNull();
+    expect(resolveDevServerImagePath(dataDir, '../a.png', data)).toBeNull();
+  });
+
+  it.runIf(process.platform === 'win32')('Windows 上路徑不分大小寫', () => {
+    expect(resolveDevServerImagePath(dataDir, path.join(poolDir.toUpperCase(), 'A.PNG'), data)).not.toBeNull();
+    expect(resolveDevServerImagePath(dataDir, path.join(goneDir, 'OLD.png'), data)).not.toBeNull();
+  });
+
+  it('collectReferencedImageLocations 只收絕對路徑，資料格式不對時回傳空清單', () => {
+    const { dirs, files } = collectReferencedImageLocations(data);
+    expect(dirs).toEqual([data.rewardFolderPath, poolDir]);
+    expect(files).toEqual([path.join(poolDir, 'a.png'), path.join(goneDir, 'old.png')]);
+    expect(collectReferencedImageLocations(null)).toEqual({ dirs: [], files: [] });
+    expect(collectReferencedImageLocations({ lotteryPrizes: { R: 'x' }, rewardHistory: 'y' })).toEqual({ dirs: [], files: [] });
   });
 });
 

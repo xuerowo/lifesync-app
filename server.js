@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createStorage } from './electron/storage.js';
-import { resolveImageReadPath } from './electron/galleryFiles.js';
+import { resolveDevServerImagePath } from './electron/galleryFiles.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,6 +22,8 @@ const DATA_DIR = process.env.LIFESYNC_DATA_DIR
 // 與 Electron 版共用同一套存檔機制（安全寫入、每日備份、讀檔失敗就禁止存檔）。
 // 瀏覽器模式維持原本的行為：密碼不加密。
 const storage = createStorage({ dataDir: DATA_DIR });
+// 最近一次成功讀到或存好的資料：讀圖片時用來判斷「卡池用到的資料夾」有哪些
+let currentData = null;
 
 // 中間件
 // 不開放跨網站呼叫（不使用 cors）：開發時畫面經由 Vite 的 /api 轉送，屬於同一個網站，不需要。
@@ -41,6 +43,7 @@ app.get('/api/data', async (req, res) => {
       console.error('讀取數據錯誤（已停止存檔）:', result.code, result.error);
       return res.status(500).json({ error: `讀取數據失敗（${result.code}）`, code: result.code });
     }
+    currentData = result.data;
     res.json(result.data);
   } catch (error) {
     console.error('讀取數據錯誤:', error);
@@ -52,6 +55,7 @@ app.get('/api/data', async (req, res) => {
 app.post('/api/data', async (req, res) => {
   try {
     await storage.save(req.body);
+    currentData = req.body;
     res.json({ success: true, message: '數據已保存' });
   } catch (error) {
     if (error.code === 'SAVE_BLOCKED') {
@@ -115,8 +119,9 @@ app.get('/api/rewards/image', async (req, res) => {
     return res.status(400).json({ error: '請提供圖片路徑' });
   }
 
-  // 只讀圖片檔；相對路徑（圖庫）以資料資料夾為基準，且不能跳出資料資料夾
-  const absolutePath = resolveImageReadPath(DATA_DIR, String(imagePath));
+  // 只讀圖片檔，而且只能讀資料資料夾（含圖庫）裡的，或目前資料裡卡池用到的資料夾／圖片；
+  // 相對路徑以資料資料夾為基準，不能跳出去
+  const absolutePath = resolveDevServerImagePath(DATA_DIR, String(imagePath), currentData);
   if (!absolutePath) {
     return res.status(403).json({ error: '不允許讀取這個檔案' });
   }
@@ -136,6 +141,7 @@ app.get('/api/health', (req, res) => {
 
 // 啟動時先讀一次，讓讀檔問題立刻顯示在主控台
 const initialLoad = await storage.load();
+if (initialLoad.status !== 'error') currentData = initialLoad.data;
 if (initialLoad.status === 'error') {
   console.error(`⚠️  資料檔讀取失敗（${initialLoad.code}）：${initialLoad.error}`);
   console.error('   在問題排除前，所有存檔要求都會被拒絕，原檔不會被覆寫。');
