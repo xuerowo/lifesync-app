@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Settings2, Download, Upload, Cloud, ShieldCheck, RefreshCw, Image as ImageIcon, FolderOpen, HelpCircle, ChevronUp, ExternalLink, Lock, User, Link2, Info, AlertTriangle, Zap, Server, Shield, Eye, EyeOff } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
 import { encryptData, decryptData } from '../../utils/crypto';
-import { normalizeData } from '../../shared/defaultData';
+import { mergeIncomingData, stripCloudSecrets, isImportableData } from '../../shared/cloudSecrets';
 import {
   SNAPSHOT_REASONS, CONFIRM_BACKUP_RESTORE, CONFIRM_CLOUD_RESTORE, confirmJsonImportMessage,
   snapshotBeforeOverwrite, snapshotFailedMessage, snapshotSavedNote
@@ -32,7 +32,7 @@ const SettingsView = () => {
             if (result.aborted) {
                 alert('匯出已中斷');
             } else {
-                alert(`完整備份匯出成功！\n路徑：${result.path}`);
+                alert(`完整備份匯出成功！\n路徑：${result.path}\n\n備份裡不含雲端密碼和主密碼；在別台電腦還原後，需要重新輸入雲端設定。`);
             }
         } else {
             alert(`匯出失敗: ${result.error}`);
@@ -67,7 +67,8 @@ const SettingsView = () => {
             if (result.aborted) {
                 alert('還原已中斷');
             } else {
-                setData(prev => normalizeData({ ...prev, ...result.data }));
+                // 雲端設定保留這台電腦目前的，不用備份裡的
+                setData(prev => mergeIncomingData(prev, result.data));
                 alert(`完整數據與圖庫還原成功！${snapshotSavedNote(snapshot)}`);
             }
         } else {
@@ -95,6 +96,10 @@ const SettingsView = () => {
         alert('導入失敗');
         return;
       }
+      if (!isImportableData(imported)) {
+        alert('導入失敗：檔案內容不是 LifeSync 的資料格式');
+        return;
+      }
       if (!confirm(confirmJsonImportMessage(file.name))) return;
       // 覆蓋前先拍快照；失敗就不匯入
       const snapshot = await snapshotBeforeOverwrite(window.electronAPI, { reason: SNAPSHOT_REASONS.jsonImport, data });
@@ -102,7 +107,8 @@ const SettingsView = () => {
         alert(snapshotFailedMessage(snapshot.error));
         return;
       }
-      setData(prev => normalizeData({ ...prev, ...imported }));
+      // 雲端設定保留這台電腦目前的，不用檔案裡的（檔案裡的密碼可能是加密過、這台解不開的字串）
+      setData(prev => mergeIncomingData(prev, imported));
       alert(`JSON 數據導入成功！${snapshotSavedNote(snapshot)}`);
     };
     reader.readAsText(file);
@@ -137,7 +143,8 @@ const SettingsView = () => {
     setIsSyncing(true);
     setSyncProgress({ message: '正在加密並同步 JSON 數據...' });
     try {
-      const encrypted = await encryptData(JSON.stringify(data), data.cloudConfig.masterPassword);
+      // 上傳的內容不放密碼：下載時一律保留本機的雲端設定，用不到；也少一份可能外流的密碼
+      const encrypted = await encryptData(JSON.stringify(stripCloudSecrets(data)), data.cloudConfig.masterPassword);
       const result = await window.electronAPI.cloudUpload({
         config: data.cloudConfig,
         fileName: 'lifesync_backup_e2ee.dat',
@@ -173,6 +180,7 @@ const SettingsView = () => {
       if (result.success) {
         const decryptedJson = await decryptData(result.data, data.cloudConfig.masterPassword);
         const imported = JSON.parse(decryptedJson);
+        if (!isImportableData(imported)) throw new Error('雲端上的檔案不是 LifeSync 的資料格式');
         // 下載、解密都成功了，覆蓋前先拍快照；失敗就不覆蓋
         setSyncProgress({ message: '正在備份目前的資料...' });
         const snapshot = await snapshotBeforeOverwrite(window.electronAPI, { reason: SNAPSHOT_REASONS.cloudRestore, data });
@@ -180,7 +188,8 @@ const SettingsView = () => {
           alert(snapshotFailedMessage(snapshot.error));
           return;
         }
-        setData(prev => normalizeData({ ...prev, ...imported }));
+        // 雲端設定保留這台電腦目前的，不用雲端那份的
+        setData(prev => mergeIncomingData(prev, imported));
         alert(`加密數據還原成功！${snapshotSavedNote(snapshot)}`);
       } else {
         alert(`下載失敗: ${result.error}`);

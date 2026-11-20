@@ -10,22 +10,27 @@ export const SNAPSHOT_REASONS = {
   backupRestore: 'before-backup-restore',
 };
 
+const CLOUD_CONFIG_NOTE = '雲端設定（網址、帳號、密碼、主密碼）會保留這台電腦目前的，不會被換掉。';
+
 const KEEP_NOTE = '覆蓋前會先自動把目前的資料備份一份（程式資料夾裡的 backups 資料夾），萬一按錯還救得回來。';
 
 export const CONFIRM_CLOUD_RESTORE =
   '確定要用雲端上的備份，取代這台電腦上目前的資料嗎？\n\n' +
   '目前所有的計畫、任務、完成紀錄、抽卡券、筆記等，都會換成雲端那一份的內容；' +
-  '在雲端那一份之後才做的修改都會不見。\n\n' +
+  '在雲端那一份之後才做的修改都會不見。\n' +
+  CLOUD_CONFIG_NOTE + '\n\n' +
   KEEP_NOTE;
 
 export const CONFIRM_BACKUP_RESTORE =
   '確定要用這份完整備份，取代這台電腦上目前的資料和圖庫嗎？\n\n' +
-  '目前所有的計畫、任務、完成紀錄、抽卡券、筆記等，都會換成備份裡的內容；同名的圖庫圖片也會被備份裡的蓋掉。\n\n' +
+  '目前所有的計畫、任務、完成紀錄、抽卡券、筆記等，都會換成備份裡的內容；同名的圖庫圖片也會被備份裡的蓋掉。\n' +
+  CLOUD_CONFIG_NOTE + '\n\n' +
   '覆蓋前會先自動把目前的資料備份一份（程式資料夾裡的 backups 資料夾，不含圖庫圖片），萬一按錯還救得回來。';
 
 export const confirmJsonImportMessage = (fileName) =>
   `確定要匯入${fileName ? `「${fileName}」` : '這個 JSON 檔'}，取代這台電腦上目前的資料嗎？\n\n` +
-  '檔案裡有的項目（例如計畫、任務、完成紀錄、抽卡券、筆記）會整個換成檔案裡的內容。\n\n' +
+  '檔案裡有的項目（例如計畫、任務、完成紀錄、抽卡券、筆記）會整個換成檔案裡的內容。\n' +
+  CLOUD_CONFIG_NOTE + '\n\n' +
   KEEP_NOTE;
 
 /**

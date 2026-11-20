@@ -6,6 +6,7 @@ import { existsSync } from 'fs';
 import { setupCloudHandlers, setAbortFlag } from './cloudManager.js';
 import { createStorage } from './storage.js';
 import { resolveImageReadPath, copyImageIntoGallery } from './galleryFiles.js';
+import { stripCloudSecrets } from '../src/shared/cloudSecrets.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -368,8 +369,8 @@ ipcMain.handle('export-full-backup', async (event, { targetDir, data }) => {
 
     await fs.mkdir(galleryBackupDir, { recursive: true });
 
-    // 1. 保存 JSON
-    await fs.writeFile(path.join(partialDir, 'lifesync-data.json'), JSON.stringify(data, null, 2), 'utf-8');
+    // 1. 保存 JSON（不含 WebDAV 密碼與主密碼：備份檔外流時不會連帶洩漏雲端帳號和解密鑰匙）
+    await fs.writeFile(path.join(partialDir, 'lifesync-data.json'), JSON.stringify(stripCloudSecrets(data), null, 2), 'utf-8');
 
     // 2. 複製圖庫（圖庫資料夾不存在＝沒有圖片；複製途中出錯則整份備份視為失敗）
     let files = [];
