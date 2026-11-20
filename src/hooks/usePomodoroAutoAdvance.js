@@ -1,24 +1,26 @@
 import { useEffect, useEffectEvent, useRef } from 'react';
 import { useAudio } from './useAudio';
-import { breakSecondsFor, nextPhaseOnTimeout, phaseStartEvents, shouldHandleTimeout } from '../domain/pomodoro';
+import { breakSecondsFor, phaseStartEvents, shouldHandleTimeout } from '../domain/pomodoro';
+import { insertChronologically, planTimeout, pomodoroClock } from '../domain/pomodoroClock';
 
 /**
  * 番茄鐘的階段切換（進入專注／休息／心流）與「時間到」的自動處理。
  *
  * 放在 App 這一層呼叫，因為 App 不會被卸載：就算番茄鐘頁面沒有顯示，
  * 時間到時照樣會響鈴、切換階段。手動操作（跳過、心流等）也用這裡回傳的同一份函式。
+ *
+ * 倒數是從時間軸算出來的（見 domain/pomodoroClock.js），這裡只負責寫時間軸事件和「這個階段要倒數幾秒」。
  */
 export const usePomodoroAutoAdvance = ({
   status, setStatus,
   settings,
-  timeLeft, setTimeLeft,
+  timeLeft,
+  phaseLength, setPhaseLength,
   isPaused, setIsPaused,
   cycles, setCycles,
   showSettlement, setShowSettlement,
   showSummary, setShowSummary,
-  setCurrentSessionDuration,
-  setCurrentCycleWorkDuration,
-  setTimeline,
+  timeline, setTimeline,
 }) => {
   const { playNotificationSound } = useAudio();
   // 同一次歸零只處理一次；倒數重新大於 0 才解除
@@ -38,8 +40,7 @@ export const usePomodoroAutoAdvance = ({
   const startFocus = ({ newSession = false } = {}) => {
     const now = new Date().toISOString();
     setStatus('focus');
-    setTimeLeft(settings.focus * 60);
-    setCurrentSessionDuration(0);
+    setPhaseLength(settings.focus * 60);
     setIsPaused(false);
     if (newSession) {
       setTimeline([{ type: 'focus_start', time: now }]);
@@ -54,32 +55,30 @@ export const usePomodoroAutoAdvance = ({
   /** 進入休息。currentCycles 為進入休息時已完成的番茄數，用來決定是否長休息。 */
   const startBreak = (currentCycles) => {
     setStatus('break');
-    setCurrentSessionDuration(0);
     setIsPaused(false);
     addPhaseStartEvent('break_start');
-    setTimeLeft(breakSecondsFor(currentCycles, settings));
+    setPhaseLength(breakSecondsFor(currentCycles, settings));
   };
 
   // 進入心流也一併解除暫停，與時間軸（flow_start 之後不算暫停）一致
   const enterFlow = () => {
     setStatus('flow');
-    setCurrentSessionDuration(0);
     setIsPaused(false);
     addPhaseStartEvent('flow_start');
+    setPhaseLength(null);
   };
 
+  // 倒數歸零：用「現在」重新算一次，把切換點放在倒數真正歸零的那一刻（休眠、對話框開著時也一樣），只響一次
   const handleTimeout = useEffectEvent(() => {
-    const next = nextPhaseOnTimeout({ status, cycles, settings });
-    if (!next) return;
+    const nowMs = Date.now();
+    const clock = pomodoroClock({ timeline, phaseLength, nowMs });
+    const plan = planTimeout({ status, cycles, settings, clock, phaseLength, nowMs });
+    if (!plan) return;
     playNotificationSound();
-    if (next.status === 'break') {
-      const newCycles = cycles + next.cyclesIncrement;
-      setCycles(newCycles);
-      if (next.resetCycleWorkDuration) setCurrentCycleWorkDuration(0);
-      startBreak(newCycles);
-    } else {
-      startFocus();
-    }
+    if (plan.cyclesIncrement) setCycles(cycles + plan.cyclesIncrement);
+    setStatus(plan.status);
+    setPhaseLength(plan.phaseLength);
+    setTimeline(prev => insertChronologically(prev, plan.events));
   });
 
   useEffect(() => {

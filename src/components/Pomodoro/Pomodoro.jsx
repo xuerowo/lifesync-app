@@ -4,7 +4,8 @@ import {
   Timer, Settings2, Target, CheckCircle2, ChevronUp, ChevronDown, Play, Square, Pause, FastForward, Trophy, Gift, Infinity as InfinityIcon, Plus, Trash2, X, RotateCcw
 } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
-import { formatTime, formatFlowTime, calculatePomodoroStats } from '../../utils';
+import { formatTime, formatFlowTime, calculatePomodoroStats, pomodoroWorkSeconds } from '../../utils';
+import { isPausedByAppClose, pomodoroClock } from '../../domain/pomodoroClock';
 import PomodoroSummary from './PomodoroSummary';
 import PomodoroHistory from './PomodoroHistory';
 import { completionRewardTickets } from '../../domain/tasks';
@@ -23,13 +24,13 @@ const Pomodoro = ({
   sessionTasks, setSessionTasks,
   completedSessionTaskIds, setCompletedSessionTaskIds,
   isPaused, setIsPaused,
-  totalAccumulated, setTotalAccumulated,
-  currentSessionDuration, setCurrentSessionDuration,
+  // 以下兩個由 App 從時間軸算出（唯讀）：總專注（專注 + 心流）、目前階段已經過的秒數
+  totalAccumulated,
+  currentSessionDuration,
   cycles, setCycles,
   showSettlement, setShowSettlement,
   // New props for persistence
   sessionTimeline, setSessionTimeline,
-  currentCycleWorkDuration, setCurrentCycleWorkDuration,
   showSummary, setShowSummary,
   sessionStats, setSessionStats,
   sessionStartTimeRef,
@@ -65,17 +66,19 @@ const Pomodoro = ({
     setSessionTasks(selectedTasks);
     setCompletedSessionTaskIds([]);
     setCycles(0);
-    setCurrentCycleWorkDuration(0);
   };
+
+  // 從上一次休息之後累計的專注 + 心流秒數（用「現在」從時間軸算，進入休息時自動歸零）
+  const currentCycleWork = (timeline = sessionTimeline) =>
+    pomodoroClock({ timeline, nowMs: Date.now() }).cycleWork;
 
   const endFlow = () => {
     let newCycles = cycles;
     // 檢查專注+心流總時長是否達標
-    if (currentCycleWorkDuration >= settings.focus * 60) {
+    if (currentCycleWork() >= settings.focus * 60) {
       newCycles += 1;
       setCycles(newCycles);
     }
-    setCurrentCycleWorkDuration(0);
     startBreak(newCycles);
   };
 
@@ -94,7 +97,7 @@ const Pomodoro = ({
 
     // 最後結算時檢查當前進行中的週期
     let finalCycles = cycles;
-    if ((status === 'focus' || status === 'flow') && currentCycleWorkDuration >= settings.focus * 60) {
+    if ((status === 'focus' || status === 'flow') && currentCycleWork(finalTimeline) >= settings.focus * 60) {
       finalCycles += 1;
     }
 
@@ -122,9 +125,12 @@ const Pomodoro = ({
     setIsPaused(true);
   };
 
+  // 這一輪的純專注秒數：和總結畫面、專注歷史同一個算法（同一條時間軸），時間給的券也用它
+  const settledWorkSeconds = pomodoroWorkSeconds(sessionStats?.timeline);
+
   // 結算畫面上的券數：時間的券 + 這次完成的任務照各自設定的張數（紀錄已被撤銷或刪除的不算）
   const settlementTickets = pomodoroSettlementTickets({
-    workSeconds: totalAccumulated,
+    workSeconds: settledWorkSeconds,
     timeline: sessionTimeline,
     taskHistory: data.taskHistory,
   });
@@ -134,15 +140,13 @@ const Pomodoro = ({
     updateData(prev => {
       // 用最新的資料重算一次，畫面算好之後才被撤銷的紀錄不會被加券
       const { timeTickets, grants } = pomodoroSettlementTickets({
-        workSeconds: totalAccumulated,
+        workSeconds: settledWorkSeconds,
         timeline: sessionTimeline,
         taskHistory: prev.taskHistory,
       });
       return settlePomodoroTickets(prev, { grants, timeTickets, claim });
     });
     setStatus('idle');
-    setTotalAccumulated(0);
-    setCurrentSessionDuration(0);
     setCycles(0);
     setIsPaused(false);
     setSessionTasks([]);
@@ -152,7 +156,7 @@ const Pomodoro = ({
     setSelectedTaskIds([]);
     // Clear local storage on settlement
     const keysToRemove = [
-      'pomodoroStatus', 'pomodoroTimeLeft', 'pomodoroSelectedTaskIds',
+      'pomodoroStatus', 'pomodoroPhaseLength', 'pomodoroTimeLeft', 'pomodoroSelectedTaskIds',
       'pomodoroSessionTasks', 'pomodoroCompletedSessionTaskIds', 'pomodoroIsPaused',
       'pomodoroTotalAccumulated', 'pomodoroCurrentSessionDuration', 'pomodoroCycles',
       'pomodoroShowSettlement', 'pomodoroTimeline', 'pomodoroCurrentCycleWorkDuration',
@@ -237,11 +241,10 @@ const Pomodoro = ({
     if (status === 'focus' || status === 'flow') {
       let newCycles = cycles;
       // 只有在心流模式且時長達標時才計入完整番茄
-      if (status === 'flow' && currentCycleWorkDuration >= settings.focus * 60) {
+      if (status === 'flow' && currentCycleWork() >= settings.focus * 60) {
         newCycles += 1;
         setCycles(newCycles);
       }
-      setCurrentCycleWorkDuration(0);
       startBreak(newCycles);
     }
   };
@@ -501,6 +504,11 @@ const Pomodoro = ({
         }`}>
           {status === 'flow' ? '享受心流時刻' : status === 'break' ? '深呼吸，放鬆一下' : '保持專注，你做得到'}
         </p>
+        {isPausedByAppClose(sessionTimeline, isPaused) && (
+          <p className="mt-2 px-4 py-2 rounded-2xl bg-white/70 border border-amber-200 text-[11px] md:text-xs font-bold text-amber-700 text-center">
+            程式關閉期間不計時，已暫停在關閉時的剩餘時間；按 ▶ 繼續
+          </p>
+        )}
       </div>
 
       <div className="relative z-10 mb-8 md:mb-12 max-w-sm md:max-w-md w-full animate-in slide-up">
@@ -669,7 +677,7 @@ const Pomodoro = ({
           <div className="grid grid-cols-2 gap-4 md:gap-8 mb-8 md:mb-12 w-full max-w-lg">
             <div className="bg-sky-50 rounded-2xl md:rounded-[32px] p-4 md:p-6 text-center border border-sky-100">
               <span className="text-[8px] md:text-[10px] font-black text-sky-600 uppercase tracking-widest block mb-1 md:mb-2">專注時長</span>
-              <p className="text-xl md:text-3xl font-black text-sky-800">{formatFlowTime(totalAccumulated)}</p>
+              <p className="text-xl md:text-3xl font-black text-sky-800">{formatFlowTime(settledWorkSeconds)}</p>
             </div>
             <div className="bg-emerald-50 rounded-2xl md:rounded-[32px] p-4 md:p-6 text-center border border-emerald-100">
               <span className="text-[8px] md:text-[10px] font-black text-emerald-400 uppercase tracking-widest block mb-1 md:mb-2">完成任務</span>

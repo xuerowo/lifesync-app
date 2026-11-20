@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { Trophy, Clock, CheckCircle2, Zap, Timer, X, Calendar, ArrowRight, Sparkles, Pause, Play, Coffee, Flag, Target } from 'lucide-react';
-import { formatFlowTime, calculatePomodoroStats } from '../../utils';
+import { formatFlowTime, calculatePomodoroStats, pomodoroWorkSeconds } from '../../utils';
 
 const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
   // hooks 必須在任何條件 return 之前呼叫，所以先用 ?. 取值，沒有 stats 時等 hooks 跑完才 return
@@ -21,7 +21,7 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
     return `${ampm} ${displayH}:${m.toString().padStart(2, '0')}`;
   };
 
-  const { focusDuration: calcFocus, flowDuration: calcFlow, segments: statsSegments } = useMemo(() => {
+  const { segments: statsSegments } = useMemo(() => {
     return calculatePomodoroStats(timeline);
   }, [timeline]);
 
@@ -98,7 +98,8 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
             <div className="bg-indigo-50/50 p-6 rounded-[32px] border border-indigo-100 text-center">
               <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest block mb-2">純專注</span>
               <p className="text-3xl font-black text-indigo-800 font-mono">
-                {formatFlowTime(Math.round((calcFocus || 0) + (calcFlow || 0)))}
+                {/* 和結算畫面、抽卡券用同一個數字 */}
+                {formatFlowTime(pomodoroWorkSeconds(timeline))}
               </p>
             </div>
             <div className="bg-emerald-50/50 p-6 rounded-[32px] border border-emerald-100 text-center">

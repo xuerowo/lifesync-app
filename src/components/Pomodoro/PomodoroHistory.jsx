@@ -4,7 +4,7 @@ import { History, Trash2, Eye, Calendar, Clock, Timer, CheckCircle2, Zap, Chevro
 import { useAppData } from '../../contexts/AppDataContext';
 import { ITEMS_PER_PAGE } from '../../constants/index.jsx';
 import { clampPage, getTotalPages } from '../../domain/pagination';
-import { formatFlowTime, calculatePomodoroStats } from '../../utils';
+import { formatFlowTime, pomodoroWorkSeconds } from '../../utils';
 import PomodoroSummary from './PomodoroSummary';
 
 const PomodoroHistory = () => {
@@ -66,7 +66,8 @@ const PomodoroHistory = () => {
             <tbody>
               <AnimatePresence mode="popLayout">
                 {data.pomodoroHistory.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((record) => {
-                  const { focusDuration: calcFocus, flowDuration: calcFlow } = calculatePomodoroStats(record.timeline);
+                  // 和總結畫面、結算畫面、抽卡券用同一個數字
+                  const workSeconds = pomodoroWorkSeconds(record.timeline);
                   return (
                   <motion.tr
                     key={record.id}
@@ -134,7 +135,7 @@ const PomodoroHistory = () => {
                           <div className="flex flex-col">
                             <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">純專注</span>
                             <span className="text-[11px] font-black text-indigo-800 leading-none font-mono">
-                              {formatFlowTime(Math.round((calcFocus || 0) + (calcFlow || 0)))}
+                              {formatFlowTime(workSeconds)}
                             </span>
                           </div>
                         </div>

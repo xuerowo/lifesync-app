@@ -35,6 +35,7 @@ import NoticeBar from './components/Shared/NoticeBar';
 import SaveErrorBanner from './components/Shared/SaveErrorBanner';
 import { describeRestoreSuccess, describeSecretsUnavailable } from './domain/loadError';
 import { completionRewardTickets } from './domain/tasks';
+import { LEGACY_POMODORO_KEYS, lastEventMs, loadPomodoroState, pomodoroClock } from './domain/pomodoroClock';
 
 
 const App = () => {
@@ -72,42 +73,27 @@ const App = () => {
   }, [rewardToShow]);
 
   // --- Pomodoro State ---
-  const [pomodoroStatus, setPomodoroStatus] = useState(() => localStorage.getItem('pomodoroStatus') || 'idle');
-  const [pomodoroSettings, setPomodoroSettings] = useState(() => {
-    const saved = localStorage.getItem('pomodoroSettings');
-    return saved ? JSON.parse(saved) : { focus: 25, break: 5 };
-  });
-  const [pomodoroTimeLeft, setPomodoroTimeLeft] = useState(() => Number(localStorage.getItem('pomodoroTimeLeft')) || 25 * 60);
-  const [pomodoroSelectedTaskIds, setPomodoroSelectedTaskIds] = useState(() => {
-    const saved = localStorage.getItem('pomodoroSelectedTaskIds');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [pomodoroSessionTasks, setPomodoroSessionTasks] = useState(() => {
-    const saved = localStorage.getItem('pomodoroSessionTasks');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [pomodoroCompletedSessionTaskIds, setPomodoroCompletedSessionTaskIds] = useState(() => {
-    const saved = localStorage.getItem('pomodoroCompletedSessionTaskIds');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [pomodoroIsPaused, setPomodoroIsPaused] = useState(() => localStorage.getItem('pomodoroIsPaused') === 'true');
-  const [pomodoroTotalAccumulated, setPomodoroTotalAccumulated] = useState(() => Number(localStorage.getItem('pomodoroTotalAccumulated')) || 0);
-  const [pomodoroCurrentSessionDuration, setPomodoroCurrentSessionDuration] = useState(() => Number(localStorage.getItem('pomodoroCurrentSessionDuration')) || 0);
-  const [pomodoroCycles, setPomodoroCycles] = useState(() => Number(localStorage.getItem('pomodoroCycles')) || 0);
-  const [pomodoroShowSettlement, setPomodoroShowSettlement] = useState(() => localStorage.getItem('pomodoroShowSettlement') === 'true');
-  
-  // --- Pomodoro Background Persistence ---
-  const [pomodoroTimeline, setPomodoroTimeline] = useState(() => {
-    const saved = localStorage.getItem('pomodoroTimeline');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [pomodoroCurrentCycleWorkDuration, setPomodoroCurrentCycleWorkDuration] = useState(() => Number(localStorage.getItem('pomodoroCurrentCycleWorkDuration')) || 0);
-  const [pomodoroShowSummary, setPomodoroShowSummary] = useState(() => localStorage.getItem('pomodoroShowSummary') === 'true');
-  const [pomodoroSessionStats, setPomodoroSessionStats] = useState(() => {
-    const saved = localStorage.getItem('pomodoroSessionStats');
-    return saved ? JSON.parse(saved) : null;
-  });
-  const pomodoroSessionStartTimeRef = useRef(localStorage.getItem('pomodoroSessionStartTime'));
+  // 讀取上次存的狀態；程式關閉期間的時間在這裡就處理成「暫停」（見 domain/pomodoroClock.js 的 loadPomodoroState）
+  const [initialPomodoro] = useState(() => loadPomodoroState(window.localStorage, Date.now()));
+  const [pomodoroStatus, setPomodoroStatus] = useState(initialPomodoro.status);
+  const [pomodoroSettings, setPomodoroSettings] = useState(initialPomodoro.settings);
+  const [pomodoroSelectedTaskIds, setPomodoroSelectedTaskIds] = useState(initialPomodoro.selectedTaskIds);
+  const [pomodoroSessionTasks, setPomodoroSessionTasks] = useState(initialPomodoro.sessionTasks);
+  const [pomodoroCompletedSessionTaskIds, setPomodoroCompletedSessionTaskIds] = useState(initialPomodoro.completedSessionTaskIds);
+  const [pomodoroIsPaused, setPomodoroIsPaused] = useState(initialPomodoro.isPaused);
+  const [pomodoroCycles, setPomodoroCycles] = useState(initialPomodoro.cycles);
+  const [pomodoroShowSettlement, setPomodoroShowSettlement] = useState(initialPomodoro.showSettlement);
+  // 時間軸是計時的唯一依據：倒數、總專注、心流時長、抽卡券、總結、歷史都從它算
+  const [pomodoroTimeline, setPomodoroTimeline] = useState(initialPomodoro.timeline);
+  // 目前這個專注／休息階段要倒數幾秒（心流與待機為 null）
+  const [pomodoroPhaseLength, setPomodoroPhaseLength] = useState(initialPomodoro.phaseLength);
+  const [pomodoroShowSummary, setPomodoroShowSummary] = useState(initialPomodoro.showSummary);
+  const [pomodoroSessionStats, setPomodoroSessionStats] = useState(initialPomodoro.sessionStats);
+  const pomodoroSessionStartTimeRef = useRef(initialPomodoro.sessionStartTime);
+  // 畫面用的「現在」，計時中每秒更新一次
+  const [pomodoroNowMs, setPomodoroNowMs] = useState(() => Date.now());
+
+  const pomodoroRunning = pomodoroStatus !== 'idle' && !pomodoroIsPaused && !pomodoroShowSettlement && !pomodoroShowSummary;
 
   // Persist UI State
   useEffect(() => {
@@ -122,85 +108,67 @@ const App = () => {
     localStorage.setItem('taskSubTab', taskSubTab);
   }, [taskSubTab]);
 
+  // 舊版「每秒 +1」累計用的欄位已經換算進時間軸，不再需要
+  useEffect(() => {
+    LEGACY_POMODORO_KEYS.forEach(k => localStorage.removeItem(k));
+  }, []);
+
   // Persist Pomodoro State
   useEffect(() => {
     localStorage.setItem('pomodoroStatus', pomodoroStatus);
     localStorage.setItem('pomodoroSettings', JSON.stringify(pomodoroSettings));
-    localStorage.setItem('pomodoroTimeLeft', pomodoroTimeLeft);
     localStorage.setItem('pomodoroSelectedTaskIds', JSON.stringify(pomodoroSelectedTaskIds));
     localStorage.setItem('pomodoroSessionTasks', JSON.stringify(pomodoroSessionTasks));
     localStorage.setItem('pomodoroCompletedSessionTaskIds', JSON.stringify(pomodoroCompletedSessionTaskIds));
     localStorage.setItem('pomodoroIsPaused', pomodoroIsPaused);
-    localStorage.setItem('pomodoroTotalAccumulated', pomodoroTotalAccumulated);
-    localStorage.setItem('pomodoroCurrentSessionDuration', pomodoroCurrentSessionDuration);
     localStorage.setItem('pomodoroCycles', pomodoroCycles);
     localStorage.setItem('pomodoroShowSettlement', pomodoroShowSettlement);
     localStorage.setItem('pomodoroTimeline', JSON.stringify(pomodoroTimeline));
-    localStorage.setItem('pomodoroCurrentCycleWorkDuration', pomodoroCurrentCycleWorkDuration);
+    if (pomodoroPhaseLength == null) localStorage.removeItem('pomodoroPhaseLength');
+    else localStorage.setItem('pomodoroPhaseLength', pomodoroPhaseLength);
     localStorage.setItem('pomodoroShowSummary', pomodoroShowSummary);
     localStorage.setItem('pomodoroSessionStats', JSON.stringify(pomodoroSessionStats));
     if (pomodoroSessionStartTimeRef.current) localStorage.setItem('pomodoroSessionStartTime', pomodoroSessionStartTimeRef.current);
     localStorage.setItem('lastPomodoroTick', new Date().getTime());
   }, [
-    pomodoroStatus, pomodoroSettings, pomodoroTimeLeft, pomodoroSelectedTaskIds,
+    pomodoroStatus, pomodoroSettings, pomodoroSelectedTaskIds,
     pomodoroSessionTasks, pomodoroCompletedSessionTaskIds, pomodoroIsPaused,
-    pomodoroTotalAccumulated, pomodoroCurrentSessionDuration, pomodoroCycles,
-    pomodoroShowSettlement, pomodoroTimeline, pomodoroCurrentCycleWorkDuration,
+    pomodoroCycles, pomodoroShowSettlement, pomodoroTimeline, pomodoroPhaseLength,
     pomodoroShowSummary, pomodoroSessionStats
   ]);
 
-  // Handle "Offline" time during refresh
+  // 計時中：每秒更新畫面上的「現在」，同時記下「程式還活著」的時間（lastPomodoroTick）。
+  // 下次開啟時，這個時間點之後到開啟之間就是「程式關閉」的時間，視同暫停。
+  // 休眠或對話框開著時這裡會停住，但醒來後是用實際時間點相減，經過的時間照算，也不會被當成關閉。
   useEffect(() => {
-    if (pomodoroStatus !== 'idle' && !pomodoroIsPaused) {
-      const lastTick = Number(localStorage.getItem('lastPomodoroTick'));
-      if (lastTick) {
-        const now = new Date().getTime();
-        const diffSeconds = Math.floor((now - lastTick) / 1000);
-        
-        if (diffSeconds > 0) {
-          if (pomodoroStatus === 'focus' || pomodoroStatus === 'break') {
-            setPomodoroTimeLeft(prev => Math.max(0, prev - diffSeconds));
-            if (pomodoroStatus === 'focus') {
-              setPomodoroTotalAccumulated(prev => prev + diffSeconds);
-              setPomodoroCurrentSessionDuration(prev => prev + diffSeconds);
-              setPomodoroCurrentCycleWorkDuration(prev => prev + diffSeconds);
-            }
-          } else if (pomodoroStatus === 'flow') {
-            setPomodoroTotalAccumulated(prev => prev + diffSeconds);
-            setPomodoroCurrentSessionDuration(prev => prev + diffSeconds);
-            setPomodoroCurrentCycleWorkDuration(prev => prev + diffSeconds);
-          }
-        }
-      }
-    }
-  }, []); // Only on mount
+    if (!pomodoroRunning) return;
+    const tick = () => {
+      const now = Date.now();
+      localStorage.setItem('lastPomodoroTick', now);
+      // 同一秒內不重繪；每秒只更新一次畫面
+      setPomodoroNowMs(prev => (Math.floor(prev / 1000) === Math.floor(now / 1000) ? prev : now));
+    };
+    const interval = setInterval(tick, 250);
+    // 關閉視窗、重新整理前，把最後還活著的時間記到最準
+    const onPageHide = () => localStorage.setItem('lastPomodoroTick', Date.now());
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('pagehide', onPageHide);
+    };
+  }, [pomodoroRunning]);
 
-  useEffect(() => {
-    let interval = null;
-    if (pomodoroStatus !== 'idle' && !pomodoroIsPaused && !pomodoroShowSettlement && !pomodoroShowSummary) {
-      interval = setInterval(() => {
-        if (pomodoroStatus === 'focus' || pomodoroStatus === 'break') {
-          setPomodoroTimeLeft(prev => {
-            if (prev <= 1) {
-              // 這裡需要觸發完成邏輯，我們透過狀態變更讓 Pomodoro 元件處理或在此實作
-              return 0;
-            }
-            return prev - 1;
-          });
-          if (pomodoroStatus === 'focus') {
-            setPomodoroCurrentSessionDuration(prev => prev + 1);
-            setPomodoroTotalAccumulated(prev => prev + 1);
-            setPomodoroCurrentCycleWorkDuration(prev => prev + 1);
-          }
-        } else if (pomodoroStatus === 'flow') {
-          setPomodoroCurrentSessionDuration(prev => prev + 1);
-          setPomodoroTotalAccumulated(prev => prev + 1);
-          setPomodoroCurrentCycleWorkDuration(prev => prev + 1);
-        }
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [pomodoroStatus, pomodoroIsPaused, pomodoroShowSettlement, pomodoroShowSummary]);
+  // 從時間軸算出目前的倒數、總專注等。總結或結算畫面開著時，時間停在按停止的那一刻；
+  // 暫停時停在最後一個事件（暫停的那一刻）
+  const pomodoroClockNowMs = (pomodoroShowSummary || pomodoroShowSettlement) && pomodoroSessionStats?.endTime
+    ? new Date(pomodoroSessionStats.endTime).getTime()
+    : Math.max(pomodoroNowMs, lastEventMs(pomodoroTimeline) ?? 0);
+  const pomodoroClockState = pomodoroClock({
+    timeline: pomodoroTimeline,
+    phaseLength: pomodoroPhaseLength,
+    nowMs: pomodoroClockNowMs,
+  });
+  const pomodoroTimeLeft = (pomodoroStatus === 'focus' || pomodoroStatus === 'break') ? pomodoroClockState.timeLeft : 0;
 
   // 「時間到」的處理與階段切換放在這一層，切到別的分頁也照常運作
   const {
@@ -210,14 +178,13 @@ const App = () => {
   } = usePomodoroAutoAdvance({
     status: pomodoroStatus, setStatus: setPomodoroStatus,
     settings: pomodoroSettings,
-    timeLeft: pomodoroTimeLeft, setTimeLeft: setPomodoroTimeLeft,
+    timeLeft: pomodoroTimeLeft,
+    phaseLength: pomodoroPhaseLength, setPhaseLength: setPomodoroPhaseLength,
     isPaused: pomodoroIsPaused, setIsPaused: setPomodoroIsPaused,
     cycles: pomodoroCycles, setCycles: setPomodoroCycles,
     showSettlement: pomodoroShowSettlement, setShowSettlement: setPomodoroShowSettlement,
     showSummary: pomodoroShowSummary, setShowSummary: setPomodoroShowSummary,
-    setCurrentSessionDuration: setPomodoroCurrentSessionDuration,
-    setCurrentCycleWorkDuration: setPomodoroCurrentCycleWorkDuration,
-    setTimeline: setPomodoroTimeline,
+    timeline: pomodoroTimeline, setTimeline: setPomodoroTimeline,
   });
 
   const skipLottery = () => {
@@ -342,7 +309,7 @@ const App = () => {
               <div className="w-12 md:w-20 h-1 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-sky-500 transition-all duration-1000"
-                  style={{ width: `${(pomodoroTimeLeft / (pomodoroSettings.focus * 60)) * 100}%` }}
+                  style={{ width: `${(pomodoroTimeLeft / (pomodoroPhaseLength || pomodoroSettings.focus * 60)) * 100}%` }}
                 />
               </div>
             )}
@@ -486,12 +453,11 @@ const App = () => {
                   sessionTasks={pomodoroSessionTasks} setSessionTasks={setPomodoroSessionTasks}
                   completedSessionTaskIds={pomodoroCompletedSessionTaskIds} setCompletedSessionTaskIds={setPomodoroCompletedSessionTaskIds}
                   isPaused={pomodoroIsPaused} setIsPaused={setPomodoroIsPaused}
-                  totalAccumulated={pomodoroTotalAccumulated} setTotalAccumulated={setPomodoroTotalAccumulated}
-                  currentSessionDuration={pomodoroCurrentSessionDuration} setCurrentSessionDuration={setPomodoroCurrentSessionDuration}
+                  totalAccumulated={Math.floor(pomodoroClockState.workSeconds)}
+                  currentSessionDuration={Math.floor(pomodoroClockState.phaseElapsed)}
                   cycles={pomodoroCycles} setCycles={setPomodoroCycles}
                   showSettlement={pomodoroShowSettlement} setShowSettlement={setPomodoroShowSettlement}
                   sessionTimeline={pomodoroTimeline} setSessionTimeline={setPomodoroTimeline}
-                  currentCycleWorkDuration={pomodoroCurrentCycleWorkDuration} setCurrentCycleWorkDuration={setPomodoroCurrentCycleWorkDuration}
                   showSummary={pomodoroShowSummary} setShowSummary={setPomodoroShowSummary}
                   sessionStats={pomodoroSessionStats} setSessionStats={setPomodoroSessionStats}
                   sessionStartTimeRef={pomodoroSessionStartTimeRef}

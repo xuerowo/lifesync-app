@@ -137,3 +137,12 @@ export const calculatePomodoroStats = (timeline) => {
 
   return { focusDuration, flowDuration, breakDuration, segments };
 };
+
+/**
+ * 一輪番茄鐘的「純專注」秒數（專注 + 心流，四捨五入到整秒）。
+ * 總結畫面、專注歷史、結算畫面的專注時長和時間給的抽卡券，都用這一個數字，才不會互相對不上。
+ */
+export const pomodoroWorkSeconds = (timeline) => {
+  const { focusDuration, flowDuration } = calculatePomodoroStats(timeline);
+  return Math.round((focusDuration || 0) + (flowDuration || 0));
+};
