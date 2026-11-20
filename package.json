@@ -3,14 +3,14 @@
   "private": true,
   "version": "1.0.0",
   "description": "LifeSync App - A personal productivity and data synchronization tool",
-  "author": "Your Name <your.email@example.com>",
+  "author": "xuerowo",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
     "server": "node server.js",
     "dev:all": "concurrently \"npm run server\" \"npm run dev\"",
-    "build": "vite build && electron-builder",
+    "build": "node scripts/clean-build.js && vite build && electron-builder",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
@@ -51,7 +51,8 @@
   "build": {
     "appId": "com.lifesync.app",
     "productName": "LifeSync",
-    "copyright": "Copyright © 2026 Your Name",
+    "copyright": "Copyright © 2026 xuerowo",
+    "publish": null,
     "directories": {
       "output": "dist_electron"
     },

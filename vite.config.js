@@ -41,6 +41,8 @@ const injectCsp = () => ({
 
 // https://vite.dev/config/
 export default defineConfig({
+  // 打包版用 file:// 載入 dist/index.html，資源必須用相對路徑
+  base: './',
   plugins: [
     react(),
     injectCsp(),
