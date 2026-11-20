@@ -67,6 +67,42 @@ export const nextPhaseOnTimeout = ({ status, cycles, settings }) => {
 };
 
 // ---------------------------------------------------------------------------
+// 目標任務
+// ---------------------------------------------------------------------------
+
+const pad2 = (n) => String(n).padStart(2, '0');
+const localDateStr = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+/**
+ * 番茄鐘可以選的目標任務：「學習」維度、還沒完成的任務；
+ * 每日／每週任務排除今天已完成的，每週任務也排除今天不是指定星期的。
+ * 開始前的選擇清單和進行中的「＋」用同一份規則。
+ * @param {Array} subTasks
+ * @param {Date} [now]
+ */
+export const pomodoroCandidateTasks = (subTasks, now = new Date()) => {
+  const todayStr = localDateStr(now);
+  const weekday = now.getDay();
+  return (Array.isArray(subTasks) ? subTasks : []).filter(t => {
+    if (t.indicatorId !== 'learning') return false;
+    // 排除已歸檔/已完成的一次性任務
+    if (t.completed) return false;
+    if (t.type === 'daily' || t.type === 'weekly') {
+      const isTodayCompleted = typeof t.lastCompletedAt === 'string' && t.lastCompletedAt.startsWith(todayStr);
+      const isWrongDay = t.type === 'weekly' && !(Array.isArray(t.days) && t.days.includes(weekday));
+      return !isTodayCompleted && !isWrongDay;
+    }
+    return true;
+  });
+};
+
+/** 進行中按「＋」時可以加入的任務：可選的任務中，還不在本次目標裡的 */
+export const addableSessionTasks = (subTasks, sessionTasks, now = new Date()) => {
+  const inSession = new Set((Array.isArray(sessionTasks) ? sessionTasks : []).map(t => t.id));
+  return pomodoroCandidateTasks(subTasks, now).filter(t => !inSession.has(t.id));
+};
+
+// ---------------------------------------------------------------------------
 // 抽卡券
 // ---------------------------------------------------------------------------
 

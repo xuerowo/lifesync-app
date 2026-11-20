@@ -4,11 +4,12 @@ import {
   Timer, Settings2, Target, CheckCircle2, ChevronUp, ChevronDown, Play, Square, Pause, FastForward, Trophy, Gift, Infinity as InfinityIcon, Plus, Trash2, X, RotateCcw
 } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
-import { formatTime, formatFlowTime, getTodayStr, calculatePomodoroStats } from '../../utils';
+import { formatTime, formatFlowTime, calculatePomodoroStats } from '../../utils';
 import PomodoroSummary from './PomodoroSummary';
 import PomodoroHistory from './PomodoroHistory';
 import { completionRewardTickets } from '../../domain/tasks';
-import { pomodoroSettlementTickets, settlePomodoroTickets } from '../../domain/pomodoro';
+import { addableSessionTasks, pomodoroCandidateTasks, pomodoroSettlementTickets, settlePomodoroTickets } from '../../domain/pomodoro';
+import AddSessionTaskPicker from './AddSessionTaskPicker';
 
 const Pomodoro = ({
   subTasks,
@@ -41,26 +42,8 @@ const Pomodoro = ({
 
   const [isAddingTask, setIsAddingTask] = useState(false);
 
-  const learningTasks = subTasks.filter(t => {
-    if (t.indicatorId !== 'learning') return false;
-    
-    // 排除已歸檔/已完成的一次性任務
-    if (t.completed) return false;
-
-    const todayStr = getTodayStr();
-    const today = new Date();
-    const currentDay = today.getDay();
-
-    // 如果是重複性任務
-    if (t.type === 'daily' || t.type === 'weekly') {
-      const isTodayCompleted = t.lastCompletedAt && t.lastCompletedAt.startsWith(todayStr);
-      const isWrongDay = t.type === 'weekly' && !t.days.includes(currentDay);
-      // 排除今日已完成 或 非指定日期的任務
-      return !isTodayCompleted && !isWrongDay;
-    }
-
-    return true;
-  });
+  // 可選的目標任務（學習維度、未完成；規則見 domain/pomodoro.js，「＋」加入任務也用同一份）
+  const learningTasks = pomodoroCandidateTasks(subTasks);
 
   // 「時間到」的自動處理在 App 層（usePomodoroAutoAdvance），這裡不再監聽，避免重複觸發
 
@@ -132,6 +115,7 @@ const Pomodoro = ({
       }))
     };
 
+    setIsAddingTask(false);
     setSessionStats(stats);
     addPomodoroRecord(stats);
     setShowSummary(true);
@@ -526,6 +510,8 @@ const Pomodoro = ({
             <p className="text-[8px] md:text-[10px] font-black text-slate-600 uppercase tracking-widest text-center">本次目標</p>
             <button
               onClick={() => setIsAddingTask(true)}
+              title="加入目標任務"
+              aria-label="加入目標任務"
               className="p-1 md:p-1.5 bg-sky-500/10 text-sky-600 rounded-lg hover:bg-sky-500/20 transition-all"
             >
               <Plus className="w-3.5 h-3.5 md:w-4 md:h-4" />
@@ -648,6 +634,15 @@ const Pomodoro = ({
           </button>
         )}
       </div>
+
+      {/* 進行中加入目標任務（專注、心流、休息都可以）；只是畫面上的清單，不影響計時 */}
+      {isAddingTask && !showSummary && !showSettlement && (
+        <AddSessionTaskPicker
+          tasks={addableSessionTasks(subTasks, sessionTasks)}
+          onAdd={addSessionTask}
+          onClose={() => setIsAddingTask(false)}
+        />
+      )}
 
       <AnimatePresence>
         {showSummary && (
