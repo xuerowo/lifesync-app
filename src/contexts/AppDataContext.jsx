@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { getTodayStr, getLocalISOString } from '../utils';
 import { createDefaultData, normalizeData } from '../shared/defaultData';
-import { computeActivePriorityTasks, createRecentGuard, isOneTimeTask } from '../domain/tasks';
+import { computeActivePriorityTasks, createRecentGuard, isOneTimeTask, renumberPriorityTasks } from '../domain/tasks';
 import { localStampedIsoFromUtcIso, parseLocalDate } from '../domain/dates';
 
 const AppDataContext = createContext();
@@ -193,22 +193,8 @@ export const AppDataProvider = ({ children }) => {
     }, 0);
   };
 
-  const reorderPriorityTasks = (allSubTasks, removedTaskId = null) => {
-    const remainingTasks = allSubTasks
-      .filter(t => t.isPriority && t.id !== removedTaskId)
-      .sort((a, b) => a.priorityOrder - b.priorityOrder);
-    
-    return allSubTasks.map(t => {
-      if (t.id === removedTaskId) return t;
-      if (!t.isPriority) return t;
-      
-      const newIndex = remainingTasks.findIndex(rt => rt.id === t.id);
-      if (newIndex !== -1) {
-        return { ...t, priorityOrder: newIndex + 1 };
-      }
-      return t;
-    });
-  };
+  // 重排優先順序（1..n），規則見 domain/tasks.js
+  const reorderPriorityTasks = renumberPriorityTasks;
 
   // 今天的本地日期。程式開著跨過午夜時，每分鐘檢查一次，日期變了就更新，讓優先任務清單重新計算
   const [todayStr, setTodayStr] = useState(getTodayStr);
@@ -234,17 +220,9 @@ export const AppDataProvider = ({ children }) => {
       const subTasksToArchive = prev.subTasks.filter(s => s.majorTaskId === taskId);
       let updatedSubTasks = prev.subTasks.filter(s => s.majorTaskId !== taskId);
       
-      const priorityTasksToRemove = subTasksToArchive.filter(s => s.isPriority).map(s => s.id);
-      if (priorityTasksToRemove.length > 0) {
-        const remainingPriorityTasks = updatedSubTasks
-          .filter(t => t.isPriority)
-          .sort((a, b) => a.priorityOrder - b.priorityOrder);
-          
-        updatedSubTasks = updatedSubTasks.map(t => {
-          if (!t.isPriority) return t;
-          const newIndex = remainingPriorityTasks.findIndex(rt => rt.id === t.id);
-          return { ...t, priorityOrder: newIndex + 1 };
-        });
+      // 有優先任務被歸檔時，剩下的優先任務重新編號
+      if (subTasksToArchive.some(s => s.isPriority)) {
+        updatedSubTasks = renumberPriorityTasks(updatedSubTasks);
       }
 
       return {
@@ -326,7 +304,7 @@ export const AppDataProvider = ({ children }) => {
 
     let newSubTasks = prev.subTasks;
     if (task && task.isPriority) {
-        newSubTasks = reorderPriorityTasks(prev.subTasks, id);
+        newSubTasks = renumberPriorityTasks(prev.subTasks, id);
     }
     return {
       ...prev,
@@ -350,16 +328,7 @@ export const AppDataProvider = ({ children }) => {
       setTicketNotification({ count: ticketsToRecover, type: 'loss', id: crypto.randomUUID() });
     }
 
-    let remainingSubTasks = prev.subTasks.filter(s => s.majorTaskId !== id);
-    const priorityTasks = remainingSubTasks
-      .filter(t => t.isPriority)
-      .sort((a, b) => a.priorityOrder - b.priorityOrder);
-      
-    remainingSubTasks = remainingSubTasks.map(t => {
-      if (!t.isPriority) return t;
-      const newIndex = priorityTasks.findIndex(pt => pt.id === t.id);
-      return { ...t, priorityOrder: newIndex + 1 };
-    });
+    const remainingSubTasks = renumberPriorityTasks(prev.subTasks.filter(s => s.majorTaskId !== id));
 
     return {
       ...prev,
@@ -377,7 +346,7 @@ export const AppDataProvider = ({ children }) => {
     if (!task) return prev;
     let newSubTasks = prev.subTasks;
     if (task.isPriority) {
-        newSubTasks = reorderPriorityTasks(prev.subTasks, id);
+        newSubTasks = renumberPriorityTasks(prev.subTasks, id);
     }
     return { ...prev, subTasks: newSubTasks.filter(t => t.id !== id), archivedSubTasks: [...prev.archivedSubTasks, { ...task, completed: true, completedAt: new Date().toISOString(), isPriority: false, priorityOrder: 0 }] };
   });
@@ -430,7 +399,7 @@ export const AppDataProvider = ({ children }) => {
 
       if (task.isPriority) {
         const tempTasks = newSubTasks.map(t => t.id === id ? { ...t, isPriority: false, priorityOrder: 0 } : t);
-        newSubTasks = reorderPriorityTasks(tempTasks);
+        newSubTasks = renumberPriorityTasks(tempTasks);
       }
 
       const completionRecord = {

@@ -9,7 +9,7 @@ import { getTodayStr, formatTaskTime } from '../../utils';
 
 const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask }) => {
   const {
-    data, updateData, activePriorityTasks, reorderPriorityTasks,
+    data, updateData, activePriorityTasks, toggleMajorTask,
     completeSubTaskData, revertTaskCompletion, deleteMajorTask, deleteSubTask, terminateSubTask
   } = useAppData();
   const [expandedArchived, setExpandedArchived] = useState({});
@@ -33,37 +33,6 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
   const addMajorTask = (indicatorId, goalId) => {
     const newTask = { id: crypto.randomUUID(), indicatorId, goalId, title: '', startDate: getTodayStr(), endDate: getTodayStr(), completed: false, createdAt: new Date().toISOString() };
     setEditingTask({ type: 'major', item: newTask });
-  };
-
-  const toggleMajorTask = (taskId) => {
-    updateData(prev => {
-      const task = prev.majorTasks.find(t => t.id === taskId);
-      if (!task) return prev;
-
-      const subTasksToArchive = prev.subTasks.filter(s => s.majorTaskId === taskId);
-      let updatedSubTasks = prev.subTasks.filter(s => s.majorTaskId !== taskId);
-      
-      const priorityTasksToRemove = subTasksToArchive.filter(s => s.isPriority).map(s => s.id);
-      if (priorityTasksToRemove.length > 0) {
-        const remainingPriorityTasks = updatedSubTasks
-          .filter(t => t.isPriority)
-          .sort((a, b) => a.priorityOrder - b.priorityOrder);
-          
-        updatedSubTasks = updatedSubTasks.map(t => {
-          if (!t.isPriority) return t;
-          const newIndex = remainingPriorityTasks.findIndex(rt => rt.id === t.id);
-          return { ...t, priorityOrder: newIndex + 1 };
-        });
-      }
-
-      return {
-        ...prev,
-        majorTasks: prev.majorTasks.filter(t => t.id !== taskId),
-        subTasks: updatedSubTasks,
-        archivedTasks: [...prev.archivedTasks, { ...task, completed: true, completedAt: new Date().toISOString() }],
-        archivedSubTasks: [...prev.archivedSubTasks, ...subTasksToArchive.map(s => ({ ...s, completed: true, completedAt: new Date().toISOString(), isPriority: false, priorityOrder: 0 }))]
-      };
-    });
   };
 
   const addSubTask = (majorTaskId) => {
