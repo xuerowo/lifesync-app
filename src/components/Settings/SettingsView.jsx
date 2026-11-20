@@ -7,6 +7,9 @@ import {
   SNAPSHOT_REASONS, CONFIRM_BACKUP_RESTORE, CONFIRM_CLOUD_RESTORE, confirmJsonImportMessage,
   snapshotBeforeOverwrite, snapshotFailedMessage, snapshotSavedNote
 } from '../../domain/overwriteGuard';
+import {
+  evaluateMasterPassword, masterPasswordBlockMessage, isInsecureWebdavUrl, INSECURE_URL_WARNING
+} from '../../domain/masterPassword';
 
 const SettingsView = () => {
   const { data, setData, updateData, isSyncing, setIsSyncing, setSyncProgress } = useAppData();
@@ -16,6 +19,46 @@ const SettingsView = () => {
   // 密碼顯示開關狀態
   const [showAppPassword, setShowAppPassword] = useState(false);
   const [showMasterPassword, setShowMasterPassword] = useState(false);
+
+  // 主密碼（H11）：修改時要輸入兩次，兩次一樣才存進資料。
+  // masterDraft 是主密碼欄正在改的內容（null＝沒有在改，顯示已存的主密碼）；masterConfirm 是「再輸入一次」欄。
+  // 沒確認就離開設定頁，修改會被放棄，保留原本的主密碼。
+  const [masterDraft, setMasterDraft] = useState(null);
+  const [masterConfirm, setMasterConfirm] = useState('');
+  const [masterJustSaved, setMasterJustSaved] = useState(false);
+  const masterState = evaluateMasterPassword({
+    saved: data.cloudConfig.masterPassword, draft: masterDraft, confirm: masterConfirm
+  });
+  const masterMessage = masterState.status === 'verified' && masterJustSaved
+    ? '兩次輸入相同，新的主密碼已儲存。'
+    : masterState.message;
+
+  const applyMasterInput = (nextDraft, nextConfirm) => {
+    const next = evaluateMasterPassword({
+      saved: data.cloudConfig.masterPassword, draft: nextDraft, confirm: nextConfirm
+    });
+    if (next.shouldCommit) {
+      updateData(prev => ({ ...prev, cloudConfig: { ...prev.cloudConfig, masterPassword: next.value } }));
+      setMasterDraft(null);
+      setMasterJustSaved(true);
+    } else {
+      setMasterDraft(next.changed ? nextDraft : null);
+      setMasterJustSaved(false);
+    }
+    setMasterConfirm(nextConfirm);
+  };
+  const cancelMasterEdit = () => {
+    setMasterDraft(null);
+    setMasterConfirm('');
+    setMasterJustSaved(false);
+  };
+
+  // 主密碼還沒確認好時，雲端按鈕一律先擋下（以免用打錯、或不是畫面上那一個的主密碼加密或解密）
+  const blockedByMasterPassword = (actionLabel) => {
+    const message = masterPasswordBlockMessage(masterState, actionLabel);
+    if (message) alert(message);
+    return Boolean(message);
+  };
 
   // --- 本地備份處理 ---
 
@@ -135,6 +178,7 @@ const SettingsView = () => {
   };
 
   const handleCloudUpload = async () => {
+    if (blockedByMasterPassword('上傳')) return;
     if (!data.cloudConfig.masterPassword) {
       alert('請先設定主密碼以進行加密備份');
       return;
@@ -164,6 +208,7 @@ const SettingsView = () => {
   };
 
   const handleCloudDownload = async () => {
+    if (blockedByMasterPassword('還原')) return;
     if (!data.cloudConfig.masterPassword) {
       alert('請輸入主密碼以進行解密');
       return;
@@ -203,6 +248,7 @@ const SettingsView = () => {
   };
 
   const handleSyncGallery = async () => {
+    if (blockedByMasterPassword('同步圖庫')) return;
     if (!data.cloudConfig.masterPassword) {
         alert('請先設定主密碼以進行加密備份');
         return;
@@ -233,6 +279,7 @@ const SettingsView = () => {
   };
 
   const handleRestoreGallery = async () => {
+    if (blockedByMasterPassword('還原圖庫')) return;
     if (!data.cloudConfig.masterPassword) {
         alert('請輸入主密碼以進行解密');
         return;
@@ -469,6 +516,12 @@ const SettingsView = () => {
                 placeholder="https://koofr.eu/dav"
                 className="w-full px-5 md:px-6 py-3 md:py-4 rounded-2xl md:rounded-3xl bg-white border-2 border-sky-100 focus:border-sky-400 outline-none transition-all font-medium text-sky-900 text-sm shadow-sm"
               />
+              {isInsecureWebdavUrl(data.cloudConfig.url) && (
+                <p role="alert" className="flex items-start gap-2 mx-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-[11px] md:text-xs font-bold text-amber-800 leading-relaxed">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500 mt-0.5" />
+                  {INSECURE_URL_WARNING}
+                </p>
+              )}
             </div>
             <div className="space-y-2 text-sky-950">
               <label className="text-xs md:text-sm font-bold text-sky-700 ml-3 md:ml-4">使用者名稱</label>
@@ -506,8 +559,8 @@ const SettingsView = () => {
                 <input
                     type={showMasterPassword ? "text" : "password"}
                     name="masterPassword"
-                    value={data.cloudConfig.masterPassword}
-                    onChange={handleCloudConfigChange}
+                    value={masterState.value}
+                    onChange={(e) => applyMasterInput(e.target.value, masterConfirm)}
                     placeholder="遺失此密碼將無法救回數據"
                     className="w-full px-5 md:px-6 py-3 md:py-4 pr-12 md:pr-14 rounded-2xl md:rounded-3xl bg-sky-900 text-white placeholder:text-sky-400 border-2 border-sky-900 focus:border-sky-400 outline-none transition-all font-medium text-sm shadow-lg"
                 />
@@ -518,6 +571,39 @@ const SettingsView = () => {
                     {showMasterPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
+            </div>
+            <div className="space-y-2 text-sky-950 md:col-start-2">
+              <label className="text-xs md:text-sm font-bold text-sky-700 ml-3 md:ml-4 text-sky-950">再輸入一次主密碼</label>
+              <input
+                  type={showMasterPassword ? "text" : "password"}
+                  name="masterPasswordConfirm"
+                  value={masterConfirm}
+                  onChange={(e) => applyMasterInput(masterDraft, e.target.value)}
+                  placeholder={masterState.changed ? "修改主密碼時必填，兩次要一樣" : "修改主密碼時才需要填"}
+                  autoComplete="off"
+                  className="w-full px-5 md:px-6 py-3 md:py-4 rounded-2xl md:rounded-3xl bg-sky-900 text-white placeholder:text-sky-400 border-2 border-sky-900 focus:border-sky-400 outline-none transition-all font-medium text-sm shadow-lg"
+              />
+              {masterMessage && (
+                <p
+                  role={masterState.tone === 'error' ? 'alert' : 'status'}
+                  className={`mx-2 p-3 rounded-2xl text-[11px] md:text-xs font-bold leading-relaxed border ${
+                    masterState.tone === 'error' ? 'bg-rose-50 border-rose-200 text-rose-700'
+                      : masterState.tone === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-800'
+                        : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                  }`}
+                >
+                  {masterMessage}
+                </p>
+              )}
+              {masterState.changed && (
+                <button
+                  type="button"
+                  onClick={cancelMasterEdit}
+                  className="ml-2 text-[11px] md:text-xs font-black text-sky-500 hover:text-sky-700 underline"
+                >
+                  取消修改（改回原本的主密碼）
+                </button>
+              )}
             </div>
           </div>
 
