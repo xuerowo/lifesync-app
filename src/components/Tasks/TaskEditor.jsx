@@ -20,11 +20,23 @@ const TaskEditor = ({ editingTask, setEditingTask }) => {
       if (isMajor) {
           const exists = prev.majorTasks.some(t => t.id === localItem.id);
           if (exists) return { ...prev, majorTasks: prev.majorTasks.map(t => t.id === localItem.id ? localItem : t) };
+          // 已完成的計畫：更新原本那一筆，不要新增成進行中的計畫
+          if (prev.archivedTasks.some(t => t.id === localItem.id)) {
+            return { ...prev, archivedTasks: prev.archivedTasks.map(t => t.id === localItem.id ? localItem : t) };
+          }
           return { ...prev, majorTasks: [...prev.majorTasks, localItem] };
       } else {
           let newSubTasks = [...prev.subTasks];
           const originalTask = prev.subTasks.find(t => t.id === localItem.id);
-          
+
+          // 從日曆打開的已完成任務：更新原本已完成的那一筆，不要再新增一份到進行中。
+          // 已完成的任務不參與優先順序，保留它原本的優先欄位
+          const archivedOriginal = !originalTask && prev.archivedSubTasks.find(t => t.id === localItem.id);
+          if (archivedOriginal) {
+            const updated = { ...localItem, isPriority: archivedOriginal.isPriority, priorityOrder: archivedOriginal.priorityOrder };
+            return { ...prev, archivedSubTasks: prev.archivedSubTasks.map(t => t.id === localItem.id ? updated : t) };
+          }
+
           if (originalTask && originalTask.isPriority && !localItem.isPriority) {
                const tempTasks = newSubTasks.map(t => t.id === localItem.id ? localItem : t);
                newSubTasks = reorderPriorityTasks(tempTasks);
