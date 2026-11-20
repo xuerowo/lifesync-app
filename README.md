@@ -44,6 +44,7 @@ LifeSync 是一款用 React + Electron + Vite 做的個人生活管理工具。�
 
 1.  安裝 [Node.js](https://nodejs.org/)。
 2.  在專案資料夾執行一次 `npm install`（安裝依賴套件）。用 `run.bat` 啟動的話，它發現還沒安裝時會自動執行。
+    -   npm 12 以後預設更嚴格（不下載 git 來源的套件、不執行套件的安裝腳本），專案已經用 `.npmrc` 和 `package.json` 的 `allowScripts` 設定好，直接執行即可。原因與升級 Electron 後要多做的步驟，見 [docs/build-and-packaging.md](docs/build-and-packaging.md)。
 
 ### Windows 快速啟動：`run.bat`
 
@@ -113,6 +114,9 @@ npm run build
     -   `LifeSync Setup 1.0.0.exe`：安裝程式。
     -   `LifeSync 1.0.0.exe`：免安裝可攜版（資料一樣存在 `%APPDATA%\lifesync-app\data\`）。
     -   `win-unpacked/`：解開後的程式資料夾。
+-   所有套件都列在 `devDependencies`（開發用清單）：畫面和主程序用到的套件在建置時已經打包好，安裝檔裡不會再多塞一份 `node_modules`。以後新增套件請用 `npm install -D`。
+-   打包失敗、訊息有 `Cannot create symbolic link`（winCodeSign）時，見 [docs/build-and-packaging.md](docs/build-and-packaging.md) 第 3 節。
+-   檢查打包版時，一定要先設定 `LIFESYNC_DATA_DIR` 再開 `win-unpacked\LifeSync.exe`，否則會讀寫真正的資料（見同一份文件第 4 節）。
 
 ## 🛠️ 技術棧
 
@@ -130,5 +134,5 @@ npm run build
 -   `server.js`：瀏覽器模式用的本機資料伺服器
 -   `scripts/`：沙盒啟動、資料清理、打包前清理等小工具
 -   `tests/`：自動測試
--   `docs/`：手動檢查清單等文件
+-   `docs/`：手動檢查清單、安裝與打包注意事項等文件
 -   `data/`：開發模式的資料（已被 `.gitignore` 排除）
