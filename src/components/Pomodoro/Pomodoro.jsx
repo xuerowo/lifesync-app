@@ -1,9 +1,8 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Timer, Settings2, Target, CheckCircle2, ChevronUp, ChevronDown, Play, Square, Pause, FastForward, Trophy, Gift, Infinity as InfinityIcon, Plus, Trash2, X, RotateCcw
 } from 'lucide-react';
-import { useAudio } from '../../hooks/useAudio';
 import { useAppData } from '../../contexts/AppDataContext';
 import { formatTime, formatFlowTime, getTodayStr, calculatePomodoroStats } from '../../utils';
 import PomodoroSummary from './PomodoroSummary';
@@ -16,7 +15,7 @@ const Pomodoro = ({
   // State from parent
   status, setStatus,
   settings, setSettings,
-  timeLeft, setTimeLeft,
+  timeLeft,
   selectedTaskIds, setSelectedTaskIds,
   sessionTasks, setSessionTasks,
   completedSessionTaskIds, setCompletedSessionTaskIds,
@@ -30,12 +29,14 @@ const Pomodoro = ({
   currentCycleWorkDuration, setCurrentCycleWorkDuration,
   showSummary, setShowSummary,
   sessionStats, setSessionStats,
-  sessionStartTimeRef
+  sessionStartTimeRef,
+  // 階段切換（由 App 層提供，與「時間到」自動切換共用）
+  startFocus: startSharedFocus,
+  startBreak,
+  enterFlow
 }) => {
-  const { playNotificationSound } = useAudio();
   const { addPomodoroRecord, addLotteryTickets } = useAppData();
-  
-  const lastFocusStartTimeRef = useRef(null);
+
   const [isAddingTask, setIsAddingTask] = useState(false);
 
   const learningTasks = subTasks.filter(t => {
@@ -59,72 +60,27 @@ const Pomodoro = ({
     return true;
   });
 
-  // 監聽時間歸零
-  useEffect(() => {
-    if (timeLeft <= 0 && status !== 'idle' && status !== 'flow' && !isPaused && !showSettlement && !showSummary) {
-      handleTimerComplete();
-    }
-  }, [timeLeft, status, isPaused, showSettlement, showSummary]);
+  // 「時間到」的自動處理在 App 層（usePomodoroAutoAdvance），這裡不再監聽，避免重複觸發
 
   const addTimelineEvent = (type, extra = {}) => {
     setSessionTimeline(prev => [...prev, { type, time: new Date().toISOString(), ...extra }]);
   };
 
-  const handleTimerComplete = () => {
-    playNotificationSound();
-    if (status === 'focus') {
-      const newCycles = cycles + 1;
-      setCycles(newCycles);
-      setCurrentCycleWorkDuration(0); // 重置當前週期時長
-      startBreak(newCycles);
-    } else if (status === 'break') {
-      startFocus();
-    }
-  };
-
+  // 從待機開始新的一輪；進入專注本身的狀態切換與自動切換共用同一份實作
   const startFocus = () => {
-    const now = new Date().toISOString();
-    setStatus('focus');
-    setTimeLeft(settings.focus * 60);
-    setCurrentSessionDuration(0);
-    setIsPaused(false);
-    
-    if (status === 'idle') {
-      sessionStartTimeRef.current = now;
-      localStorage.setItem('pomodoroSessionStartTime', now);
-      // 確保任務順序與選擇的順序一致
-      const selectedTasks = selectedTaskIds.map(id => subTasks.find(t => t.id === id)).filter(Boolean);
-      setSessionTasks(selectedTasks);
-      setCompletedSessionTaskIds([]);
-      setSessionTimeline([{ type: 'focus_start', time: now }]);
-      setCycles(0);
-      setCurrentCycleWorkDuration(0);
-    } else {
-      addTimelineEvent('focus_start');
+    if (status !== 'idle') {
+      startSharedFocus();
+      return;
     }
-    
-    lastFocusStartTimeRef.current = now;
-    setShowSettlement(false);
-    setShowSummary(false);
-  };
-
-  const startBreak = (currentCycles) => {
-    setStatus('break');
-    setCurrentSessionDuration(0);
-    setIsPaused(false);
-    addTimelineEvent('break_start');
-    
-    if (settings.break <= 10 && currentCycles > 0 && currentCycles % 4 === 0) {
-      setTimeLeft(20 * 60);
-    } else {
-      setTimeLeft(settings.break * 60);
-    }
-  };
-
-  const enterFlow = () => {
-    setStatus('flow');
-    setCurrentSessionDuration(0);
-    addTimelineEvent('flow_start');
+    const now = startSharedFocus({ newSession: true });
+    sessionStartTimeRef.current = now;
+    localStorage.setItem('pomodoroSessionStartTime', now);
+    // 確保任務順序與選擇的順序一致
+    const selectedTasks = selectedTaskIds.map(id => subTasks.find(t => t.id === id)).filter(Boolean);
+    setSessionTasks(selectedTasks);
+    setCompletedSessionTaskIds([]);
+    setCycles(0);
+    setCurrentCycleWorkDuration(0);
   };
 
   const endFlow = () => {

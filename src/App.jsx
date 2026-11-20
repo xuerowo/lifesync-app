@@ -6,6 +6,7 @@ import {
 
 // Context & Hooks
 import { useAppData } from './contexts/AppDataContext';
+import { usePomodoroAutoAdvance } from './hooks/usePomodoroAutoAdvance';
 
 // Utils & Constants
 import { generateTeethPath } from './utils';
@@ -191,6 +192,24 @@ const App = () => {
     }
     return () => clearInterval(interval);
   }, [pomodoroStatus, pomodoroIsPaused, pomodoroShowSettlement, pomodoroShowSummary]);
+
+  // 「時間到」的處理與階段切換放在這一層，切到別的分頁也照常運作
+  const {
+    startFocus: pomodoroStartFocus,
+    startBreak: pomodoroStartBreak,
+    enterFlow: pomodoroEnterFlow,
+  } = usePomodoroAutoAdvance({
+    status: pomodoroStatus, setStatus: setPomodoroStatus,
+    settings: pomodoroSettings,
+    timeLeft: pomodoroTimeLeft, setTimeLeft: setPomodoroTimeLeft,
+    isPaused: pomodoroIsPaused, setIsPaused: setPomodoroIsPaused,
+    cycles: pomodoroCycles, setCycles: setPomodoroCycles,
+    showSettlement: pomodoroShowSettlement, setShowSettlement: setPomodoroShowSettlement,
+    showSummary: pomodoroShowSummary, setShowSummary: setPomodoroShowSummary,
+    setCurrentSessionDuration: setPomodoroCurrentSessionDuration,
+    setCurrentCycleWorkDuration: setPomodoroCurrentCycleWorkDuration,
+    setTimeline: setPomodoroTimeline,
+  });
 
   const skipLottery = () => {
     if (!rewardToShow) return;
@@ -423,7 +442,7 @@ const App = () => {
                   onTaskRevert={(taskId) => revertTaskCompletion(taskId, true)}
                   status={pomodoroStatus} setStatus={setPomodoroStatus}
                   settings={pomodoroSettings} setSettings={setPomodoroSettings}
-                  timeLeft={pomodoroTimeLeft} setTimeLeft={setPomodoroTimeLeft}
+                  timeLeft={pomodoroTimeLeft}
                   selectedTaskIds={pomodoroSelectedTaskIds} setSelectedTaskIds={setPomodoroSelectedTaskIds}
                   sessionTasks={pomodoroSessionTasks} setSessionTasks={setPomodoroSessionTasks}
                   completedSessionTaskIds={pomodoroCompletedSessionTaskIds} setCompletedSessionTaskIds={setPomodoroCompletedSessionTaskIds}
@@ -437,6 +456,9 @@ const App = () => {
                   showSummary={pomodoroShowSummary} setShowSummary={setPomodoroShowSummary}
                   sessionStats={pomodoroSessionStats} setSessionStats={setPomodoroSessionStats}
                   sessionStartTimeRef={pomodoroSessionStartTimeRef}
+                  startFocus={pomodoroStartFocus}
+                  startBreak={pomodoroStartBreak}
+                  enterFlow={pomodoroEnterFlow}
                 />
               )}
               {taskSubTab === 'history' && <TasksHistory setEditingTaskHistory={setEditingTaskHistory} />}
