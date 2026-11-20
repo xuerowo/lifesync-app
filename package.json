@@ -25,7 +25,7 @@
     "autoprefixer": "^10.4.23",
     "concurrently": "^9.2.1",
     "cors": "^2.8.5",
-    "electron": "^39.2.7",
+    "electron": "39.8.10",
     "electron-builder": "^26.0.12",
     "eslint": "^9.39.1",
     "eslint-plugin-react": "^7.37.5",
@@ -73,8 +73,8 @@
     }
   },
   "allowScripts": {
-    "electron@39.2.7": true,
     "electron-winstaller": false,
-    "esbuild": false
+    "esbuild": false,
+    "electron@39.8.10": true
   }
 }

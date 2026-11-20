@@ -121,7 +121,8 @@ npm run build
 ## 🛠️ 技術棧
 
 -   **畫面**：React 19、Tailwind CSS、Framer Motion、Lucide React
--   **桌面程式**：Electron（主程序負責讀寫硬碟）；Express 只用在開發時的瀏覽器模式
+-   **桌面程式**：Electron 39.8.10（主程序負責讀寫硬碟）；Express 只用在開發時的瀏覽器模式
+    -   Electron 39 系列已經停止更新，之後還要另外安排升級到受支援的大版本，見 [docs/build-and-packaging.md](docs/build-and-packaging.md) 第 5 節。
 -   **建置與測試**：Vite、electron-builder、Vitest、ESLint
 
 ## 📂 專案結構
