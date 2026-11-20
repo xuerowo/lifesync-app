@@ -5,5 +5,6 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.{js,jsx}'],
+    exclude: ['**/node_modules/**', '.claude/**'],
   },
 })

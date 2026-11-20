@@ -36,3 +36,6 @@ release
 
 # Data files (keep user data out of git)
 data/
+
+# Claude Code local worktrees and settings
+.claude/

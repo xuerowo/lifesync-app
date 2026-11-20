@@ -7,7 +7,7 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
   // 建置產物與打包輸出不檢查
-  globalIgnores(['dist', 'dist-electron', 'dist_electron', 'coverage']),
+  globalIgnores(['dist', 'dist-electron', 'dist_electron', 'coverage', '.claude']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
