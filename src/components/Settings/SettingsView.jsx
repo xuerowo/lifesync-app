@@ -7,6 +7,7 @@ import {
   SNAPSHOT_REASONS, CONFIRM_BACKUP_RESTORE, CONFIRM_CLOUD_RESTORE, confirmJsonImportMessage,
   snapshotBeforeOverwrite, snapshotFailedMessage, snapshotSavedNote
 } from '../../domain/overwriteGuard';
+import { cloudUploadSuccessMessage } from '../../domain/cloudUpload';
 import {
   evaluateMasterPassword, masterPasswordBlockMessage, isInsecureWebdavUrl, INSECURE_URL_WARNING
 } from '../../domain/masterPassword';
@@ -195,7 +196,7 @@ const SettingsView = () => {
         encryptedData: encrypted
       });
       if (result.success) {
-        alert('加密數據上傳成功！');
+        alert(cloudUploadSuccessMessage(result));
       } else {
         alert(`上傳失敗: ${result.error}`);
       }

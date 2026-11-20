@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { encryptBuffer, decryptBuffer } from './galleryCrypto.js';
 import { toSafeLocalName, resolveInsideDir, pushError, ENCRYPTED_EXT, DOWNLOAD_TMP_EXT } from './galleryFiles.js';
+import { keepPreviousVersion, pruneOldVersions, MAX_CLOUD_VERSIONS } from './cloudVersions.js';
 
 // 全局取消旗標
 let abortSync = false;
@@ -35,12 +36,31 @@ export function setupCloudHandlers(ipcMain, { GALLERY_DIR }) {
       username: config.username,
       password: config.password,
     });
+    // 1. 蓋掉之前，先把雲端上原本那份複製成舊版；做不到就不上傳，免得唯一的一份被蓋掉後救不回來
+    let previous;
+    try {
+      previous = await keepPreviousVersion(client, fileName);
+    } catch (error) {
+      return {
+        success: false,
+        error: `沒辦法先把雲端上原本那份另存為舊版，為了安全，這次沒有上傳，雲端上的檔案也沒有被改動。（${error.message}）`,
+      };
+    }
+    // 2. 上傳
     try {
       await client.putFileContents(fileName, Buffer.from(encryptedData), { overwrite: true });
-      return { success: true };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: error.message, versionedAs: previous.versionedAs };
     }
+    // 3. 舊版超過保留份數時刪掉最舊的（只刪符合舊版命名規則的檔案）；刪不掉不影響這次上傳
+    let warning = null;
+    if (previous.versionedAs) {
+      const { errors } = await pruneOldVersions(client, fileName, previous.siblingNames, MAX_CLOUD_VERSIONS);
+      if (errors.length > 0) {
+        warning = `有 ${errors.length} 份較舊的舊版沒有刪掉，雲端上的舊版可能超過 ${MAX_CLOUD_VERSIONS} 份：${errors.join('；')}`;
+      }
+    }
+    return { success: true, versionedAs: previous.versionedAs, keep: MAX_CLOUD_VERSIONS, warning };
   });
 
   ipcMain.handle('cloud-download', async (event, { config, fileName }) => {
