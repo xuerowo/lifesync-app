@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getData: () => ipcRenderer.invoke('get-data'),
   // 讀檔失敗時用：從最近一份自動備份還原（壞檔會改名保留），回傳格式同 getData，另有 restoredFrom、preservedAs
   restoreLatestBackup: () => ipcRenderer.invoke('restore-latest-backup'),
+  // 回傳 { success: true } 或 { success: false, code, error }（code 為 SAVE_BLOCKED 時表示讀檔失敗而被擋下）
   saveData: (data) => ipcRenderer.invoke('save-data', data),
   // 關窗或重新整理前使用：同步等到寫入完成，回傳 { success, error? }
   saveDataSync: (data) => ipcRenderer.sendSync('save-data-sync', data),

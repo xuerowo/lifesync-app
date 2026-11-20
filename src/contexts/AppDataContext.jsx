@@ -3,6 +3,7 @@ import { getTodayStr, getLocalISOString } from '../utils';
 import { createDefaultData, normalizeData } from '../shared/defaultData';
 import { computeActivePriorityTasks, createRecentGuard, isOneTimeTask, renumberPriorityTasks } from '../domain/tasks';
 import { localStampedIsoFromUtcIso, parseLocalDate } from '../domain/dates';
+import { saveResultError, toSaveFailure } from '../domain/saveRetry';
 
 const AppDataContext = createContext();
 
@@ -17,6 +18,39 @@ const toLoadResult = (res) => {
     data: res.data,
     secretsUnavailable: Array.isArray(res.secretsUnavailable) ? res.secretsUnavailable : [],
   };
+};
+
+/** 存檔（Electron 走 IPC；瀏覽器模式走 server.js）。失敗時丟出帶 code 的錯誤 */
+const persistData = async (data) => {
+  if (window.electronAPI) {
+    // 密碼由主程序負責加密
+    const error = saveResultError(await window.electronAPI.saveData(data));
+    if (error) throw error;
+    return;
+  }
+  let response;
+  try {
+    response = await fetch('/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  } catch (error) {
+    throw Object.assign(new Error(error?.message || '連不到資料伺服器'), { code: 'SERVER_UNREACHABLE' });
+  }
+  if (!response.ok) {
+    let message = `HTTP ${response.status}`;
+    let code = `HTTP_${response.status}`;
+    try {
+      const body = await response.json();
+      if (body?.error) message = body.error;
+      // server.js 拒絕存檔時會帶 SAVE_BLOCKED
+      if (body?.code) code = body.code;
+    } catch {
+      // 回應不是 JSON，沿用 HTTP 狀態碼
+    }
+    throw Object.assign(new Error(message), { code });
+  }
 };
 
 /** 讀取資料（Electron 走 IPC；瀏覽器模式走 server.js）。不丟錯，一律回傳 { ok, ... } */
@@ -85,8 +119,15 @@ export const AppDataProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   // 讀檔失敗：{ code, error, dataFile?, at }。此時畫面改顯示讀檔失敗畫面，而且一律不存檔，避免空白資料蓋掉原檔
   const [loadError, setLoadError] = useState(null);
-  // 最近一次存檔失敗：{ error, at }（目前只記錄，尚未顯示）
+  // 存檔失敗（H9）：{ code, error, blocked, failures, retryInMs, at }，畫面上方顯示紅色提示並自動重試
   const [saveError, setSaveError] = useState(null);
+  // 改變這個數字就會再存一次（自動重試、「立即重試」按鈕）
+  const [saveRetryNonce, setSaveRetryNonce] = useState(0);
+  // 失敗狀態下正在重試（只在失敗時才更新，平常存檔不會因此多重繪一次）
+  const [isRetryingSave, setIsRetryingSave] = useState(false);
+  const saveFailedRef = useRef(false);
+  const saveFailCountRef = useRef(0);
+  const lastFailedSeqRef = useRef(0);
 
   // 關窗前存檔用：記住最新資料、最後一次確定存好的資料，以及是否允許存檔
   const latestDataRef = useRef(data);
@@ -188,32 +229,54 @@ export const AppDataProvider = ({ children }) => {
   // Save data
   useEffect(() => {
     if (isLoading || loadError) return;
-    // 和最後一次存好的內容相同（例如剛載入完），不必再存
-    if (data === savedDataRef.current) return;
+    // 和最後一次存好的內容相同（例如剛載入完），不必再存；但失敗狀態下仍要往下走，才能清掉紅色提示
+    if (data === savedDataRef.current && !saveFailedRef.current) return;
+    const clearSaveFailure = () => {
+      saveFailedRef.current = false;
+      saveFailCountRef.current = 0;
+      setSaveError(null);
+    };
     const saveData = async () => {
+      if (data === savedDataRef.current) {
+        // 期間已經存好了（例如關窗前的同步存檔）
+        if (saveFailedRef.current) clearSaveFailure();
+        return;
+      }
       const seq = ++saveSeqRef.current;
+      const retrying = saveFailedRef.current;
+      if (retrying) setIsRetryingSave(true);
       try {
-        if (window.electronAPI) {
-          // 密碼由主程序負責加密
-          await window.electronAPI.saveData(data);
-        } else {
-          const response = await fetch('/api/data', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-          });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        }
+        await persistData(data);
         markSaved(seq, data);
-        setSaveError(null);
+        // 比最後一次失敗還新的存檔成功了，失敗的修改也已經包含在裡面
+        if (seq > lastFailedSeqRef.current && saveFailedRef.current) clearSaveFailure();
       } catch (error) {
         console.error('Failed to save data:', error);
-        setSaveError({ error: error?.message || String(error), at: new Date().toISOString() });
+        // 較新的存檔已經成功，這次較舊的失敗不必理會
+        if (seq > savedSeqRef.current) {
+          lastFailedSeqRef.current = seq;
+          saveFailedRef.current = true;
+          saveFailCountRef.current += 1;
+          setSaveError(toSaveFailure(error, saveFailCountRef.current));
+        }
+      } finally {
+        if (retrying) setIsRetryingSave(false);
       }
     };
     const timer = setTimeout(saveData, 500);
     return () => clearTimeout(timer);
-  }, [data, isLoading, loadError]);
+  }, [data, isLoading, loadError, saveRetryNonce]);
+
+  // 存檔失敗後自動重試：2、5、10、30 秒，之後每 60 秒一次。
+  // 主程序擋下的存檔（SAVE_BLOCKED，資料沒有成功載入）重試也沒用，不自動重試。
+  useEffect(() => {
+    if (!saveError || saveError.retryInMs == null) return;
+    const timer = setTimeout(() => setSaveRetryNonce((n) => n + 1), saveError.retryInMs);
+    return () => clearTimeout(timer);
+  }, [saveError]);
+
+  // 紅色提示上的「立即重試」
+  const retrySaveNow = () => setSaveRetryNonce((n) => n + 1);
 
   // 關閉視窗或重新整理前，立刻把還沒存的資料同步存完（只限 Electron）。
   // 注意：這裡不可設定 returnValue 或呼叫 preventDefault，否則 Electron 會默默取消關窗。
@@ -541,6 +604,8 @@ export const AppDataProvider = ({ children }) => {
     secretsUnavailable,
     dismissSecretsNotice: () => setSecretsUnavailable([]),
     saveError,
+    isRetryingSave,
+    retrySaveNow,
     getIndicatorStats,
     reorderPriorityTasks,
     activePriorityTasks,

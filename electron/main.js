@@ -257,9 +257,15 @@ ipcMain.handle('restore-latest-backup', async () => {
   }
 });
 
-// 保存數據（讀檔失敗時會被 storage 擋下並丟錯）
+// 保存數據。失敗時回傳 { success: false, code, error }，不用丟錯：
+// 丟錯經過 IPC 之後錯誤碼會不見，畫面就分不出「讀檔失敗而被擋下（SAVE_BLOCKED，不該重試）」和一般的寫入失敗。
 ipcMain.handle('save-data', async (event, data) => {
-  return storage.save(data);
+  try {
+    return await storage.save(data);
+  } catch (e) {
+    console.error('[storage] 存檔失敗:', e.code, e.message);
+    return { success: false, code: e.code || 'SAVE_FAILED', error: e.message };
+  }
 });
 
 // 關窗或重新整理前的同步存檔

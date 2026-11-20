@@ -32,6 +32,7 @@ import NoteEditor from './components/Note/NoteEditor';
 import PriorityManager from './components/Tasks/PriorityManager';
 import LoadErrorScreen from './components/Shared/LoadErrorScreen';
 import NoticeBar from './components/Shared/NoticeBar';
+import SaveErrorBanner from './components/Shared/SaveErrorBanner';
 import { describeRestoreSuccess, describeSecretsUnavailable } from './domain/loadError';
 
 
@@ -41,7 +42,8 @@ const App = () => {
     revertTaskCompletion, addLotteryTickets, ticketNotification, setTicketNotification,
     isSyncing, syncProgress, setIsSyncing,
     loadError, loadBusy, restoreFailure, retryLoad, canRestoreFromBackup, restoreFromBackup,
-    restoreNotice, dismissRestoreNotice, secretsUnavailable, dismissSecretsNotice
+    restoreNotice, dismissRestoreNotice, secretsUnavailable, dismissSecretsNotice,
+    saveError, isRetryingSave, retrySaveNow
   } = useAppData();
   const secretsNoticeText = describeSecretsUnavailable(secretsUnavailable);
 
@@ -265,6 +267,9 @@ const App = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-300 via-sky-100 to-white text-sky-950 font-sans selection:bg-sky-200 selection:text-sky-900">
       
+      {/* 存檔失敗的紅色提示（存好後自動消失） */}
+      <SaveErrorBanner saveError={saveError} isRetrying={isRetryingSave} onRetry={retrySaveNow} />
+
       {/* 全局同步進度面板 */}
       <AnimatePresence>
         {isSyncing && syncProgress && (
