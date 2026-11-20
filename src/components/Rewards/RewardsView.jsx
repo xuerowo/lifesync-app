@@ -7,6 +7,7 @@ import { useLottery } from '../../hooks/useLottery';
 import { RARITY_STYLES, ITEMS_PER_PAGE } from '../../constants/index.jsx';
 import RarityBadge from '../Shared/RarityBadge';
 import { getPrizeSortName } from '../../domain/lottery';
+import { clampPage, getTotalPages } from '../../domain/pagination';
 
 const EditableContent = ({ initialValue, onSave, className, placeholder }) => {
   const [localValue, setLocalValue] = useState(initialValue);
@@ -57,7 +58,10 @@ const RewardsView = ({
   const { performLottery } = useLottery();
   
   const [expandedImagePools, setExpandedImagePools] = useState({});
-  const [rewardHistoryPage, setRewardHistoryPage] = useState(1);
+  const [rewardHistoryPageState, setRewardHistoryPage] = useState(1);
+  // 刪除紀錄使目前頁碼超過總頁數時，自動顯示最後一頁（在 render 時計算，不在 effect 裡改 state）
+  const rewardHistoryTotalPages = getTotalPages(data.rewardHistory.length, ITEMS_PER_PAGE);
+  const rewardHistoryPage = clampPage(rewardHistoryPageState, data.rewardHistory.length, ITEMS_PER_PAGE);
   const [selectedHistoryIds, setSelectedHistoryIds] = useState([]);
 
   const scanRewardFolder = async (folderPath, targetRarity = 'R') => {
@@ -798,7 +802,7 @@ const RewardsView = ({
                 </div>
                 <div className="flex items-center gap-3">
                   <button
-                    onClick={() => setRewardHistoryPage(p => Math.max(1, p - 1))}
+                    onClick={() => setRewardHistoryPage(Math.max(1, rewardHistoryPage - 1))}
                     disabled={rewardHistoryPage === 1}
                     className="p-2.5 rounded-2xl bg-white/60 hover:bg-white disabled:opacity-30 text-sky-600 shadow-sm border border-white transition-all hover:-translate-x-1 active:scale-90"
                   >
@@ -807,11 +811,11 @@ const RewardsView = ({
                   <div className="flex items-center gap-1.5 px-4 py-2 bg-white/40 rounded-2xl border border-white/60 shadow-inner">
                     <span className="text-sm font-black text-sky-800">{rewardHistoryPage}</span>
                     <span className="text-xs font-bold text-sky-300">/</span>
-                    <span className="text-xs font-bold text-sky-400">{Math.ceil(data.rewardHistory.length / ITEMS_PER_PAGE)}</span>
+                    <span className="text-xs font-bold text-sky-400">{rewardHistoryTotalPages}</span>
                   </div>
                   <button
-                    onClick={() => setRewardHistoryPage(p => Math.min(Math.ceil(data.rewardHistory.length / ITEMS_PER_PAGE), p + 1))}
-                    disabled={rewardHistoryPage >= Math.ceil(data.rewardHistory.length / ITEMS_PER_PAGE)}
+                    onClick={() => setRewardHistoryPage(Math.min(rewardHistoryTotalPages, rewardHistoryPage + 1))}
+                    disabled={rewardHistoryPage >= rewardHistoryTotalPages}
                     className="p-2.5 rounded-2xl bg-white/60 hover:bg-white disabled:opacity-30 text-sky-600 shadow-sm border border-white transition-all hover:translate-x-1 active:scale-90"
                   >
                     <ChevronRight className="w-4 h-4" />
