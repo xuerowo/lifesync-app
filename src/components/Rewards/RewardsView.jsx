@@ -6,6 +6,7 @@ import { useAppData } from '../../contexts/AppDataContext';
 import { useLottery } from '../../hooks/useLottery';
 import { RARITY_STYLES, ITEMS_PER_PAGE } from '../../constants/index.jsx';
 import RarityBadge from '../Shared/RarityBadge';
+import { getPrizeSortName } from '../../domain/lottery';
 
 const EditableContent = ({ initialValue, onSave, className, placeholder }) => {
   const [localValue, setLocalValue] = useState(initialValue);
@@ -53,7 +54,7 @@ const RewardsView = ({
   setBlurImages
 }) => {
   const { data, updateData, getIndicatorStats, consumeLotteryTickets } = useAppData();
-  const { performLottery, performLotteryForRarity } = useLottery();
+  const { performLottery } = useLottery();
   
   const [expandedImagePools, setExpandedImagePools] = useState({});
   const [rewardHistoryPage, setRewardHistoryPage] = useState(1);
@@ -73,8 +74,13 @@ const RewardsView = ({
       }
 
       if (result.success) {
-        let finalImages = result.images.map(img => img.path);
-        
+        let finalImages = Array.isArray(result.images) ? result.images.map(img => img.path) : [];
+        if (finalImages.length === 0) {
+          // 不建立空卡池：空卡池抽不到任何東西
+          alert('這個資料夾裡沒有圖片，未加入卡池。');
+          return;
+        }
+
         // 如果在 Electron 環境，進行同步下載到 app 資料夾
         if (window.electronAPI) {
           const syncResult = await window.electronAPI.syncImages(finalImages);
@@ -108,32 +114,46 @@ const RewardsView = ({
 
   const handleDraw = (count) => {
     const cost = count === 10 ? 9 : count;
-    if (consumeLotteryTickets(cost)) {
-      const results = [];
-      for (let i = 0; i < count; i++) {
-        const result = performLottery();
-        if (result) {
-          results.push({
-            id: crypto.randomUUID(),
-            ...result,
-            timestamp: new Date().toISOString(),
-            claimed: false
-          });
-        }
-      }
-      if (results.length > 0) {
-        updateData(prev => ({ ...prev, rewardHistory: [...results, ...prev.rewardHistory] }));
-        if (count === 1) {
-          setRewardToShow(results[0]);
-          setRewardStage('pack');
-        } else {
-          // 觸發十連抽專屬動畫狀態
-          setRewardToShow({ results, isMulti: true });
-          setRewardStage('multi-pack');
-        }
-      }
-    } else {
+    // 與 consumeLotteryTickets 相同的判斷，先確認券夠不夠
+    if (data.lotteryTickets < cost) {
       alert('抽卡券不足！');
+      return;
+    }
+
+    // 先抽、確認抽得到，再扣券
+    const results = [];
+    for (let i = 0; i < count; i++) {
+      const result = performLottery();
+      if (result) {
+        results.push({
+          id: crypto.randomUUID(),
+          ...result,
+          timestamp: new Date().toISOString(),
+          claimed: false
+        });
+      }
+    }
+
+    if (results.length === 0) {
+      alert('獎池沒有可用的獎品，請先新增獎品');
+      return;
+    }
+
+    // 十連抽若只抽到部分，只扣實際抽到的張數（全部抽到時仍是 9 張）
+    const actualCost = Math.min(cost, results.length);
+    if (!consumeLotteryTickets(actualCost)) {
+      alert('抽卡券不足！');
+      return;
+    }
+
+    updateData(prev => ({ ...prev, rewardHistory: [...results, ...prev.rewardHistory] }));
+    if (count === 1) {
+      setRewardToShow(results[0]);
+      setRewardStage('pack');
+    } else {
+      // 觸發十連抽專屬動畫狀態
+      setRewardToShow({ results, isMulti: true });
+      setRewardStage('multi-pack');
     }
   };
 
@@ -533,8 +553,9 @@ const RewardsView = ({
                   return rarityOrder[rewardA.rarity] - rarityOrder[rewardB.rarity];
                 }
                 
-                const nameA = rewardA.prize.type === 'image' ? rewardA.prize.content.split('\\').pop() : rewardA.prize.content;
-                const nameB = rewardB.prize.type === 'image' ? rewardB.prize.content.split('\\').pop() : rewardB.prize.content;
+                // 內容不是字串（例如舊資料裡的陣列）時也能安全比較，不會讓頁面當掉
+                const nameA = getPrizeSortName(rewardA.prize);
+                const nameB = getPrizeSortName(rewardB.prize);
                 return nameA.localeCompare(nameB);
               });
 

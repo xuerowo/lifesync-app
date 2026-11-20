@@ -1,54 +1,14 @@
 import { useAppData } from '../contexts/AppDataContext';
+import { drawPrize, drawFromRarity } from '../domain/lottery';
 
 export const useLottery = () => {
   const { data } = useAppData();
 
-  const performLottery = () => {
-    const { lotteryPrizes, lotteryProbability } = data;
-    const hasAnyPrize = ['UR', 'SSR', 'SR', 'R', 'N'].some(r => lotteryPrizes[r] && lotteryPrizes[r].length > 0);
-    if (!hasAnyPrize) return null;
-    
-    const rand = Math.random() * 100;
-    let rarity;
-    if (rand < lotteryProbability.UR) rarity = 'UR';
-    else if (rand < lotteryProbability.UR + lotteryProbability.SSR) rarity = 'SSR';
-    else if (rand < lotteryProbability.UR + lotteryProbability.SSR + lotteryProbability.SR) rarity = 'SR';
-    else if (rand < lotteryProbability.UR + lotteryProbability.SSR + lotteryProbability.SR + lotteryProbability.R) rarity = 'R';
-    else rarity = 'N';
+  // 抽一次；整個獎池都沒有可用獎品時回傳 null
+  const performLottery = () => drawPrize(data.lotteryPrizes, data.lotteryProbability);
 
-    let prizes = lotteryPrizes[rarity];
-    if (!prizes || prizes.length === 0) {
-      const rarities = ['UR', 'SSR', 'SR', 'R', 'N'];
-      const currentIdx = rarities.indexOf(rarity);
-      for (let i = currentIdx + 1; i < rarities.length; i++) {
-        if (lotteryPrizes[rarities[i]].length > 0) {
-          rarity = rarities[i];
-          prizes = lotteryPrizes[rarity];
-          break;
-        }
-      }
-      if (!prizes || prizes.length === 0) return null;
-    }
-    
-    const selectedPrize = prizes[Math.floor(Math.random() * prizes.length)];
-    if (selectedPrize.type === 'image-pool' && selectedPrize.content.length > 0) {
-      const randomImagePath = selectedPrize.content[Math.floor(Math.random() * selectedPrize.content.length)];
-      return { rarity, prize: { type: 'image', content: randomImagePath } };
-    }
-    return { rarity, prize: selectedPrize };
-  };
-
-  const performLotteryForRarity = (rarity) => {
-    const prizes = data.lotteryPrizes[rarity];
-    if (!prizes || prizes.length === 0) return null;
-    
-    const selectedPrize = prizes[Math.floor(Math.random() * prizes.length)];
-    if (selectedPrize.type === 'image-pool' && selectedPrize.content.length > 0) {
-      const randomImagePath = selectedPrize.content[Math.floor(Math.random() * selectedPrize.content.length)];
-      return { rarity, prize: { type: 'image', content: randomImagePath } };
-    }
-    return { rarity, prize: selectedPrize };
-  };
+  // 從指定稀有度抽一次；該稀有度沒有可用獎品時回傳 null
+  const performLotteryForRarity = (rarity) => drawFromRarity(data.lotteryPrizes, rarity);
 
   return { performLottery, performLotteryForRarity };
 };
