@@ -5,9 +5,10 @@ import { RotateCw, X, CheckCircle2 } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
 import { INDICATORS } from '../../constants/index.jsx';
 import { formatForDateTimeLocal } from '../../utils';
+import { addHistoryRecord, historyFieldsFromTask, linkableHistoryTasks } from '../../domain/taskHistory';
 
 const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
-  const { updateData } = useAppData();
+  const { data, updateData } = useAppData();
   const [localItem, setLocalItem] = useState({
     title: '',
     majorTaskTitle: '',
@@ -17,6 +18,19 @@ const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
     ...editingTaskHistory
   });
   const isNew = !editingTaskHistory.id;
+  // 補登時可以選「對應的任務」：選了的話，那個任務的完成次數會加 1（Q18）
+  const linkable = isNew ? linkableHistoryTasks(data) : [];
+  const linked = isNew && !!localItem.taskId;
+
+  const handleLinkChange = (taskId) => {
+    const option = linkable.find(o => o.task.id === taskId);
+    if (!option) {
+      const { taskId: _unlinked, ...rest } = localItem;
+      setLocalItem(rest);
+      return;
+    }
+    setLocalItem({ ...localItem, ...historyFieldsFromTask(option.task, option.planTitle) });
+  };
 
   const handleSave = () => {
     if (!localItem.title.trim()) {
@@ -25,8 +39,9 @@ const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
     }
     updateData(prev => {
       if (isNew) {
-        const newRecord = { ...localItem, id: crypto.randomUUID() };
-        return { ...prev, taskHistory: [newRecord, ...prev.taskHistory] };
+        // 補登不發抽卡券，所以記成 0 張：之後撤銷或刪除任務時，才不會扣到一張沒拿到的券
+        const newRecord = { ...localItem, id: crypto.randomUUID(), rewardTickets: 0 };
+        return { ...prev, ...addHistoryRecord(prev, newRecord) };
       } else {
         return { ...prev, taskHistory: prev.taskHistory.map(h => h.id === localItem.id ? localItem : h) };
       }
@@ -39,7 +54,7 @@ const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
       <motion.div
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="bg-white/30 backdrop-blur-[40px] w-full max-w-lg rounded-[48px] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1),inset_0_0_0_1px_rgba(255,255,255,0.4)] border border-white/20 overflow-hidden relative"
+        className="bg-white/30 backdrop-blur-[40px] w-full max-w-lg max-h-[calc(100vh-2rem)] overflow-y-auto custom-scrollbar rounded-[48px] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1),inset_0_0_0_1px_rgba(255,255,255,0.4)] border border-white/20 overflow-hidden relative"
       >
         <div className="p-8 border-b border-white/20 flex justify-between items-center bg-white/10 relative z-10">
           <h3 className="font-black text-2xl flex items-center gap-3 text-sky-900 drop-shadow-sm">
@@ -50,12 +65,35 @@ const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
           </button>
         </div>
         <div className="p-10 space-y-8 relative z-10">
+          {isNew && (
+            <div>
+              <label className="block text-[10px] font-black text-sky-600 mb-2 uppercase tracking-widest ml-1">對應的任務</label>
+              <select
+                className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none appearance-none cursor-pointer"
+                value={localItem.taskId || ''}
+                onChange={e => handleLinkChange(e.target.value)}
+              >
+                <option value="">不對應任何任務（只記一筆紀錄）</option>
+                {linkable.map(({ task, planTitle, archived }) => (
+                  <option key={task.id} value={task.id}>
+                    {task.title || '（未命名任務）'}（{planTitle}）{archived ? '・已歸檔' : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] font-bold text-sky-500 mt-2 ml-1 leading-relaxed">
+                {linked
+                  ? '這個任務的完成次數會加 1，成就和維度的進度也會跟著增加。補登不會發抽卡券。'
+                  : '只列出每日、每週、隨時挑戰任務（只有這些任務有完成次數）。不選的話，任何任務的完成次數都不會變。'}
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-6">
             <div>
               <label className="block text-[10px] font-black text-sky-600 mb-2 uppercase tracking-widest">維度</label>
               <select 
                 className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none appearance-none cursor-pointer" 
                 value={localItem.indicatorId} 
+                disabled={linked}
                 onChange={e => setLocalItem({ ...localItem, indicatorId: e.target.value })}
               >
                 {INDICATORS.map(ind => <option key={ind.id} value={ind.id}>{ind.name}</option>)}
@@ -66,6 +104,7 @@ const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
               <select 
                 className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none appearance-none cursor-pointer" 
                 value={localItem.type} 
+                disabled={linked}
                 onChange={e => setLocalItem({ ...localItem, type: e.target.value })}
               >
                 <option value="daily">每日任務</option>
@@ -81,6 +120,7 @@ const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
             <input 
               className="w-full bg-white/40 p-5 rounded-2xl text-lg font-black outline-none border border-white/60 focus:bg-white/60 text-sky-900 transition-all placeholder:text-sky-300" 
               value={localItem.title} 
+              disabled={linked}
               onChange={e => setLocalItem({ ...localItem, title: e.target.value })} 
               placeholder="輸入任務名稱..." 
             />
@@ -91,6 +131,7 @@ const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
             <input 
               className="w-full bg-white/40 p-5 rounded-2xl text-lg font-black outline-none border border-white/60 focus:bg-white/60 text-sky-900 transition-all placeholder:text-sky-300" 
               value={localItem.majorTaskTitle} 
+              disabled={linked}
               onChange={e => setLocalItem({ ...localItem, majorTaskTitle: e.target.value })} 
               placeholder="輸入計畫名稱..." 
             />

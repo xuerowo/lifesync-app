@@ -4,6 +4,8 @@ import { History, Trash2, CheckCircle2, ChevronLeft, ChevronRight, Clock, Layers
 import { useAppData } from '../../contexts/AppDataContext';
 import { ITEMS_PER_PAGE, INDICATORS } from '../../constants/index.jsx';
 import { clampPage, getTotalPages } from '../../domain/pagination';
+import { deleteHistoryRecords } from '../../domain/taskHistory';
+import { deleteHistoryRecordsMessage } from '../../domain/confirmations.js';
 
 const TasksHistory = ({ setEditingTaskHistory }) => {
   const { data, updateData } = useAppData();
@@ -24,21 +26,17 @@ const TasksHistory = ({ setEditingTaskHistory }) => {
     currentPage * ITEMS_PER_PAGE
   );
 
+  // 刪除紀錄時，對應任務的完成次數跟著減少（Q18，規則見 domain/taskHistory.js）；確認文字會寫出次數怎麼變
   const handleDelete = (id) => {
-    if (confirm('確定要永久刪除此項任務紀錄嗎？')) {
-      updateData(prev => ({
-        ...prev,
-        taskHistory: prev.taskHistory.filter(t => t.id !== id)
-      }));
+    if (confirm(deleteHistoryRecordsMessage(data, [id]))) {
+      updateData(prev => ({ ...prev, ...deleteHistoryRecords(prev, [id]) }));
     }
   };
 
   const handleBulkDelete = () => {
-    if (confirm(`確定要刪除選中的 ${selectedIds.length} 筆任務紀錄嗎？`)) {
-      updateData(prev => ({
-        ...prev,
-        taskHistory: prev.taskHistory.filter(t => !selectedIds.includes(t.id))
-      }));
+    const ids = [...selectedIds];
+    if (confirm(deleteHistoryRecordsMessage(data, ids))) {
+      updateData(prev => ({ ...prev, ...deleteHistoryRecords(prev, ids) }));
       setSelectedIds([]);
     }
   };

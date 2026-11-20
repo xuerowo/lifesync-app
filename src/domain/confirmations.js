@@ -2,11 +2,13 @@
  * 會刪除或改動資料的操作，在執行前要給使用者看的確認文字（純函式）。
  *
  * 這裡計算的「會刪幾筆紀錄、扣幾張券」必須和 AppDataContext 裡實際執行的
- * deleteSubTask、deleteMajorTask、revertTaskCompletion、toggleMajorTask 一致；
+ * deleteSubTask、deleteMajorTask、revertTaskCompletion、toggleMajorTask，
+ * 以及任務歷史的刪除（domain/taskHistory.js）一致；
  * 改了那邊的規則，這裡也要一起改（tests/confirmations.test.js 有對照）。
  */
 
 import { completionRewardTickets } from './tasks.js';
+import { completionCountChanges } from './taskHistory.js';
 
 const REPEATING_TYPES = ['daily', 'weekly', 'infinite'];
 const isCounted = (task) => REPEATING_TYPES.includes(task?.type);
@@ -150,6 +152,29 @@ export function revertCompletionMessage(data, id) {
   } else if (duplicate) {
     lines.push('「已完成」區裡還有一份同樣的任務（舊資料重複留下的），它不會變動；這次只改進行中那一份。');
   }
+  return lines.join('\n');
+}
+
+/**
+ * 在「任務歷史」刪除紀錄的確認文字（一筆或勾選的好幾筆）。
+ * 算法與 domain/taskHistory.js 的 deleteHistoryRecords 相同：對應任務的完成次數跟著減少，不扣抽卡券。
+ */
+export function deleteHistoryRecordsMessage(data, recordIds) {
+  const ids = new Set(recordIds);
+  const records = (data?.taskHistory || []).filter((h) => ids.has(h?.id));
+  const changes = completionCountChanges(data, records, -1).filter((c) => c.from !== c.to);
+  const lines = [
+    records.length === 1 ? '確定要永久刪除這筆任務紀錄嗎？' : `確定要永久刪除選中的 ${records.length} 筆任務紀錄嗎？`,
+    '',
+  ];
+  if (changes.length === 1) {
+    const [c] = changes;
+    lines.push(`任務${nameOf(c.task, '（未命名任務）')}的完成次數會從 ${c.from} 次變成 ${c.to} 次，成就和維度的進度也會跟著減少。`);
+  } else if (changes.length > 1) {
+    lines.push('這些任務的完成次數會跟著減少，成就和維度的進度也會跟著減少：');
+    for (const c of changes) lines.push(`・${nameOf(c.task, '（未命名任務）')}：${c.from} 次 → ${c.to} 次`);
+  }
+  lines.push('不會扣回當初發的抽卡券。刪除後無法復原。');
   return lines.join('\n');
 }
 
