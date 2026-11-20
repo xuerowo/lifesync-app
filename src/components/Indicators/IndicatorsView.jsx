@@ -4,6 +4,9 @@ import { Archive, Trophy, RotateCcw, Trash2, Plus, CheckCircle2, ArrowUp, ArrowD
 import { useAppData } from '../../contexts/AppDataContext';
 import { INDICATORS } from '../../constants/index.jsx';
 
+// 每個維度最多幾個目標（新增與恢復目標都受這個限制）
+const MAX_GOALS_PER_INDICATOR = 3;
+
 const IndicatorsView = ({ setEditingTask }) => {
   const { data, updateData, getIndicatorStats } = useAppData();
   const [addingGoalTo, setAddingGoalTo] = useState(null);
@@ -16,7 +19,7 @@ const IndicatorsView = ({ setEditingTask }) => {
       setNewGoalTitle('');
       return;
     }
-    if (data.goals[indicatorId].length >= 3) return;
+    if (data.goals[indicatorId].length >= MAX_GOALS_PER_INDICATOR) return;
     const newGoal = { id: crypto.randomUUID(), title: finalTitle, order: data.goals[indicatorId].length + 1 };
     updateData(prev => ({ ...prev, goals: { ...prev.goals, [indicatorId]: [...prev.goals[indicatorId], newGoal] } }));
     setAddingGoalTo(null);
@@ -38,6 +41,11 @@ const IndicatorsView = ({ setEditingTask }) => {
   };
 
   const uncompleteGoal = (goalId) => {
+    const archived = data.archivedGoals.find(g => g.id === goalId);
+    if (archived && (data.goals[archived.indicatorId] || []).length >= MAX_GOALS_PER_INDICATOR) {
+      alert(`每個維度最多 ${MAX_GOALS_PER_INDICATOR} 個目標`);
+      return;
+    }
     updateData(prev => {
       const goal = prev.archivedGoals.find(g => g.id === goalId);
       if (!goal) return prev;
@@ -45,7 +53,7 @@ const IndicatorsView = ({ setEditingTask }) => {
       return {
         ...prev,
         archivedGoals: prev.archivedGoals.filter(g => g.id !== goalId),
-        goals: { ...prev.goals, [indicatorId]: [...prev.goals[indicatorId], { id: goal.id, title: goal.title, order: prev.goals[indicatorId].length + 1 }] }
+        goals: { ...prev.goals, [indicatorId]: [...(prev.goals[indicatorId] || []), { id: goal.id, title: goal.title, order: (prev.goals[indicatorId] || []).length + 1 }] }
       };
     });
   };
@@ -118,7 +126,7 @@ const IndicatorsView = ({ setEditingTask }) => {
                 </motion.div>
               ))}
             </AnimatePresence>
-            {(data.goals[ind.id] || []).length < 3 && (
+            {(data.goals[ind.id] || []).length < MAX_GOALS_PER_INDICATOR && (
               addingGoalTo === ind.id ? (
                 <div className="mt-3 md:mt-4 animate-in slide-down">
                   <input

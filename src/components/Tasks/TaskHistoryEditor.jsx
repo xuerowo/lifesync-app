@@ -7,7 +7,7 @@ import { INDICATORS } from '../../constants/index.jsx';
 import { formatForDateTimeLocal } from '../../utils';
 
 const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
-  const { data, updateData } = useAppData();
+  const { updateData } = useAppData();
   const [localItem, setLocalItem] = useState({
     title: '',
     majorTaskTitle: '',
@@ -71,6 +71,7 @@ const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
                 <option value="daily">每日任務</option>
                 <option value="weekly">每週任務</option>
                 <option value="precise">單次計畫</option>
+                <option value="infinite">隨時挑戰</option>
               </select>
             </div>
           </div>

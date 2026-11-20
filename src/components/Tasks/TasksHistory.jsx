@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { History, Trash2, CheckCircle2, ChevronLeft, ChevronRight, Clock, Layers, Plus, Edit3 } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
 import { ITEMS_PER_PAGE, INDICATORS } from '../../constants/index.jsx';
-import { formatTaskTime } from '../../utils';
 
 const TasksHistory = ({ setEditingTaskHistory }) => {
   const { data, updateData } = useAppData();
@@ -155,7 +154,7 @@ const TasksHistory = ({ setEditingTaskHistory }) => {
                               <div className="flex items-center gap-1">
                                 <Clock className="w-3 h-3 text-sky-400" />
                                 <span className="text-[9px] font-black text-sky-600 uppercase tracking-tighter">
-                                  {task.type === 'daily' ? '每日任務' : task.type === 'weekly' ? '每週任務' : '單次計畫'}
+                                  {task.type === 'daily' ? '每日任務' : task.type === 'weekly' ? '每週任務' : task.type === 'infinite' ? '隨時挑戰' : '單次計畫'}
                                 </span>
                               </div>
                               <div className="flex items-center gap-1.5 px-2 py-0.5 bg-sky-500/5 rounded-md border border-sky-500/10">
