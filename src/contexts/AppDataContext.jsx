@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { getTodayStr, getLocalISOString } from '../utils';
 import { createDefaultData, normalizeData } from '../shared/defaultData';
+import { computeActivePriorityTasks } from '../domain/tasks';
+import { parseLocalDate } from '../domain/dates';
 
 const AppDataContext = createContext();
 
@@ -206,18 +208,20 @@ export const AppDataProvider = ({ children }) => {
     });
   };
 
-  const activePriorityTasks = useMemo(() => {
-    const todayStr = getTodayStr();
-    return data.subTasks
-      .filter(t => t.isPriority)
-      .filter(t => {
-        if (t.type === 'daily' || t.type === 'weekly') {
-          return !t.lastCompletedAt || !t.lastCompletedAt.startsWith(todayStr);
-        }
-        return !t.completed;
-      })
-      .sort((a, b) => a.priorityOrder - b.priorityOrder);
-  }, [data.subTasks]);
+  // 今天的本地日期。程式開著跨過午夜時，每分鐘檢查一次，日期變了就更新，讓優先任務清單重新計算
+  const [todayStr, setTodayStr] = useState(getTodayStr);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const current = getTodayStr();
+      setTodayStr(prev => (prev === current ? prev : current));
+    }, 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const activePriorityTasks = useMemo(
+    () => computeActivePriorityTasks(data.subTasks, parseLocalDate(todayStr) || new Date()),
+    [data.subTasks, todayStr]
+  );
 
   // Business Logic Methods
   const toggleMajorTask = (taskId) => {
@@ -482,6 +486,7 @@ export const AppDataProvider = ({ children }) => {
     getIndicatorStats,
     reorderPriorityTasks,
     activePriorityTasks,
+    todayStr,
     toggleMajorTask,
     revertTaskCompletion,
     uncompleteSubTask,
