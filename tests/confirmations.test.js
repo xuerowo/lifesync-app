@@ -177,6 +177,10 @@ describe('completeMajorTaskMessage', () => {
     expect(msg).toContain('「讀書計畫」');
     expect(msg).toContain('2 個任務會一起歸檔');
     expect(msg).toContain('不會刪除任何完成紀錄');
+    // 「買書」還沒做完：不算進成就；恢復計畫時兩個任務會一起回來
+    expect(msg).toContain('其中 1 個一次性任務還沒完成');
+    expect(msg).toContain('這 2 個任務會一起回到進行中');
+    expect(msg).not.toContain('只會拿回計畫本身');
   });
 });
 

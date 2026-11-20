@@ -3,6 +3,7 @@ import { getTodayStr, getLocalISOString } from '../utils';
 import { createDefaultData, normalizeData } from '../shared/defaultData';
 import { completionRewardTickets, computeActivePriorityTasks, createRecentGuard, isOneTimeTask, priorityAfterCompletion, renumberPriorityTasks } from '../domain/tasks';
 import { localStampedIsoFromUtcIso, parseLocalDate } from '../domain/dates';
+import { archivePlan, countIndicatorProgress, restorePlan } from '../domain/plans';
 import { saveResultError, toSaveFailure } from '../domain/saveRetry';
 import { withoutReenteredSecret } from '../domain/loadError';
 
@@ -308,20 +309,8 @@ export const AppDataProvider = ({ children }) => {
     return { ...prev, ...newData };
   });
 
-  const getIndicatorStats = (indicatorId) => {
-    const activeSubs = data.subTasks.filter(s => indicatorId === 'total' ? true : s.indicatorId === indicatorId);
-    const archivedSubs = data.archivedSubTasks.filter(s => indicatorId === 'total' ? true : s.indicatorId === indicatorId);
-    
-    return [
-      ...activeSubs.filter(s => s.type === 'daily' || s.type === 'weekly' || s.type === 'infinite'),
-      ...archivedSubs
-    ].reduce((acc, s) => {
-      if (s.type === 'daily' || s.type === 'weekly' || s.type === 'infinite') {
-        return acc + (s.completionCount || 0);
-      }
-      return acc + 1;
-    }, 0);
-  };
+  // 成就與維度的進度。跟著計畫一起收起來、沒做完的一次性任務不算（Q13，規則見 domain/plans.js）
+  const getIndicatorStats = (indicatorId) => countIndicatorProgress(data, indicatorId);
 
   // 重排優先順序（1..n），規則見 domain/tasks.js
   const reorderPriorityTasks = renumberPriorityTasks;
@@ -342,26 +331,19 @@ export const AppDataProvider = ({ children }) => {
   );
 
   // Business Logic Methods
+  // 完成整個計畫：還在進行中的任務跟著計畫一起收起來，並記下是跟著哪個計畫（Q13，規則見 domain/plans.js）
   const toggleMajorTask = (taskId) => {
     updateData(prev => {
-      const task = prev.majorTasks.find(t => t.id === taskId);
-      if (!task) return prev;
+      const changes = archivePlan(prev, taskId);
+      return changes ? { ...prev, ...changes } : prev;
+    });
+  };
 
-      const subTasksToArchive = prev.subTasks.filter(s => s.majorTaskId === taskId);
-      let updatedSubTasks = prev.subTasks.filter(s => s.majorTaskId !== taskId);
-      
-      // 有優先任務被歸檔時，剩下的優先任務重新編號
-      if (subTasksToArchive.some(s => s.isPriority)) {
-        updatedSubTasks = renumberPriorityTasks(updatedSubTasks);
-      }
-
-      return {
-        ...prev,
-        majorTasks: prev.majorTasks.filter(t => t.id !== taskId),
-        subTasks: updatedSubTasks,
-        archivedTasks: [...prev.archivedTasks, { ...task, completed: true, completedAt: new Date().toISOString() }],
-        archivedSubTasks: [...prev.archivedSubTasks, ...subTasksToArchive.map(s => ({ ...s, completed: true, completedAt: new Date().toISOString(), isPriority: false, priorityOrder: 0 }))]
-      };
+  // 恢復計畫：跟著計畫一起收起來的任務也一起回到進行中，優先順序盡量排回原本的位置
+  const restoreMajorTask = (taskId) => {
+    updateData(prev => {
+      const changes = restorePlan(prev, taskId);
+      return changes ? { ...prev, ...changes } : prev;
     });
   };
 
@@ -620,6 +602,7 @@ export const AppDataProvider = ({ children }) => {
     activePriorityTasks,
     todayStr,
     toggleMajorTask,
+    restoreMajorTask,
     revertTaskCompletion,
     uncompleteSubTask,
     deleteSubTask,

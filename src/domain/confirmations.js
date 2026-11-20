@@ -178,16 +178,32 @@ export function deleteHistoryRecordsMessage(data, recordIds) {
   return lines.join('\n');
 }
 
-/** 「完成整個計畫」的確認文字（不刪紀錄、不扣券，但進行中的任務會一起歸檔） */
+/**
+ * 「完成整個計畫」的確認文字（不刪紀錄、不扣券，但進行中的任務會一起歸檔）。
+ * 規則與 domain/plans.js 的 archivePlan、restorePlan、countIndicatorProgress 相同。
+ */
 export function completeMajorTaskMessage(data, id) {
   const major = (data?.majorTasks || []).find((t) => t.id === id);
   const activeSubs = (data?.subTasks || []).filter((s) => s.majorTaskId === id);
+  const unfinishedOnce = activeSubs.filter((s) => !isCounted(s)).length;
+  const hasPriority = activeSubs.some((s) => s.isPriority);
   const lines = [`確定要完成整個計畫${nameOf(major, '（未命名計畫）')}嗎？`, ''];
   if (activeSubs.length > 0) {
     lines.push(`計畫裡還在進行中的 ${activeSubs.length} 個任務會一起歸檔，之後不能再勾選完成（每日、每週任務也會停止）。`);
+    if (unfinishedOnce > 0) {
+      lines.push(`其中 ${unfinishedOnce} 個一次性任務還沒完成，不會算進成就和維度的進度。`);
+    }
   }
   lines.push('不會刪除任何完成紀錄，也不會扣抽卡券。');
-  lines.push('之後按「恢復計畫」只會拿回計畫本身，任務會留在「已完成」區，要一個一個撤銷才會回到進行中。');
+  if (activeSubs.length > 0) {
+    lines.push(
+      `之後按「恢復計畫」，這 ${activeSubs.length} 個任務會一起回到進行中` +
+        (hasPriority ? '，原本的優先標記也會恢復' : '') +
+        '；之前就已經完成的任務會留在「已完成」區。'
+    );
+  } else {
+    lines.push('之後按「恢復計畫」會拿回計畫本身；已經完成的任務會留在「已完成」區。');
+  }
   return lines.join('\n');
 }
 

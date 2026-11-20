@@ -12,7 +12,7 @@ import {
 
 const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask }) => {
   const {
-    data, updateData, activePriorityTasks, toggleMajorTask,
+    data, activePriorityTasks, toggleMajorTask, restoreMajorTask,
     completeSubTaskData, revertTaskCompletion, deleteMajorTask, deleteSubTask, terminateSubTask
   } = useAppData();
   const [expandedArchived, setExpandedArchived] = useState({});
@@ -368,7 +368,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                   <span className="text-[8px] md:text-[9px] font-black uppercase tracking-widest px-2.5 py-1 md:px-3 md:py-1.5 bg-white/60 text-emerald-600 rounded-full border border-emerald-50">{goal?.title || '已完成'}</span>
                 </div>
                 <div className="flex gap-0.5 md:gap-1">
-                  <button onClick={() => updateData(prev => ({ ...prev, archivedTasks: prev.archivedTasks.filter(t => t.id !== task.id), majorTasks: [...prev.majorTasks, { ...task, completed: false }] }))} className="p-1.5 md:p-2 text-emerald-300 hover:text-sky-500 transition-colors" title="恢復計畫"><RotateCcw className="w-4 h-4 md:w-5 md:h-5" /></button>
+                  <button onClick={() => restoreMajorTask(task.id)} className="p-1.5 md:p-2 text-emerald-300 hover:text-sky-500 transition-colors" title="恢復計畫"><RotateCcw className="w-4 h-4 md:w-5 md:h-5" /></button>
                   <button onClick={() => confirmDeleteMajorTask(task.id)} className="p-1.5 md:p-2 text-emerald-200 hover:text-red-400 transition-colors" title="刪除計畫"><Trash2 className="w-4 h-4 md:w-5 md:h-5" /></button>
                 </div>
               </div>
@@ -389,13 +389,15 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                     <div className="space-y-2 mt-2 md:mt-3 animate-in slide-down">
                       {allSubs.map(sub => (
                         <div key={sub.id} className="flex items-center gap-2.5 p-2.5 md:p-3 bg-white/40 rounded-xl md:rounded-2xl border border-emerald-100/50">
-                          {/* 顯示真實的完成狀態：已撤銷（回到進行中）的任務不打勾，也不能再撤銷，避免一直重複扣券 */}
+                          {/* 顯示真實的完成狀態：已撤銷（回到進行中）的任務、跟著計畫一起收起來的任務不打勾，也不能撤銷，避免一直重複扣券 */}
                           <input
                             type="checkbox"
                             checked={!!sub.completed}
                             disabled={!sub.completed}
                             onChange={() => { if (sub.completed) confirmRevert(sub.id); }}
-                            title={sub.completed ? '撤銷完成' : '已撤銷完成；恢復計畫後可以在計畫裡重新完成'}
+                            title={sub.completed ? '撤銷完成'
+                              : sub.archivedWithPlanId ? '沒有完成，跟著計畫一起收起來；按「恢復計畫」會回到進行中'
+                              : '已撤銷完成；恢復計畫後可以在計畫裡重新完成'}
                             className={`w-4 h-4 md:w-5 md:h-5 rounded-md md:rounded-lg text-emerald-500 border-sky-100 ${sub.completed ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
                           />
                           <div className="flex-grow min-w-0">
