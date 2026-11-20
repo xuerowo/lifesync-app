@@ -2,6 +2,7 @@ import { createClient } from 'webdav';
 import fs from 'fs/promises';
 import path from 'path';
 import { encryptBuffer, decryptBuffer } from './galleryCrypto.js';
+import { toSafeLocalName, resolveInsideDir, pushError, ENCRYPTED_EXT, DOWNLOAD_TMP_EXT } from './galleryFiles.js';
 
 // 全局取消旗標
 let abortSync = false;
@@ -63,12 +64,20 @@ export function setupCloudHandlers(ipcMain, { GALLERY_DIR }) {
     });
 
     try {
-      try { await client.createDirectory('/gallery'); } catch (e) {}
+      // 新電腦或剛安裝時圖庫資料夾可能還不存在，先建立，避免 readdir 丟出 ENOENT
+      await fs.mkdir(GALLERY_DIR, { recursive: true });
 
-      const localFiles = await fs.readdir(GALLERY_DIR);
+      try {
+        await client.createDirectory('/gallery');
+      } catch {
+        // 資料夾已存在時伺服器會回錯誤，忽略即可
+      }
+
+      // 下載到一半留下的暫存檔不是正式圖片，不上傳
+      const localFiles = (await fs.readdir(GALLERY_DIR)).filter(name => !name.endsWith(DOWNLOAD_TMP_EXT));
       const total = localFiles.length;
-      const results = { uploaded: 0, skipped: 0, failed: 0, total, aborted: false };
-      
+      const results = { uploaded: 0, skipped: 0, failed: 0, total, aborted: false, errors: [] };
+
       const cloudItems = await client.getDirectoryContents('/gallery');
       const cloudFileNames = new Set(cloudItems.map(i => i.basename));
 
@@ -79,12 +88,12 @@ export function setupCloudHandlers(ipcMain, { GALLERY_DIR }) {
         }
 
         const fileName = localFiles[i];
-        const encryptedName = fileName + '.e2ee';
-        
-        event.sender.send('cloud-progress', { 
-            current: i + 1, 
-            total, 
-            message: `正在同步: ${fileName}` 
+        const encryptedName = fileName + ENCRYPTED_EXT;
+
+        event.sender.send('cloud-progress', {
+            current: i + 1,
+            total,
+            message: `正在同步: ${fileName}`
         });
 
         if (cloudFileNames.has(encryptedName)) {
@@ -99,6 +108,7 @@ export function setupCloudHandlers(ipcMain, { GALLERY_DIR }) {
           results.uploaded++;
         } catch (err) {
           results.failed++;
+          pushError(results.errors, fileName, err?.message || String(err));
         }
       }
       return { success: true, results, aborted: results.aborted };
@@ -115,10 +125,13 @@ export function setupCloudHandlers(ipcMain, { GALLERY_DIR }) {
     });
 
     try {
+      // 新電腦或剛安裝時圖庫資料夾可能還不存在，先建立，否則每張都會寫入失敗
+      await fs.mkdir(GALLERY_DIR, { recursive: true });
+
       const cloudItems = await client.getDirectoryContents('/gallery');
-      const files = cloudItems.filter(i => i.type === 'file' && i.basename.endsWith('.e2ee'));
+      const files = cloudItems.filter(i => i.type === 'file' && typeof i.basename === 'string' && i.basename.endsWith(ENCRYPTED_EXT));
       const total = files.length;
-      const results = { downloaded: 0, skipped: 0, failed: 0, total, aborted: false };
+      const results = { downloaded: 0, skipped: 0, failed: 0, total, aborted: false, errors: [] };
 
       for (let i = 0; i < files.length; i++) {
         if (abortSync) {
@@ -127,28 +140,52 @@ export function setupCloudHandlers(ipcMain, { GALLERY_DIR }) {
         }
 
         const item = files[i];
-        const originalName = item.basename.replace('.e2ee', '');
-        const localPath = path.join(GALLERY_DIR, originalName);
+        const originalName = toSafeLocalName(item.basename);
+        const localPath = originalName ? resolveInsideDir(GALLERY_DIR, originalName) : null;
 
-        event.sender.send('cloud-progress', { 
-            current: i + 1, 
-            total, 
-            message: `正在下載: ${originalName}` 
+        event.sender.send('cloud-progress', {
+            current: i + 1,
+            total,
+            message: `正在下載: ${originalName || item.basename}`
         });
+
+        if (!localPath) {
+          // 檔名不安全（可能讓檔案寫到圖庫資料夾以外），略過
+          results.failed++;
+          pushError(results.errors, item.basename, '檔名不安全，已略過');
+          continue;
+        }
 
         try {
           await fs.access(localPath);
           results.skipped++;
           continue;
-        } catch {}
+        } catch {
+          // 本地沒有這個檔案，繼續下載
+        }
 
+        // 先寫到暫存檔，完整寫完才改成正式檔名；中斷時不會留下半截的正式檔
+        const tmpPath = localPath + DOWNLOAD_TMP_EXT;
+        let stage = 'download';
         try {
           const encryptedBuffer = await client.getFileContents(item.filename);
+          stage = 'decrypt';
           const decryptedBuffer = await decryptBuffer(encryptedBuffer, masterPassword);
-          await fs.writeFile(localPath, decryptedBuffer);
+          stage = 'write';
+          await fs.writeFile(tmpPath, decryptedBuffer);
+          await fs.rename(tmpPath, localPath);
           results.downloaded++;
         } catch (err) {
           results.failed++;
+          const reason = stage === 'decrypt'
+            ? '解密失敗（主密碼錯誤或檔案損壞）'
+            : (err?.message || String(err));
+          pushError(results.errors, originalName, reason);
+          try {
+            await fs.unlink(tmpPath);
+          } catch {
+            // 暫存檔可能根本沒建立，忽略
+          }
         }
       }
       return { success: true, results, aborted: results.aborted };
