@@ -224,10 +224,37 @@ ipcMain.handle('get-data', async () => {
   const result = await storage.load();
   if (result.status === 'error') {
     console.error('[storage] 讀取資料失敗，已停止存檔:', result.code, result.error);
-  } else if (result.secretsUnavailable.length > 0) {
+    // 讀檔失敗的錯誤畫面會顯示資料檔放在哪裡，方便使用者自己去看
+    return { ...result, dataFile: storage.dataFile, backupDir: storage.backupDir };
+  }
+  if (result.secretsUnavailable.length > 0) {
     console.warn('[storage] 無法解密的密碼欄位:', result.secretsUnavailable.join(', '));
   }
   return result;
+});
+
+// 讀檔失敗時，從 backups\ 裡最近一份可用的自動備份還原。
+// 壞掉的資料檔會先改名保留（lifesync-data.corrupt-時間.json），絕不刪除。
+// 回傳和 get-data 相同的格式，另外加上 restoredFrom、restoredFromTime、preservedAs。
+ipcMain.handle('restore-latest-backup', async () => {
+  try {
+    const result = await storage.restoreLatestBackup();
+    if (result.status === 'error') {
+      console.error('[storage] 從備份還原失敗:', result.code, result.error);
+      return { ...result, dataFile: storage.dataFile, backupDir: storage.backupDir };
+    }
+    console.warn('[storage] 已從備份還原:', result.restoredFrom, '壞檔保留為:', result.preservedAs);
+    return result;
+  } catch (e) {
+    console.error('[storage] 從備份還原失敗:', e.message);
+    return {
+      status: 'error',
+      code: e.code || 'RESTORE_FAILED',
+      error: e.message,
+      dataFile: storage.dataFile,
+      backupDir: storage.backupDir,
+    };
+  }
 });
 
 // 保存數據（讀檔失敗時會被 storage 擋下並丟錯）

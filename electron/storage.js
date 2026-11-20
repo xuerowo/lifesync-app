@@ -381,6 +381,8 @@ export function createStorage({
       // 讓排隊中、內容較舊的存檔不會蓋掉還原後的資料
       committedGeneration = ++generation;
 
+      // 壞掉的資料檔只改名保留，絕不刪除（之後可能還救得回裡面的內容）
+      let preservedAs = null;
       if (existsSync(dataFile)) {
         const base = `lifesync-data.corrupt-${timeStamp(now())}`;
         let corruptPath = path.join(dataDir, `${base}.json`);
@@ -388,10 +390,17 @@ export function createStorage({
           corruptPath = path.join(dataDir, `${base}-${i}.json`);
         }
         renameWithRetrySync(dataFile, corruptPath);
+        preservedAs = corruptPath;
       }
       copyAtomicSync(usable.full, dataFile);
       const result = await doLoad();
-      return { ...result, restoredFrom: usable.full };
+      return {
+        ...result,
+        restoredFrom: usable.full,
+        // 備份檔的修改時間，讓畫面告訴使用者「還原到什麼時候的資料」
+        restoredFromTime: usable.mtime ? new Date(usable.mtime).toISOString() : null,
+        preservedAs,
+      };
     });
 
   return {

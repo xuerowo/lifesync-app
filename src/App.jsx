@@ -30,14 +30,20 @@ import HistoryEditor from './components/Rewards/HistoryEditor';
 import TaskHistoryEditor from './components/Tasks/TaskHistoryEditor';
 import NoteEditor from './components/Note/NoteEditor';
 import PriorityManager from './components/Tasks/PriorityManager';
+import LoadErrorScreen from './components/Shared/LoadErrorScreen';
+import NoticeBar from './components/Shared/NoticeBar';
+import { describeRestoreSuccess, describeSecretsUnavailable } from './domain/loadError';
 
 
 const App = () => {
   const {
     data, updateData, isLoading, getIndicatorStats, completeSubTaskData,
     revertTaskCompletion, addLotteryTickets, ticketNotification, setTicketNotification,
-    isSyncing, syncProgress, setIsSyncing
+    isSyncing, syncProgress, setIsSyncing,
+    loadError, loadBusy, restoreFailure, retryLoad, canRestoreFromBackup, restoreFromBackup,
+    restoreNotice, dismissRestoreNotice, secretsUnavailable, dismissSecretsNotice
   } = useAppData();
+  const secretsNoticeText = describeSecretsUnavailable(secretsUnavailable);
 
   // --- UI State ---
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('activeTab') || 'indicators');
@@ -235,6 +241,18 @@ const App = () => {
     }
   };
 
+  // 讀檔失敗：改顯示錯誤畫面（重試／載入最近一次自動備份），不再一直轉圈
+  if (isLoading && loadError) return (
+    <LoadErrorScreen
+      loadError={loadError}
+      busy={loadBusy}
+      canRestore={canRestoreFromBackup}
+      restoreFailure={restoreFailure}
+      onRetry={retryLoad}
+      onRestore={restoreFromBackup}
+    />
+  );
+
   if (isLoading) return (
     <div className="min-h-screen bg-gradient-to-b from-sky-300 via-sky-100 to-white flex items-center justify-center">
       <div className="text-center">
@@ -333,6 +351,17 @@ const App = () => {
       </div>
 
       <div className="relative z-10 container mx-auto px-4 py-8 md:px-6 md:py-12 max-w-7xl">
+        {restoreNotice && (
+          <NoticeBar tone="success" lines={describeRestoreSuccess(restoreNotice)} onDismiss={dismissRestoreNotice} />
+        )}
+        {secretsNoticeText && (
+          <NoticeBar
+            tone="warning"
+            lines={[secretsNoticeText]}
+            action={activeTab === 'settings' ? undefined : { label: '前往設定', onClick: () => setActiveTab('settings') }}
+            onDismiss={dismissSecretsNotice}
+          />
+        )}
         <header className="flex flex-col lg:flex-row justify-between items-center mb-10 md:mb-16 gap-8">
           <div className="text-center lg:text-left group cursor-default">
             <div className="flex items-center justify-center lg:justify-start gap-3 mb-1">

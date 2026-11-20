@@ -404,6 +404,8 @@ describe('restoreLatestBackup', () => {
     expect(res.status).toBe('ok')
     expect(res.data.lotteryTickets).toBe(19)
     expect(res.restoredFrom).toBe(newer)
+    expect(res.restoredFromTime).toBe(new Date(2026, 10, 19).toISOString())
+    expect(res.preservedAs).toBe(path.join(dir, 'lifesync-data.corrupt-20261120-093000.json'))
     expect(fs.readFileSync(path.join(dir, 'lifesync-data.corrupt-20261120-093000.json'), 'utf-8')).toBe('garbage')
     expect(readJson(dataFile).lotteryTickets).toBe(19)
     // 備份本身保持不變
@@ -421,6 +423,22 @@ describe('restoreLatestBackup', () => {
     const res = await storage.restoreLatestBackup()
     expect(res.status).toBe('ok')
     expect(res.data.lotteryTickets).toBe(7)
+    // 沒有壞檔可以保留
+    expect(res.preservedAs).toBeNull()
+  })
+
+  it('同一秒內還原兩次，兩份壞檔都保留，不會互相蓋掉', async () => {
+    fs.mkdirSync(backupDir)
+    writeJson(path.join(backupDir, 'lifesync-data-2026-11-19.json'), { lotteryTickets: 3 })
+    const first = path.join(dir, 'lifesync-data.corrupt-20261120-093000.json')
+    fs.writeFileSync(first, 'old garbage', 'utf-8')
+    fs.writeFileSync(dataFile, 'new garbage', 'utf-8')
+    const storage = makeStorage()
+    await storage.load()
+    const res = await storage.restoreLatestBackup()
+    expect(res.preservedAs).toBe(path.join(dir, 'lifesync-data.corrupt-20261120-093000-2.json'))
+    expect(fs.readFileSync(first, 'utf-8')).toBe('old garbage')
+    expect(fs.readFileSync(res.preservedAs, 'utf-8')).toBe('new garbage')
   })
 
   it('沒有可用備份 → NO_BACKUP，不動原檔', async () => {
