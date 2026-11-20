@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
 import { setupCloudHandlers, setAbortFlag } from './cloudManager.js';
-import { createDefaultData } from '../src/shared/defaultData.js';
+import { createStorage } from './storage.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,11 +13,33 @@ let mainWindow;
 let abortLocalSync = false;
 
 // 數據文件路徑
-const DATA_DIR = app.isPackaged 
-  ? path.join(app.getPath('userData'), 'data')
-  : path.join(app.getAppPath(), 'data');
+// 設了 LIFESYNC_DATA_DIR（沙盒、測試用）時，資料與 Electron 自己的設定、快取都放進該資料夾，
+// 完全不碰安裝版的真實資料。setPath 必須在 app ready 之前呼叫。
+const SANDBOX_DATA_DIR = process.env.LIFESYNC_DATA_DIR ? path.resolve(process.env.LIFESYNC_DATA_DIR) : null;
+if (SANDBOX_DATA_DIR) {
+  app.setPath('userData', path.join(SANDBOX_DATA_DIR, '.electron-userdata'));
+}
+const DATA_DIR = SANDBOX_DATA_DIR
+  ? SANDBOX_DATA_DIR
+  : app.isPackaged
+    ? path.join(app.getPath('userData'), 'data')
+    : path.join(app.getAppPath(), 'data');
 const GALLERY_DIR = path.join(DATA_DIR, 'gallery');
-const DATA_FILE = path.join(DATA_DIR, 'lifesync-data.json');
+
+// 密碼的加密方式與舊版相同（safeStorage + base64），舊資料可以照常解開。
+// safeStorage 要在 app ready 之後才能用；這兩個函式只會在 IPC 呼叫時執行，那時視窗已建立。
+const storage = createStorage({
+  dataDir: DATA_DIR,
+  encrypt: (plainText) => {
+    if (!safeStorage.isEncryptionAvailable()) return plainText;
+    return safeStorage.encryptString(plainText).toString('base64');
+  },
+  decrypt: (encryptedBase64) => {
+    if (!safeStorage.isEncryptionAvailable()) return encryptedBase64;
+    // 解不開時會丟錯，由 storage 保留原本的加密字串
+    return safeStorage.decryptString(Buffer.from(encryptedBase64, 'base64'));
+  },
+});
 
 async function ensureDataDir() {
   try {
@@ -101,25 +123,31 @@ app.on('window-all-closed', () => {
 // 註冊雲端處理程序
 setupCloudHandlers(ipcMain, { GALLERY_DIR });
 
-// 讀取數據
+// 讀取數據：回傳 { status: 'ok' | 'new' | 'error', ... }
 ipcMain.handle('get-data', async () => {
-  try {
-    await ensureDataDir();
-    const data = await fs.readFile(DATA_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch (error) {
-    if (error.code === 'ENOENT') {
-      return createDefaultData();
-    }
-    throw error;
+  const result = await storage.load();
+  if (result.status === 'error') {
+    console.error('[storage] 讀取資料失敗，已停止存檔:', result.code, result.error);
+  } else if (result.secretsUnavailable.length > 0) {
+    console.warn('[storage] 無法解密的密碼欄位:', result.secretsUnavailable.join(', '));
   }
+  return result;
 });
 
-// 保存數據
+// 保存數據（讀檔失敗時會被 storage 擋下並丟錯）
 ipcMain.handle('save-data', async (event, data) => {
-  await ensureDataDir();
-  await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
-  return { success: true };
+  return storage.save(data);
+});
+
+// 關窗或重新整理前的同步存檔
+ipcMain.on('save-data-sync', (event, data) => {
+  try {
+    storage.saveSync(data);
+    event.returnValue = { success: true };
+  } catch (e) {
+    console.error('[storage] 同步存檔失敗:', e.message);
+    event.returnValue = { success: false, error: e.message };
+  }
 });
 
 // 掃描資料夾
@@ -200,24 +228,6 @@ ipcMain.handle('read-image-base64', async (event, filePath) => {
   }
 });
 
-// 安全存儲加密
-ipcMain.handle('encrypt-string', async (event, plainText) => {
-  if (!safeStorage.isEncryptionAvailable()) return plainText;
-  return safeStorage.encryptString(plainText).toString('base64');
-});
-
-// 安全存儲解密
-ipcMain.handle('decrypt-string', async (event, encryptedBase64) => {
-  if (!safeStorage.isEncryptionAvailable()) return encryptedBase64;
-  try {
-    const buffer = Buffer.from(encryptedBase64, 'base64');
-    return safeStorage.decryptString(buffer);
-  } catch (e) {
-    console.error('解密失敗:', e);
-    return '';
-  }
-});
-
 // --- 完整本地備份 ---
 
 // 選擇目錄
@@ -276,7 +286,7 @@ ipcMain.handle('export-full-backup', async (event, { targetDir, data }) => {
         });
         await fs.copyFile(path.join(GALLERY_DIR, file), path.join(galleryBackupDir, file));
       }
-    } catch (e) {
+    } catch {
       console.warn('圖庫為空或無法讀取');
     }
     
@@ -312,7 +322,7 @@ ipcMain.handle('import-full-backup', async (event, backupDir) => {
         });
         await fs.copyFile(path.join(gallerySrcDir, file), path.join(GALLERY_DIR, file));
       }
-    } catch (e) {
+    } catch {
       console.warn('備份中無圖庫');
     }
     
