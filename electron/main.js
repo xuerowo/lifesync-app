@@ -10,6 +10,7 @@ import { stripCloudSecrets } from '../src/shared/cloudSecrets.js';
 import { decideWindowOpen } from './windowOpen.js';
 import { setupSingleInstance } from './singleInstance.js';
 import { buildMessageBoxOptions, confirmResultFromResponse } from './nativeDialogs.js';
+import { createFocusDiagnostics } from './focusDiagnostics.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,6 +32,19 @@ const DATA_DIR = SANDBOX_DATA_DIR
     ? path.join(app.getPath('userData'), 'data')
     : path.join(app.getAppPath(), 'data');
 const GALLERY_DIR = path.join(DATA_DIR, 'gallery');
+
+// 焦點診斷（「點輸入框沒有游標、打不了字」時用）：平常不記錄，Ctrl+Shift+F11 開關、Ctrl+Shift+F12 記下狀態。
+// LIFESYNC_DEBUG=1 啟動時一律記錄。說明見 src/utils/focusDiagnostics.js、docs/manual-checks.md「F2」。
+const focusDiagnostics = createFocusDiagnostics({
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  getWindow: () => mainWindow,
+  dataDir: DATA_DIR,
+  settingsFile: path.join(app.getPath('userData'), 'focus-diagnostics.json'),
+  forceEnabled: process.env.LIFESYNC_DEBUG === '1',
+});
 
 // 打包版同時只能開一個程式，第二次開啟時把已開的視窗叫到前面（開發版不限制，原因見 singleInstance.js）。
 // 必須在上面換掉 userData 之後才申請：鎖是依 userData 區分的，沙盒才會有自己的一把鎖。
@@ -182,6 +196,8 @@ function createWindow() {
     contents.focus();
   });
 
+  focusDiagnostics.attach(mainWindow);
+
   if (process.env.LIFESYNC_DEBUG === '1') attachDebugOutput(mainWindow.webContents);
 
   // 開發環境使用 Vite 開發伺服器，生產環境加載打包後的 index.html
@@ -213,7 +229,9 @@ app.whenReady().then(() => {
         { role: 'resetZoom', accelerator: 'CmdOrCtrl+0' },
         { role: 'resetZoom', accelerator: 'CmdOrCtrl+num0', visible: false },
         { type: 'separator' },
-        { role: 'togglefullscreen', accelerator: 'F11' }
+        { role: 'togglefullscreen', accelerator: 'F11' },
+        { type: 'separator' },
+        ...focusDiagnostics.menuItems,
       ]
     }
   ];
@@ -329,6 +347,7 @@ function handleDialogRequest(kind, event, message) {
     event.returnValue = fallback;
     return;
   }
+  focusDiagnostics.record(`dialog-${kind}`);
   dialog
     .showMessageBox(win, buildMessageBoxOptions(kind, message))
     .then(
@@ -396,6 +415,7 @@ ipcMain.on('page-refocus', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win || win !== mainWindow || win.isDestroyed() || !win.isFocused()) return;
   if (win.webContents.isDevToolsOpened() && win.webContents.isDevToolsFocused()) return;
+  focusDiagnostics.record('page-refocus');
   if (process.env.LIFESYNC_DEBUG === '1') console.log('[debug][page-refocus] 頁面沒有鍵盤焦點，重新切換一次視窗焦點');
   cycleWindowFocus(win);
 });

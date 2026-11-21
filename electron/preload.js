@@ -40,4 +40,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   confirmSync: (message) => ipcRenderer.sendSync('dialog-confirm-sync', String(message ?? '')) === true,
   // 點了畫面、頁面卻沒有鍵盤焦點時呼叫：請主程序把鍵盤焦點交回頁面（見 src/utils/focusGuard.js）
   refocusPage: () => ipcRenderer.send('page-refocus'),
+  // 焦點診斷（見 src/utils/focusDiagnostics.js）：記錄有沒有開、開關切換、主程序要狀態時回傳
+  isFocusDiagnosticsEnabled: () => ipcRenderer.invoke('focus-diagnostics-enabled'),
+  onFocusDiagnosticsToggle: (callback) => {
+    const handler = (event, enabled) => callback(enabled === true);
+    ipcRenderer.on('focus-diagnostics-toggle', handler);
+    return () => ipcRenderer.removeListener('focus-diagnostics-toggle', handler);
+  },
+  onFocusDiagnosticsRequest: (callback) => {
+    const handler = (event, requestId) => callback(requestId);
+    ipcRenderer.on('focus-diagnostics-request', handler);
+    return () => ipcRenderer.removeListener('focus-diagnostics-request', handler);
+  },
+  sendFocusDiagnostics: (requestId, result) => ipcRenderer.send('focus-diagnostics-result', requestId, result),
 });
