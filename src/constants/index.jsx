@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Heart, BookOpen, Smile, LayoutDashboard, Cloud, Sparkles, Sun, Zap
+  Heart, Sprout, Smile, LayoutDashboard, Cloud, Sparkles, Sun, Zap
 } from 'lucide-react';
 
 export const RARITY_STYLES = {
@@ -57,7 +57,7 @@ export const RARITY_STYLES = {
 };
 
 export const INDICATORS = [
-  { id: 'learning', name: '學習', icon: <BookOpen className="w-5 h-5" />, color: 'from-blue-400 to-indigo-400' },
+  { id: 'growth', name: '成長', icon: <Sprout className="w-5 h-5" />, color: 'from-blue-400 to-indigo-400' },
   { id: 'health', name: '健康', icon: <Heart className="w-5 h-5" />, color: 'from-cyan-400 to-teal-400' },
   { id: 'happiness', name: '幸福', icon: <Smile className="w-5 h-5" />, color: 'from-amber-300 to-orange-400' }
 ];

@@ -8,21 +8,21 @@ const NOW = '2026-11-20T03:00:00.000Z';
 
 const baseData = () => ({
   majorTasks: [
-    { id: 'p', title: '讀書計畫', indicatorId: 'learning', completed: false },
+    { id: 'p', title: '讀書計畫', indicatorId: 'growth', completed: false },
     { id: 'q', title: '運動計畫', indicatorId: 'health', completed: false },
   ],
   archivedTasks: [],
   subTasks: [
     // 計畫 p：一個優先的每日任務、兩個還沒做的一次性任務（其中一個是優先）
-    { id: 'daily', majorTaskId: 'p', indicatorId: 'learning', type: 'daily', completionCount: 5, isPriority: true, priorityOrder: 1 },
-    { id: 'once1', majorTaskId: 'p', indicatorId: 'learning', type: 'precise', completed: false, isPriority: true, priorityOrder: 3 },
-    { id: 'once2', majorTaskId: 'p', indicatorId: 'learning', type: 'precise', completed: false, isPriority: false, priorityOrder: 0 },
+    { id: 'daily', majorTaskId: 'p', indicatorId: 'growth', type: 'daily', completionCount: 5, isPriority: true, priorityOrder: 1 },
+    { id: 'once1', majorTaskId: 'p', indicatorId: 'growth', type: 'precise', completed: false, isPriority: true, priorityOrder: 3 },
+    { id: 'once2', majorTaskId: 'p', indicatorId: 'growth', type: 'precise', completed: false, isPriority: false, priorityOrder: 0 },
     // 計畫 q：一個優先任務
     { id: 'run', majorTaskId: 'q', indicatorId: 'health', type: 'precise', completed: false, isPriority: true, priorityOrder: 2 },
   ],
   archivedSubTasks: [
     // 計畫 p 裡早就真的完成的一次性任務
-    { id: 'doneBefore', majorTaskId: 'p', indicatorId: 'learning', type: 'precise', completed: true, completedAt: '2026-11-01T00:00:00.000Z', isPriority: false, priorityOrder: 0 },
+    { id: 'doneBefore', majorTaskId: 'p', indicatorId: 'growth', type: 'precise', completed: true, completedAt: '2026-11-01T00:00:00.000Z', isPriority: false, priorityOrder: 0 },
   ],
 });
 
@@ -67,9 +67,9 @@ describe('countIndicatorProgress：只算真的完成的', () => {
   it('完成整個計畫後，沒做完的一次性任務不會增加進度', () => {
     const data = baseData();
     // 改版前：沒做完的 2 個一次性任務也會各加 1
-    const before = countIndicatorProgress(data, 'learning');
+    const before = countIndicatorProgress(data, 'growth');
     expect(before).toBe(5 + 1); // 每日任務 5 次 + 早就完成的 1 個
-    const after = countIndicatorProgress(apply(data, archivePlan(data, 'p', NOW)), 'learning');
+    const after = countIndicatorProgress(apply(data, archivePlan(data, 'p', NOW)), 'growth');
     expect(after).toBe(before);
   });
 
@@ -92,9 +92,9 @@ describe('countIndicatorProgress：只算真的完成的', () => {
   it('舊資料（沒有計畫標記）照舊：已歸檔的一次性任務都算 1', () => {
     const old = {
       subTasks: [],
-      archivedSubTasks: [{ indicatorId: 'learning', type: 'precise', completed: true }, { indicatorId: 'learning', type: 'precise', completed: true }],
+      archivedSubTasks: [{ indicatorId: 'growth', type: 'precise', completed: true }, { indicatorId: 'growth', type: 'precise', completed: true }],
     };
-    expect(countIndicatorProgress(old, 'learning')).toBe(2);
+    expect(countIndicatorProgress(old, 'growth')).toBe(2);
   });
 });
 
@@ -147,8 +147,8 @@ describe('restorePlan：恢復計畫', () => {
 
   it('恢復後成就進度不變', () => {
     const data = archived();
-    const before = countIndicatorProgress(data, 'learning');
-    expect(countIndicatorProgress(apply(data, restorePlan(data, 'p')), 'learning')).toBe(before);
+    const before = countIndicatorProgress(data, 'growth');
+    expect(countIndicatorProgress(apply(data, restorePlan(data, 'p')), 'growth')).toBe(before);
   });
 
   it('改版前完成的計畫（任務沒有標記）：只拿回計畫本身，和以前一樣', () => {

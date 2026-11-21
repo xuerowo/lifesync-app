@@ -5,6 +5,8 @@ import {
   DEFAULT_LOTTERY_PRIZES,
   DEFAULT_LOTTERY_PROBABILITY,
   DEFAULT_CLOUD_CONFIG,
+  migrateIndicatorId,
+  migrateTaskList,
 } from '../src/shared/defaultData.js'
 
 const deepFreeze = (obj) => {
@@ -34,11 +36,11 @@ describe('createDefaultData', () => {
     const a = createDefaultData()
     const b = createDefaultData()
     a.majorTasks.push({ id: 1 })
-    a.goals.learning.push('x')
+    a.goals.growth.push('x')
     a.lotteryPrizes.N.push('p')
     a.cloudConfig.url = 'changed'
     expect(b.majorTasks).toEqual([])
-    expect(b.goals.learning).toEqual([])
+    expect(b.goals.growth).toEqual([])
     expect(b.lotteryPrizes.N).toEqual([])
     expect(b.cloudConfig.url).toBe('')
     expect(createDefaultData().lotteryPrizes.N).toEqual([])
@@ -64,7 +66,7 @@ describe('normalizeData', () => {
     expect(result.majorTasks).toEqual([{ id: 'a' }])
     expect(result.subTasks).toEqual([])
     expect(result.taskHistory).toEqual([])
-    expect(result.goals).toEqual({ learning: [], health: [], happiness: [] })
+    expect(result.goals).toEqual({ growth: [], health: [], happiness: [] })
     expect(result.lotteryPrizes).toEqual({ N: [], R: [], SR: [], SSR: [], UR: [] })
     expect(result.lotteryProbability).toEqual({ N: 50, R: 25, SR: 15, SSR: 8, UR: 2 })
     expect(result.cloudConfig).toEqual(DEFAULT_CLOUD_CONFIG())
@@ -143,9 +145,9 @@ describe('normalizeData', () => {
   })
 
   it('goals 補齊三個分類，並保留額外分類', () => {
-    expect(normalizeData({ goals: 'bad' }).goals).toEqual({ learning: [], health: [], happiness: [] })
-    const result = normalizeData({ goals: { learning: [{ id: 'g' }], health: 'x', custom: [1] } })
-    expect(result.goals).toEqual({ learning: [{ id: 'g' }], health: [], happiness: [], custom: [1] })
+    expect(normalizeData({ goals: 'bad' }).goals).toEqual({ growth: [], health: [], happiness: [] })
+    const result = normalizeData({ goals: { growth: [{ id: 'g' }], health: 'x', custom: [1] } })
+    expect(result.goals).toEqual({ growth: [{ id: 'g' }], health: [], happiness: [], custom: [1] })
   })
 
   it('lotteryPrizes 缺稀有度或不是陣列時補成陣列', () => {
@@ -185,5 +187,75 @@ describe('normalizeData', () => {
     expect(result.lotteryTickets).toBe(4)
     expect(result.lotteryPrizes.N).toEqual([])
     expect(result.lotteryPrizes.UR).toEqual([{ name: 'u' }])
+  })
+})
+
+describe('維度代號改名：學習 learning → 成長 growth（2026-11-22）', () => {
+  const old = () => ({
+    goals: { learning: [{ id: 'g1' }], health: [{ id: 'h1' }] },
+    majorTasks: [{ id: 'm1', indicatorId: 'learning' }, { id: 'm2', indicatorId: 'health' }],
+    subTasks: [{ id: 's1', indicatorId: 'learning' }],
+    archivedTasks: [{ id: 'a1', indicatorId: 'learning' }],
+    archivedSubTasks: [{ id: 'as1', indicatorId: 'learning' }],
+    taskHistory: [{ id: 'th1', indicatorId: 'learning' }, { id: 'th2', indicatorId: 'happiness' }],
+    archivedGoals: [{ id: 'ag1', indicatorId: 'learning' }],
+    achievements: [{ id: 'ac1', type: 'learning' }, { id: 'ac2', type: 'total' }],
+    pomodoroHistory: [
+      { id: 'p1', tasks: [{ id: 's1', indicatorId: 'learning' }] },
+      { id: 'p2', tasks: [{ id: 's9', indicatorId: 'health' }] },
+      { id: 'p3' },
+    ],
+  })
+
+  it('舊資料的每一處都換成新代號，其他維度不動', () => {
+    const r = normalizeData(old())
+    expect(r.goals).toEqual({ growth: [{ id: 'g1' }], health: [{ id: 'h1' }], happiness: [] })
+    expect(r.majorTasks.map((t) => t.indicatorId)).toEqual(['growth', 'health'])
+    expect(r.subTasks[0].indicatorId).toBe('growth')
+    expect(r.archivedTasks[0].indicatorId).toBe('growth')
+    expect(r.archivedSubTasks[0].indicatorId).toBe('growth')
+    expect(r.taskHistory.map((t) => t.indicatorId)).toEqual(['growth', 'happiness'])
+    expect(r.archivedGoals[0].indicatorId).toBe('growth')
+    expect(r.achievements.map((a) => a.type)).toEqual(['growth', 'total'])
+    expect(r.pomodoroHistory[0].tasks[0].indicatorId).toBe('growth')
+    expect(r.pomodoroHistory[1].tasks[0].indicatorId).toBe('health')
+    expect(r.pomodoroHistory[2]).toEqual({ id: 'p3' })
+    expect(JSON.stringify(r)).not.toContain('learning')
+  })
+
+  it('不修改傳入的舊資料，沒變的項目沿用原本的物件', () => {
+    const raw = deepFreeze(old())
+    const r = normalizeData(raw)
+    expect(raw.subTasks[0].indicatorId).toBe('learning')
+    expect(r.majorTasks[1]).toBe(raw.majorTasks[1])
+    expect(r.pomodoroHistory[1]).toBe(raw.pomodoroHistory[1])
+  })
+
+  it('再跑一次結果一樣（已經是新代號的資料不會再變）', () => {
+    const once = normalizeData(old())
+    expect(normalizeData(once)).toEqual(once)
+  })
+
+  it('新舊兩個目標分類都有時合併，新的在前', () => {
+    const r = normalizeData({ goals: { growth: [{ id: 'new' }], learning: [{ id: 'old' }] } })
+    expect(r.goals.growth).toEqual([{ id: 'new' }, { id: 'old' }])
+    expect('learning' in r.goals).toBe(false)
+  })
+
+  it('合併時同一個目標（同 id）只留一個', () => {
+    const r = normalizeData({ goals: { growth: [{ id: 'a', title: '新' }], learning: [{ id: 'a', title: '舊' }, { id: 'b' }] } })
+    expect(r.goals.growth).toEqual([{ id: 'a', title: '新' }, { id: 'b' }])
+  })
+
+  it('migrateIndicatorId 只換舊代號', () => {
+    expect(migrateIndicatorId('learning')).toBe('growth')
+    expect(migrateIndicatorId('health')).toBe('health')
+    expect(migrateIndicatorId(undefined)).toBe(undefined)
+    expect(migrateIndicatorId('toString')).toBe('toString')
+  })
+
+  it('番茄鐘這一輪的任務清單也會換', () => {
+    expect(migrateTaskList([{ id: 'a', indicatorId: 'learning' }, null])).toEqual([{ id: 'a', indicatorId: 'growth' }, null])
+    expect(migrateTaskList('bad')).toBe('bad')
   })
 })

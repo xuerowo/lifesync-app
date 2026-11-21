@@ -68,7 +68,7 @@ const TasksHistory = ({ setEditingTaskHistory }) => {
           </div>
         </div>
         <button
-          onClick={() => setEditingTaskHistory({ title: '', majorTaskTitle: '手動補登', indicatorId: 'learning', type: 'daily', completedAt: new Date().toISOString() })}
+          onClick={() => setEditingTaskHistory({ title: '', majorTaskTitle: '手動補登', indicatorId: 'growth', type: 'daily', completedAt: new Date().toISOString() })}
           className="group relative px-6 py-3 bg-sky-500/5 backdrop-blur-md text-sky-600 text-[11px] font-black rounded-2xl transition-all shadow-sm hover:bg-sky-500/10 hover:!translate-y-[-6px] hover:scale-105 active:scale-95 flex items-center gap-2 border border-sky-500/20 overflow-hidden"
         >
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:animate-shine pointer-events-none" />

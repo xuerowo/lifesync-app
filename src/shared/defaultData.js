@@ -18,7 +18,45 @@ export const DEFAULT_CLOUD_CONFIG = () => ({
   enabled: false,
 });
 
-const GOAL_CATEGORIES = ['learning', 'health', 'happiness'];
+const GOAL_CATEGORIES = ['growth', 'health', 'happiness'];
+
+// 改過名字的維度代號：舊代號 → 新代號。
+// 2026-11-22 起「學習」改名「成長」，代號 learning 改成 growth。
+// 每次讀檔、匯入、還原、雲端下載都會經過 normalizeData，舊資料（包括舊備份）一律在這裡換成新代號。
+// 只換一次、不會連續換：以後如果 growth 又改名成 X，要寫 growth: 'X'，並把 learning 也直接改成指向 'X'。
+export const LEGACY_INDICATOR_IDS = Object.freeze({ learning: 'growth' });
+
+/** 舊的維度代號換成新的；其他值原樣回傳 */
+export function migrateIndicatorId(id) {
+  return typeof id === 'string' && Object.prototype.hasOwnProperty.call(LEGACY_INDICATOR_IDS, id)
+    ? LEGACY_INDICATOR_IDS[id]
+    : id;
+}
+
+// 陣列裡每個物件的某個欄位如果是舊代號，換成新代號；沒變的物件沿用原本的參考
+function migrateField(list, field) {
+  return list.map((item) => {
+    if (!isPlainObject(item)) return item;
+    const next = migrateIndicatorId(item[field]);
+    return next === item[field] ? item : { ...item, [field]: next };
+  });
+}
+
+// 帶有維度代號的欄位：[頂層陣列, 欄位名稱]
+const INDICATOR_REF_FIELDS = [
+  ['majorTasks', 'indicatorId'],
+  ['subTasks', 'indicatorId'],
+  ['archivedTasks', 'indicatorId'],
+  ['archivedSubTasks', 'indicatorId'],
+  ['taskHistory', 'indicatorId'],
+  ['archivedGoals', 'indicatorId'],
+  ['achievements', 'type'],
+];
+
+/** 番茄鐘這一輪的任務清單（也存在 localStorage）裡的舊維度代號換成新的 */
+export function migrateTaskList(tasks) {
+  return Array.isArray(tasks) ? migrateField(tasks, 'indicatorId') : tasks;
+}
 
 // 頂層的陣列欄位：讀到不是陣列的值時一律換成 []
 const ARRAY_FIELDS = [
@@ -37,7 +75,7 @@ const ARRAY_FIELDS = [
 
 export function createDefaultData() {
   return {
-    goals: { learning: [], health: [], happiness: [] },
+    goals: { growth: [], health: [], happiness: [] },
     majorTasks: [],
     subTasks: [],
     archivedTasks: [],
@@ -64,7 +102,7 @@ const toArray = (v) => (Array.isArray(v) ? v : []);
 // 把任意輸入補成完整、格式正確的資料。
 // - 不修改傳入的 raw（只做淺層複製，巢狀的陣列/物件沿用原本的參考）
 // - 保留 raw 中未知的額外欄位，避免丟資料
-// - 處理舊格式：刪除 rewards；沒有 notes 但有 diaries 時轉成 notes
+// - 處理舊格式：刪除 rewards；沒有 notes 但有 diaries 時轉成 notes；舊的維度代號換成新的（見 LEGACY_INDICATOR_IDS）
 export function normalizeData(raw) {
   if (!isPlainObject(raw)) return createDefaultData();
 
@@ -84,7 +122,26 @@ export function normalizeData(raw) {
     );
   }
 
+  // 舊的維度代號換成新的
+  for (const [field, key] of INDICATOR_REF_FIELDS) {
+    result[field] = migrateField(result[field], key);
+  }
+  result.pomodoroHistory = result.pomodoroHistory.map((session) => {
+    if (!isPlainObject(session) || !Array.isArray(session.tasks)) return session;
+    const tasks = migrateTaskList(session.tasks);
+    return tasks.every((t, i) => t === session.tasks[i]) ? session : { ...session, tasks };
+  });
+
   const goals = isPlainObject(raw.goals) ? { ...raw.goals } : {};
+  // 目標的分類鍵：舊代號底下的目標併到新代號底下（兩邊都有時，新的在前、舊的接在後面，同一個 id 只留一個）
+  for (const [oldId, newId] of Object.entries(LEGACY_INDICATOR_IDS)) {
+    if (!Object.prototype.hasOwnProperty.call(goals, oldId)) continue;
+    const current = toArray(goals[newId]);
+    const ids = new Set(current.map((g) => (isPlainObject(g) ? g.id : undefined)).filter((id) => id !== undefined));
+    const extra = toArray(goals[oldId]).filter((g) => !(isPlainObject(g) && g.id !== undefined && ids.has(g.id)));
+    goals[newId] = [...current, ...extra];
+    delete goals[oldId];
+  }
   for (const category of GOAL_CATEGORIES) {
     goals[category] = toArray(goals[category]);
   }

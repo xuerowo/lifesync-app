@@ -4,7 +4,7 @@ import { Plus, Target, X } from 'lucide-react';
 import { formatTaskTime } from '../../utils';
 
 /**
- * 番茄鐘進行中，按「本次目標」旁的「＋」打開的選單：從可選的學習任務中加入目標。
+ * 番茄鐘進行中，按「本次目標」旁的「＋」打開的選單：從可選的成長任務中加入目標。
  * 可選的任務和開始前的選擇清單是同一份規則（domain/pomodoro.js 的 pomodoroCandidateTasks），
  * 已經在本次目標裡的不再列出。加入後選單不關，方便一次加好幾個；Esc、背景、X、「完成」都能關閉。
  * 這裡只改目標清單，不碰計時。
@@ -56,9 +56,9 @@ const AddSessionTaskPicker = ({ tasks, onAdd, onClose }) => {
         <div className="p-4 md:p-5 overflow-y-auto custom-scrollbar space-y-2">
           {tasks.length === 0 ? (
             <div className="text-center py-8 px-4">
-              <p className="text-sm font-bold text-sky-700">沒有可以加入的學習任務</p>
+              <p className="text-sm font-bold text-sky-700">沒有可以加入的成長任務</p>
               <p className="text-[10px] md:text-xs font-bold text-sky-500 mt-2 leading-relaxed">
-                學習任務都已經在本次目標裡，或今天已經完成。<br />
+                成長任務都已經在本次目標裡，或今天已經完成。<br />
                 要新的任務，可以先到「計畫清單」新增，番茄鐘會照常計時。
               </p>
             </div>

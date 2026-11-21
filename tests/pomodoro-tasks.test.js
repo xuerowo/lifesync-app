@@ -4,10 +4,10 @@ import { addableSessionTasks, pomodoroCandidateTasks } from '../src/domain/pomod
 // 2026-11-20 是星期五（getDay() === 5），用本地時間建立
 const NOW = new Date(2026, 10, 20, 10, 0, 0)
 
-const task = (id, extra = {}) => ({ id, title: id, indicatorId: 'learning', type: 'precise', completed: false, ...extra })
+const task = (id, extra = {}) => ({ id, title: id, indicatorId: 'growth', type: 'precise', completed: false, ...extra })
 
 describe('pomodoroCandidateTasks：番茄鐘可選的目標任務', () => {
-  it('只列學習維度、未完成的任務', () => {
+  it('只列成長維度、未完成的任務', () => {
     const list = pomodoroCandidateTasks([
       task('a'),
       task('health', { indicatorId: 'health' }),

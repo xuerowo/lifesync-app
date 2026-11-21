@@ -75,9 +75,9 @@ describe('validateSubTaskTimes：結束時間不能早於開始時間', () => {
 });
 
 describe('firstGoalId：換維度時目標重設', () => {
-  const goals = { learning: [{ id: 'g1' }, { id: 'g2' }], health: [] };
+  const goals = { growth: [{ id: 'g1' }, { id: 'g2' }], health: [] };
   it('回傳新維度的第一個目標', () => {
-    expect(firstGoalId(goals, 'learning')).toBe('g1');
+    expect(firstGoalId(goals, 'growth')).toBe('g1');
   });
   it('新維度沒有目標時回傳空字串', () => {
     expect(firstGoalId(goals, 'health')).toBe('');

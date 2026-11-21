@@ -8,6 +8,7 @@
 // - 程式關閉的時間不算：下次開啟時，在最後一次「還活著」的時間點補一筆 pause_start，停在關閉時的剩餘時間（規則：視同暫停）。
 
 import { breakSecondsFor, nextPhaseOnTimeout, normalizePomodoroSettings } from './pomodoro.js';
+import { migrateTaskList } from '../shared/defaultData.js';
 
 const PHASE_START_TYPES = new Set(['focus_start', 'flow_start', 'break_start']);
 const RUNNING_STATUSES = new Set(['focus', 'flow', 'break']);
@@ -236,7 +237,8 @@ export const loadPomodoroState = (storage, nowMs) => {
     status,
     settings,
     selectedTaskIds: asArray('pomodoroSelectedTaskIds'),
-    sessionTasks: asArray('pomodoroSessionTasks'),
+    // 進行中那一輪的任務是升級前存的話，維度代號可能還是舊的（例如 learning → growth）
+    sessionTasks: migrateTaskList(asArray('pomodoroSessionTasks')),
     completedSessionTaskIds: asArray('pomodoroCompletedSessionTaskIds'),
     isPaused,
     cycles: toNumber(get('pomodoroCycles')) ?? 0,

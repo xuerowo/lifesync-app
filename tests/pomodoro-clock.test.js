@@ -394,3 +394,11 @@ describe('loadPomodoroState：存檔壞掉時不會把開始時間算成 1970 �
     expect(c.timeLeft).toBe(1500)
   })
 })
+
+describe('loadPomodoroState：升級前存的這一輪任務換成新的維度代號', () => {
+  it('learning → growth，其他欄位不動', () => {
+    const tasks = [{ id: 'a', title: 'A', indicatorId: 'learning' }, { id: 'b', indicatorId: 'health' }]
+    const s = loadPomodoroState(fakeStorage({ pomodoroSessionTasks: JSON.stringify(tasks) }), 0)
+    expect(s.sessionTasks).toEqual([{ id: 'a', title: 'A', indicatorId: 'growth' }, { id: 'b', indicatorId: 'health' }])
+  })
+})

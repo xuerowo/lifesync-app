@@ -12,7 +12,7 @@ const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
   const [localItem, setLocalItem] = useState({
     title: '',
     majorTaskTitle: '',
-    indicatorId: 'learning',
+    indicatorId: 'growth',
     type: 'daily',
     completedAt: new Date().toISOString(),
     ...editingTaskHistory

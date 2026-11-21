@@ -132,7 +132,7 @@ const pad2 = (n) => String(n).padStart(2, '0');
 const localDateStr = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
 /**
- * 番茄鐘可以選的目標任務：「學習」維度、還沒完成的任務；
+ * 番茄鐘可以選的目標任務：「成長」維度、還沒完成的任務；
  * 每日／每週任務排除今天已完成的，每週任務也排除今天不是指定星期的。
  * 開始前的選擇清單和進行中的「＋」用同一份規則。
  * @param {Array} subTasks
@@ -142,7 +142,7 @@ export const pomodoroCandidateTasks = (subTasks, now = new Date()) => {
   const todayStr = localDateStr(now);
   const weekday = now.getDay();
   return (Array.isArray(subTasks) ? subTasks : []).filter(t => {
-    if (t.indicatorId !== 'learning') return false;
+    if (t.indicatorId !== 'growth') return false;
     // 排除已歸檔/已完成的一次性任務
     if (t.completed) return false;
     if (t.type === 'daily' || t.type === 'weekly') {

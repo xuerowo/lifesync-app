@@ -52,8 +52,8 @@ const Pomodoro = ({
   const updateSettings = (patch) => setSettings(prev => normalizePomodoroSettings({ ...prev, ...patch }));
   const longBreakSettings = normalizePomodoroSettings(settings);
 
-  // 可選的目標任務（學習維度、未完成；規則見 domain/pomodoro.js，「＋」加入任務也用同一份）
-  const learningTasks = pomodoroCandidateTasks(subTasks);
+  // 可選的目標任務（成長維度、未完成；規則見 domain/pomodoro.js，「＋」加入任務也用同一份）
+  const candidateTasks = pomodoroCandidateTasks(subTasks);
 
   // 「時間到」的自動處理在 App 層（usePomodoroAutoAdvance），這裡不再監聽，避免重複觸發
 
@@ -414,13 +414,13 @@ const Pomodoro = ({
             <div className="flex flex-col h-full min-h-[300px]">
               <div className="bg-white/40 rounded-2xl md:rounded-[32px] p-5 md:p-6 border border-white/40 flex-grow mb-4 md:mb-6 overflow-hidden flex flex-col">
                 <h3 className="font-black text-sky-800 mb-3 md:mb-4 flex items-center gap-2 flex-shrink-0 text-sm md:text-base">
-                  <Target className="w-4 h-4 md:w-5 md:h-5" /> 選擇目標任務 (學習)
+                  <Target className="w-4 h-4 md:w-5 md:h-5" /> 選擇目標任務 (成長)
                 </h3>
                 <div className="overflow-y-auto custom-scrollbar flex-grow pr-2 space-y-2">
-                  {learningTasks.length === 0 ? (
-                    <div className="text-center py-8 text-sky-500 font-bold text-xs md:text-sm">目前沒有未完成的學習任務</div>
+                  {candidateTasks.length === 0 ? (
+                    <div className="text-center py-8 text-sky-500 font-bold text-xs md:text-sm">目前沒有未完成的成長任務</div>
                   ) : (
-                    learningTasks.map(task => {
+                    candidateTasks.map(task => {
                       const isSelected = selectedTaskIds.includes(task.id);
                       const selectedIndex = selectedTaskIds.indexOf(task.id);
                       
@@ -497,12 +497,12 @@ const Pomodoro = ({
 
               <button
                 onClick={startFocus}
-                disabled={learningTasks.length > 0 && selectedTaskIds.length === 0}
+                disabled={candidateTasks.length > 0 && selectedTaskIds.length === 0}
                 className="w-full py-4 md:py-5 bg-sky-500 hover:bg-sky-600 text-white rounded-2xl md:rounded-[24px] font-black text-lg md:text-xl shadow-lg shadow-sky-200 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <Play className="w-5 h-5 md:w-6 md:h-6 fill-current" /> 開始專注
               </button>
-              {learningTasks.length > 0 && selectedTaskIds.length === 0 && (
+              {candidateTasks.length > 0 && selectedTaskIds.length === 0 && (
                 <p className="text-center text-[9px] md:text-[10px] text-rose-400 font-bold mt-2">請至少選擇一項任務</p>
               )}
             </div>

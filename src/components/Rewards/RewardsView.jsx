@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import IpcImage from '../Shared/IpcImage';
-import { Gift, Percent, CheckCircle2, Zap, ImageIcon, Search, ChevronDown, Plus, BarChart3, Edit3, Trash2, ChevronLeft, ChevronRight, BookOpen, Heart, Smile, Trophy, RotateCw, Star, ArrowUp, ArrowDown, Sparkles, History, Tag, Layers } from 'lucide-react';
+import { Gift, Percent, CheckCircle2, Zap, ImageIcon, Search, ChevronDown, Plus, BarChart3, Edit3, Trash2, ChevronLeft, ChevronRight, Sprout, Heart, Smile, Trophy, RotateCw, Star, ArrowUp, ArrowDown, Sparkles, History, Tag, Layers } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
 import { useLottery } from '../../hooks/useLottery';
 import { RARITY_STYLES, ITEMS_PER_PAGE } from '../../constants/index.jsx';
@@ -417,7 +417,7 @@ const RewardsView = ({
         <div className="space-y-10 animate-in slide-up">
           {[
             { id: 'total', name: '總成就', icon: <Trophy className="w-6 h-6" />, color: 'from-slate-400 to-slate-600' },
-            { id: 'learning', name: '學習成就', icon: <BookOpen className="w-6 h-6" />, color: 'from-blue-400 to-indigo-400' },
+            { id: 'growth', name: '成長成就', icon: <Sprout className="w-6 h-6" />, color: 'from-blue-400 to-indigo-400' },
             { id: 'health', name: '健康成就', icon: <Heart className="w-6 h-6" />, color: 'from-cyan-400 to-teal-400' },
             { id: 'happiness', name: '幸福成就', icon: <Smile className="w-6 h-6" />, color: 'from-amber-300 to-orange-400' }
           ].map(category => {
