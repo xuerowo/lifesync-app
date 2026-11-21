@@ -32,4 +32,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   cancelCloudSync: () => ipcRenderer.invoke('cloud-cancel-sync'),
   // 番茄鐘時間到、等你按按鈕時：true 讓工作列圖示閃爍（視窗已在前面就不閃），false 停止閃爍
   setAttention: (on) => ipcRenderer.send('pomodoro-attention', on === true),
+  // 取代畫面的 alert()／confirm()：由主程序顯示 Windows 標準訊息框，等使用者按完才回傳
+  // （畫面原生的訊息框關掉後頁面常會失去鍵盤焦點，詳見 src/utils/nativeDialogs.js）
+  alertSync: (message) => {
+    ipcRenderer.sendSync('dialog-alert-sync', String(message ?? ''));
+  },
+  confirmSync: (message) => ipcRenderer.sendSync('dialog-confirm-sync', String(message ?? '')) === true,
 });

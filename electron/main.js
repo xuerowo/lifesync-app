@@ -9,6 +9,7 @@ import { resolveImageReadPath, copyImageIntoGallery } from './galleryFiles.js';
 import { stripCloudSecrets } from '../src/shared/cloudSecrets.js';
 import { decideWindowOpen } from './windowOpen.js';
 import { setupSingleInstance } from './singleInstance.js';
+import { buildMessageBoxOptions, confirmResultFromResponse } from './nativeDialogs.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -171,6 +172,16 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  // 保險：視窗重新拿到焦點時，一併把鍵盤焦點交給頁面。
+  // Windows 上偶爾會發生「視窗在最前面、頁面卻沒有鍵盤焦點」，點輸入框不出現游標、打不了字；
+  // 這樣切回視窗時一定會恢復。開發者工具正在用時不搶它的焦點。
+  mainWindow.on('focus', () => {
+    const contents = mainWindow?.webContents;
+    if (!contents || contents.isDestroyed()) return;
+    if (contents.isDevToolsOpened() && contents.isDevToolsFocused()) return;
+    contents.focus();
+  });
+
   if (process.env.LIFESYNC_DEBUG === '1') attachDebugOutput(mainWindow.webContents);
 
   // 開發環境使用 Vite 開發伺服器，生產環境加載打包後的 index.html
@@ -303,6 +314,42 @@ ipcMain.on('pomodoro-attention', (event, on) => {
     win.flashFrame(false);
   }
 });
+
+// 畫面的 alert()／confirm() 改由這裡顯示 Windows 標準訊息框（畫面端在 src/utils/nativeDialogs.js 換掉）。
+// 原因：畫面原生的 alert／confirm 關掉後，頁面常會失去鍵盤焦點，點輸入框不出現游標、打不了字。
+// 這裡指定父視窗顯示，關掉後把焦點還給視窗與頁面。
+// 用非同步的 showMessageBox：畫面端照樣等使用者按完才繼續（sendSync 會等到 returnValue 設好），
+// 但主程序不會被卡住，雲端同步等背景工作在訊息框開著時仍會繼續。
+// 只接受主視窗、而且是程式自己頁面送來的要求；其他一律當作按了「取消」。
+function handleDialogRequest(kind, event, message) {
+  const fallback = kind === 'confirm' ? false : undefined;
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win !== mainWindow || win.isDestroyed() || !isOwnPage(event.senderFrame?.url)) {
+    console.warn('[security] 已拒絕不明來源的訊息框要求');
+    event.returnValue = fallback;
+    return;
+  }
+  dialog
+    .showMessageBox(win, buildMessageBoxOptions(kind, message))
+    .then(
+      ({ response }) => (kind === 'confirm' ? confirmResultFromResponse(response) : undefined),
+      (error) => {
+        console.error('[dialog] 顯示訊息框失敗:', error.message);
+        return fallback;
+      },
+    )
+    .then((result) => {
+      // 先把焦點還給頁面，再讓畫面端繼續
+      if (!win.isDestroyed()) {
+        win.focus();
+        win.webContents.focus();
+      }
+      event.returnValue = result;
+    });
+}
+
+ipcMain.on('dialog-alert-sync', (event, message) => handleDialogRequest('alert', event, message));
+ipcMain.on('dialog-confirm-sync', (event, message) => handleDialogRequest('confirm', event, message));
 
 // 覆蓋本機資料（雲端還原、匯入 JSON、還原完整備份）之前，先在 backups\ 拍一份快照。
 // data 是畫面上目前的資料：先存好再拍，快照才不會漏掉最後幾秒的修改。
