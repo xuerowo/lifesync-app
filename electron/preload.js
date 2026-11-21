@@ -38,4 +38,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.sendSync('dialog-alert-sync', String(message ?? ''));
   },
   confirmSync: (message) => ipcRenderer.sendSync('dialog-confirm-sync', String(message ?? '')) === true,
+  // 點了畫面、頁面卻沒有鍵盤焦點時呼叫：請主程序把鍵盤焦點交回頁面（見 src/utils/focusGuard.js）
+  refocusPage: () => ipcRenderer.send('page-refocus'),
 });

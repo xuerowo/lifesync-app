@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, safeStorage, dialog, session, shell } from 'electron';
+import { app, BaseWindow, BrowserWindow, ipcMain, Menu, safeStorage, dialog, session, shell } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
@@ -172,9 +172,9 @@ function createWindow() {
     return { action: 'deny' };
   });
 
-  // 保險：視窗重新拿到焦點時，一併把鍵盤焦點交給頁面。
-  // Windows 上偶爾會發生「視窗在最前面、頁面卻沒有鍵盤焦點」，點輸入框不出現游標、打不了字；
-  // 這樣切回視窗時一定會恢復。開發者工具正在用時不搶它的焦點。
+  // 保險：視窗重新拿到焦點時，一併把鍵盤焦點交給頁面（開發者工具正在用時不搶它的焦點）。
+  // 注意：實測「原生 confirm 關掉後頁面沒有焦點」那種狀態，這一行修不好（Electron 以為頁面已有焦點，
+  // webContents.focus() 什麼都不做），真正修好的是下面 page-refocus 的做法；這裡只是成本很低的額外保險。
   mainWindow.on('focus', () => {
     const contents = mainWindow?.webContents;
     if (!contents || contents.isDestroyed()) return;
@@ -350,6 +350,55 @@ function handleDialogRequest(kind, event, message) {
 
 ipcMain.on('dialog-alert-sync', (event, message) => handleDialogRequest('alert', event, message));
 ipcMain.on('dialog-confirm-sync', (event, message) => handleDialogRequest('confirm', event, message));
+
+// 畫面被點了、頁面卻沒有鍵盤焦點（src/utils/focusGuard.js）：讓視窗真的「失去焦點再拿回來」一次。
+// 實測（打包版、真的滑鼠點擊）：原生 confirm 關掉後，Windows 的前景視窗是這個視窗，
+// Electron 也認為視窗和頁面都有焦點（isFocused() 都是 true），但頁面裡 document.hasFocus() 是 false，
+// 點輸入框不出現游標、打字進不去。這時 win.focus()、webContents.focus()、blurWebView() 都沒有用
+// （Electron 以為已經有焦點，什麼都不做）；要讓視窗真的換一次焦點才會好。
+// 做法：開一個 1×1、透明、不在工作列的小視窗（掛在主視窗底下）拿走焦點，馬上關掉再把焦點還給主視窗。
+// 只在程式自己的視窗之間切換，不會動到別的程式（win.blur() 也有效，但會讓別的程式短暫跑到前面，所以不用）。
+// 視窗本身不在前面時不做事，不會把視窗搶到前面。
+let refocusing = false;
+function cycleWindowFocus(win) {
+  if (refocusing) return;
+  refocusing = true;
+  const bounds = win.getBounds();
+  let helper = null;
+  try {
+    helper = new BaseWindow({
+      x: bounds.x + 10,
+      y: bounds.y + 10,
+      width: 1,
+      height: 1,
+      frame: false,
+      transparent: true,
+      skipTaskbar: true,
+      resizable: false,
+      show: false,
+      parent: win,
+    });
+    helper.show();
+    helper.focus();
+  } catch (error) {
+    console.error('[focus] 無法建立暫時的視窗:', error.message);
+  }
+  setTimeout(() => {
+    refocusing = false;
+    if (helper && !helper.isDestroyed()) helper.destroy();
+    if (win.isDestroyed()) return;
+    win.focus();
+    win.webContents.focus();
+  }, 30);
+}
+
+ipcMain.on('page-refocus', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win !== mainWindow || win.isDestroyed() || !win.isFocused()) return;
+  if (win.webContents.isDevToolsOpened() && win.webContents.isDevToolsFocused()) return;
+  if (process.env.LIFESYNC_DEBUG === '1') console.log('[debug][page-refocus] 頁面沒有鍵盤焦點，重新切換一次視窗焦點');
+  cycleWindowFocus(win);
+});
 
 // 覆蓋本機資料（雲端還原、匯入 JSON、還原完整備份）之前，先在 backups\ 拍一份快照。
 // data 是畫面上目前的資料：先存好再拍，快照才不會漏掉最後幾秒的修改。
