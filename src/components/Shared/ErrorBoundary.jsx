@@ -33,7 +33,7 @@ export default class ErrorBoundary extends Component {
     if (!this.state.error) return this.props.children;
 
     return (
-      <div className="min-h-screen bg-gradient-to-b from-sky-300 via-sky-100 to-white flex items-center justify-center p-6 text-sky-950">
+      <div className="app-scroll h-full bg-gradient-to-b from-sky-300 via-sky-100 to-white flex [align-items:safe_center] justify-center p-6 text-sky-950">
         <div role="alert" className="w-full max-w-lg bg-white/90 rounded-3xl shadow-xl border border-sky-100 p-8 text-center">
           <AlertTriangle className="w-14 h-14 text-amber-500 mx-auto mb-4" />
           <h1 className="text-2xl font-black mb-2">畫面發生錯誤，你的資料不受影響</h1>

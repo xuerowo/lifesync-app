@@ -232,7 +232,7 @@ const App = () => {
   );
 
   if (isLoading) return (
-    <div className="min-h-screen bg-gradient-to-b from-sky-300 via-sky-100 to-white flex items-center justify-center">
+    <div className="app-scroll h-full bg-gradient-to-b from-sky-300 via-sky-100 to-white flex [align-items:safe_center] justify-center">
       <div className="text-center">
         <Sun className="w-16 h-16 text-amber-400 animate-spin mx-auto mb-4" />
         <p className="text-sky-600 font-black text-xl">載入中...</p>
@@ -241,7 +241,7 @@ const App = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-sky-300 via-sky-100 to-white text-sky-950 font-sans selection:bg-sky-200 selection:text-sky-900">
+    <div className="app-scroll h-full bg-gradient-to-b from-sky-300 via-sky-100 to-white text-sky-950 font-sans selection:bg-sky-200 selection:text-sky-900">
       
       {/* 存檔失敗的紅色提示（存好後自動消失） */}
       <SaveErrorBanner saveError={saveError} isRetrying={isRetryingSave} onRetry={retrySaveNow} />

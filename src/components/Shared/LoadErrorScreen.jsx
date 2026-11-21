@@ -53,7 +53,7 @@ const LoadErrorScreen = ({ loadError, busy = null, canRestore, restoreFailure = 
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-sky-300 via-sky-100 to-white flex items-center justify-center p-6 text-sky-950">
+    <div className="app-scroll h-full bg-gradient-to-b from-sky-300 via-sky-100 to-white flex [align-items:safe_center] justify-center p-6 text-sky-950">
       <div role="alert" className="w-full max-w-xl bg-white/90 rounded-3xl shadow-xl border border-sky-100 p-8">
         <div className="text-center">
           <AlertTriangle className="w-14 h-14 text-amber-500 mx-auto mb-4" />
