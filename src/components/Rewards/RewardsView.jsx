@@ -10,6 +10,7 @@ import { deleteAchievementMessage } from '../../domain/confirmations.js';
 import { getPrizeSortName } from '../../domain/lottery';
 import { clampPage, getTotalPages } from '../../domain/pagination';
 import { atLeast, toNonNegativeInt, toNonNegativeNumber } from '../../domain/inputs';
+import { focusCardTextField } from '../../utils/cardFocus.js';
 
 const EditableContent = ({ initialValue, onSave, className, placeholder }) => {
   const [localValue, setLocalValue] = useState(initialValue);
@@ -355,7 +356,7 @@ const RewardsView = ({
                     {prizes.length === 0 ? (<div className={`py-12 text-center border-2 border-dashed ${style.border} rounded-3xl bg-white/30`}><p className={`${style.color} font-bold text-sm opacity-60`}>暫無獎品</p></div>) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {prizes.map((prize, pIdx) => (
-                          <div key={prize.id} className="group bg-white hover:bg-sky-50 p-4 rounded-3xl border border-sky-100 shadow-sm hover:shadow-md transition-all duration-200 relative hover:z-20 flex flex-col h-auto">
+                          <div key={prize.id} onMouseDown={prize.type === 'text' ? focusCardTextField : undefined} className={`group bg-white hover:bg-sky-50 p-4 rounded-3xl border border-sky-100 shadow-sm hover:shadow-md transition-all duration-200 relative hover:z-20 flex flex-col h-auto ${prize.type === 'text' ? 'cursor-text' : ''}`}>{/* 文字獎品：點卡片上的空白也能直接打字，見 utils/cardFocus.js */}
                             <div className="flex items-start gap-4"><span className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-2xl text-xs font-black ${style.lightBg} ${style.color}`}>{pIdx + 1}</span><div className="flex-grow min-w-0 pt-1">
                               {prize.type === 'text' ? (
                                 <EditableContent
