@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   atLeast,
+  commitCountDraft,
   firstGoalId,
+  sanitizeCountDraft,
   toggleWeekDay,
   toNonNegativeInt,
   toNonNegativeNumber,
@@ -80,5 +82,31 @@ describe('firstGoalId：換維度時目標重設', () => {
   it('新維度沒有目標時回傳空字串', () => {
     expect(firstGoalId(goals, 'health')).toBe('');
     expect(firstGoalId(goals, 'unknown')).toBe('');
+  });
+});
+
+describe('成就條件次數：打字中的草稿與打完後存的值', () => {
+  it('草稿只留數字，最多 6 位', () => {
+    expect(sanitizeCountDraft('1,000')).toBe('1000');
+    expect(sanitizeCountDraft(' 5 次')).toBe('5');
+    expect(sanitizeCountDraft('５０')).toBe('50');
+    expect(sanitizeCountDraft('-3')).toBe('3');
+    expect(sanitizeCountDraft('12345678')).toBe('123456');
+    expect(sanitizeCountDraft('')).toBe('');
+    expect(sanitizeCountDraft(undefined)).toBe('');
+  });
+  it('打完時存成至少 1 的整數', () => {
+    expect(commitCountDraft('50', 30)).toBe(50);
+    expect(commitCountDraft('007', 30)).toBe(7);
+    expect(commitCountDraft('1', 30)).toBe(1);
+  });
+  it('清空或只打 0 時退回原本的次數', () => {
+    expect(commitCountDraft('', 30)).toBe(30);
+    expect(commitCountDraft('0', 30)).toBe(30);
+    expect(commitCountDraft('000', 30)).toBe(30);
+  });
+  it('原本的次數就不合理（舊資料）時退回 1', () => {
+    expect(commitCountDraft('', 0)).toBe(1);
+    expect(commitCountDraft('', undefined)).toBe(1);
   });
 });

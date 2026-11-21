@@ -8,6 +8,25 @@ export function toNonNegativeInt(raw) {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
+/**
+ * 次數欄位打字途中的草稿：只留數字（貼上「1,000」「 5 次」「５０」也只取數字），最多 6 位，
+ * 避免一不小心多打出很大的數。
+ */
+export function sanitizeCountDraft(raw) {
+  // NFKC：全形數字「５０」先轉成半形「50」
+  return String(raw ?? '').normalize('NFKC').replace(/\D/g, '').slice(0, 6);
+}
+
+/**
+ * 次數欄位打完（離開欄位或按 Enter）時要存的值：至少 1 的整數。
+ * 清空、只打 0 這類不合理的值，退回原本的次數，不會被改成別的數字。
+ */
+export function commitCountDraft(draft, previous) {
+  const n = parseInt(sanitizeCountDraft(draft), 10);
+  if (Number.isFinite(n) && n >= 1) return n;
+  return atLeast(previous, 1);
+}
+
 /** 輸入框的值 → 0 以上的數字（可以有小數；空白、負數、不是數字都變成 0） */
 export function toNonNegativeNumber(raw) {
   const n = Number(raw);

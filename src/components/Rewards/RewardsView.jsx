@@ -9,7 +9,8 @@ import RarityBadge from '../Shared/RarityBadge';
 import { deleteAchievementMessage } from '../../domain/confirmations.js';
 import { getPrizeSortName } from '../../domain/lottery';
 import { clampPage, getTotalPages } from '../../domain/pagination';
-import { atLeast, toNonNegativeInt, toNonNegativeNumber } from '../../domain/inputs';
+import { toNonNegativeInt, toNonNegativeNumber } from '../../domain/inputs';
+import AchievementConditionInput from './AchievementConditionInput';
 import { focusCardTextField } from '../../utils/cardFocus.js';
 
 const EditableContent = ({ initialValue, onSave, className, placeholder }) => {
@@ -456,7 +457,9 @@ const RewardsView = ({
                     const progress = Math.min(100, (currentCount / achievement.condition) * 100);
                     
                     return (
-                      <div key={achievement.id} className={`relative group p-6 rounded-[32px] border-2 transition-all ${achievement.claimed ? 'bg-emerald-50/50 border-emerald-100 opacity-80' : isAchieved ? 'bg-amber-50/50 border-amber-200 shadow-amber-100 shadow-lg' : 'bg-white/60 border-white hover:border-sky-200'}`}>
+                      // 改了條件次數後卡片會換位置：用 layout 動畫讓它滑過去，看得出移到哪裡
+                      // （不用 transition-all，CSS 的位移動畫會和 layout 動畫互相干擾）
+                      <motion.div layout="position" transition={{ layout: { duration: 0.35, ease: 'easeInOut' } }} key={achievement.id} data-achievement-card className={`relative group p-6 rounded-[32px] border-2 transition-[background-color,border-color,opacity,box-shadow] ${achievement.claimed ? 'bg-emerald-50/50 border-emerald-100 opacity-80' : isAchieved ? 'bg-amber-50/50 border-amber-200 shadow-amber-100 shadow-lg' : 'bg-white/60 border-white hover:border-sky-200'}`}>
                         <div className="flex justify-between items-start mb-4">
                           <div className="flex-grow min-w-0">
                             <input
@@ -467,14 +470,11 @@ const RewardsView = ({
                             />
                             <div className="flex items-center gap-2">
                               <span className="text-[10px] font-black text-sky-300 uppercase tracking-widest">條件：</span>
-                              {/* 條件至少 1 次：打字途中允許暫時清空，離開欄位時才補成 1，避免一清空就跳成 1、接著打字變成 15 */}
-                              <input
-                                type="number"
-                                min="1"
+                              {/* 打字時卡片不跟著重新排序，打完（離開欄位或按 Enter）才存，見 AchievementConditionInput */}
+                              <AchievementConditionInput
                                 className="w-16 bg-sky-50/50 rounded-lg px-2 py-0.5 text-xs font-black text-sky-600 outline-none"
                                 value={achievement.condition}
-                                onChange={e => updateData(prev => ({ ...prev, achievements: prev.achievements.map(a => a.id === achievement.id ? { ...a, condition: toNonNegativeInt(e.target.value) } : a) }))}
-                                onBlur={() => { if (!(achievement.condition >= 1)) updateData(prev => ({ ...prev, achievements: prev.achievements.map(a => a.id === achievement.id ? { ...a, condition: atLeast(a.condition, 1) } : a) })); }}
+                                onCommit={n => updateData(prev => ({ ...prev, achievements: prev.achievements.map(a => a.id === achievement.id ? { ...a, condition: n } : a) }))}
                               />
                               <span className="text-[10px] font-black text-sky-300 uppercase tracking-widest">次</span>
                             </div>
@@ -525,7 +525,7 @@ const RewardsView = ({
                             </div>
                           </div>
                         </div>
-                      </div>
+                      </motion.div>
                     );
                     })}
                   {categoryAchievements.length === 0 && (
