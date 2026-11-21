@@ -3,6 +3,15 @@
 @tailwind utilities;
 
 @layer base {
+  /* 永遠預留捲軸的位置：切換頁面時，長頁面出現捲軸、短頁面沒有捲軸，畫面才不會左右跳動。
+     both-edges 讓左右各留一樣寬，置中的導覽列位置保持不變。
+     預留的那條空間會露出最底層的背景，所以這裡也鋪上和主畫面一樣的漸層，看起來才不會有一條白邊。 */
+  html {
+    scrollbar-gutter: stable both-edges;
+    background: linear-gradient(to bottom, theme("colors.sky.300"), theme("colors.sky.100"), #ffffff);
+    min-height: 100%;
+  }
+
   /* 自定義滾動條樣式 */
   ::-webkit-scrollbar {
     width: 8px;
