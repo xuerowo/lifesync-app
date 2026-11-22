@@ -6,6 +6,7 @@
 // - normalizeData（src/shared/defaultData.ts）只保證「頂層」格式正確：每個陣列欄位一定是陣列、
 //   goals／lotteryPrizes／lotteryProbability／cloudConfig 一定有該有的鍵。陣列裡每一筆的內容不逐筆檢查，
 //   沿用原檔（這是原本的行為）。所以讀巢狀欄位時，仍要照原本的寫法保留防呆。
+//   唯一的例外：卡池（lotteryPrizes）裡的獎品是物件但沒有 id 時，會補上新的 id。
 // - normalizeData 也會保留看不懂的頂層欄位（例如舊版的 diaries、以後的 _sync），這裡沒有列出。
 //
 // 時間欄位有四種格式，換算方式不同，詳見 src/domain/dates.ts 開頭：
@@ -179,17 +180,19 @@ export interface TaskHistoryRecord {
 /** 稀有度，由低到高：N 普通、R 稀有、SR 超稀有、SSR 傳說、UR 神話 */
 export type Rarity = 'N' | 'R' | 'SR' | 'SSR' | 'UR';
 
-/** 文字獎品 */
+/**
+ * 文字獎品（抽卡紀錄裡的樣子）。
+ * 抽卡紀錄裡補登的、或把圖片改成文字的沒有 id；卡池裡的一定有，見 PoolTextPrize。
+ */
 export interface TextPrize {
-  /** 卡池裡的都有；抽卡紀錄裡補登的、或把圖片改成文字的沒有 */
   id?: string;
   type: 'text';
   content: string;
 }
 
 /**
- * 單張圖片獎品。卡池裡只有舊資料會有（現在加圖片一律是圖庫）；
- * 抽中圖庫時，抽卡紀錄裡記的也是這種（抽出其中一張）。
+ * 單張圖片獎品（抽卡紀錄裡的樣子）。卡池裡只有舊資料會有（現在加圖片一律是圖庫）；
+ * 抽中圖庫時，抽卡紀錄裡記的也是這種（抽出其中一張，沒有 id）。
  * content 是圖片路徑，圖庫圖片是相對於資料資料夾的 'gallery\檔名'。
  */
 export interface ImagePrize {
@@ -208,8 +211,15 @@ export interface ImagePoolPrize {
   folderPath?: string;
 }
 
-/** 卡池裡的獎品 */
-export type LotteryPrize = TextPrize | ImagePrize | ImagePoolPrize;
+/**
+ * 卡池裡的文字、單張圖片獎品：一定有 id。
+ * 舊資料裡沒有 id 的，讀檔時 normalizeData 會補上（src/shared/defaultData.ts 的 ensurePrizeIds）。
+ */
+export type PoolTextPrize = TextPrize & { id: string };
+export type PoolImagePrize = ImagePrize & { id: string };
+
+/** 卡池裡的獎品（一定有 id） */
+export type LotteryPrize = PoolTextPrize | PoolImagePrize | ImagePoolPrize;
 
 /** 抽出來的獎品（圖庫會換成抽中的那一張圖） */
 export type DrawnPrize = TextPrize | ImagePrize;

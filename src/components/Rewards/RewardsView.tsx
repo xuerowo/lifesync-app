@@ -8,7 +8,7 @@ import { useLottery } from '../../hooks/useLottery.ts';
 import { RARITY_STYLES, RARITY_NAMES, ITEMS_PER_PAGE } from '../../constants/index.tsx';
 import RarityBadge from '../Shared/RarityBadge.tsx';
 import { deleteAchievementMessage } from '../../domain/confirmations.ts';
-import { RARITIES, getPrizeSortName } from '../../domain/lottery.ts';
+import { RARITIES, getPrizeSortName, movePoolPrize, prizeKeys, removePoolPrize, updatePoolPrize } from '../../domain/lottery.ts';
 import { clampPage, formatPageRange, getTotalPages } from '../../domain/pagination.ts';
 import { toNonNegativeInt, toNonNegativeNumber } from '../../domain/inputs.ts';
 import AchievementConditionInput from './AchievementConditionInput.tsx';
@@ -405,6 +405,7 @@ const RewardsView = ({
           <div className="space-y-8">
             {RARITIES.map((rarity, idx) => {
               const prizes = data.lotteryPrizes[rarity];
+              const keys = prizeKeys(prizes);
               const style = RARITY_STYLES[rarity];
               return (
                 <div key={rarity} className={`bg-white/40 backdrop-blur-md rounded-[40px] border-2 ${style.border} shadow-xl relative`} style={{ zIndex: 10 - idx }}>
@@ -413,7 +414,7 @@ const RewardsView = ({
                     {prizes.length === 0 ? (<div className={`py-12 text-center border-2 border-dashed ${style.border} rounded-3xl bg-white/30`}><p className={`${style.color} font-bold text-sm opacity-60`}>還沒有獎品</p></div>) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {prizes.map((prize, pIdx) => (
-                          <div key={prize.id} onMouseDown={prize.type === 'text' ? focusCardTextField : undefined} className={`group bg-white hover:bg-sky-50 p-4 rounded-3xl border border-sky-100 shadow-sm hover:shadow-md transition-all duration-200 relative hover:z-20 flex flex-col h-auto ${prize.type === 'text' ? 'cursor-text' : ''}`}>{/* 文字獎品：點卡片上的空白也能直接打字，見 utils/cardFocus.ts */}
+                          <div key={keys[pIdx]} onMouseDown={prize.type === 'text' ? focusCardTextField : undefined} className={`group bg-white hover:bg-sky-50 p-4 rounded-3xl border border-sky-100 shadow-sm hover:shadow-md transition-all duration-200 relative hover:z-20 flex flex-col h-auto ${prize.type === 'text' ? 'cursor-text' : ''}`}>{/* 文字獎品：點卡片上的空白也能直接打字，見 utils/cardFocus.ts */}
                             <div className="flex items-start gap-4"><span className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-2xl text-xs font-black ${style.lightBg} ${style.color}`}>{pIdx + 1}</span><div className="flex-grow min-w-0 pt-1">
                               {prize.type === 'text' ? (
                                 <EditableContent
@@ -421,10 +422,8 @@ const RewardsView = ({
                                   onSave={(newVal) => {
                                     updateData(prev => ({
                                       ...prev,
-                                      lotteryPrizes: {
-                                        ...prev.lotteryPrizes,
-                                        [rarity]: prev.lotteryPrizes[rarity].map(p => p.id === prize.id ? { ...p, content: newVal } : p)
-                                      }
+                                      // 只改這一張卡片的獎品（見 domain/lottery.ts 的 findPrizeIndex）
+                                      lotteryPrizes: updatePoolPrize(prev.lotteryPrizes, rarity, prize, pIdx, p => (p.type === 'text' ? { ...p, content: newVal } : p))
                                     }));
                                   }}
                                   className="w-full bg-transparent font-bold text-gray-700 outline-none focus:text-sky-600 transition-colors border-b border-transparent focus:border-sky-200 pb-1 resize-none overflow-hidden block break-words whitespace-pre-wrap min-h-[1.5em]"
@@ -436,8 +435,8 @@ const RewardsView = ({
                             </div></div>
                             <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm p-1 rounded-xl shadow-sm z-30 pointer-events-none group-hover:pointer-events-auto">
                               {prize.type === 'image-pool' && (<button onClick={() => setExpandedImagePools(prev => ({ ...prev, [prize.id]: !prev[prize.id] }))} title={expandedImagePools[prize.id] ? '收合圖片' : '展開圖片'} aria-label={expandedImagePools[prize.id] ? '收合圖片' : '展開圖片'} className="p-2 text-sky-400 hover:bg-sky-50 rounded-lg">{expandedImagePools[prize.id] ? <ChevronDown className="w-4 h-4" /> : <ImageIcon className="w-4 h-4" />}</button>)}
-                              <div className="relative group/move"><button title="移到其他稀有度" aria-label="移到其他稀有度" className="p-2 text-gray-400 hover:bg-gray-100 rounded-lg"><ArrowUp className="w-4 h-4 rotate-45" /></button><div className="absolute right-0 top-full w-32 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden hidden group-hover/move:block z-50 pt-1">{RARITIES.filter(r => r !== rarity).map(r => (<button key={r} onClick={() => { updateData(prev => ({ ...prev, lotteryPrizes: { ...prev.lotteryPrizes, [rarity]: prev.lotteryPrizes[rarity].filter(p => p.id !== prize.id), [r]: [...prev.lotteryPrizes[r], prize] } })); }} className="w-full text-left px-4 py-2 text-xs font-bold text-gray-600 hover:bg-sky-50 hover:text-sky-600">移到 {r}</button>))}</div></div>
-                              <button onClick={() => { if(confirm('確定要刪除這個獎品嗎？刪除後無法復原，已抽到的紀錄不受影響。')) updateData(prev => ({ ...prev, lotteryPrizes: { ...prev.lotteryPrizes, [rarity]: prev.lotteryPrizes[rarity].filter(p => p.id !== prize.id) } })) }} title="刪除獎品" aria-label="刪除獎品" className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                              <div className="relative group/move"><button title="移到其他稀有度" aria-label="移到其他稀有度" className="p-2 text-gray-400 hover:bg-gray-100 rounded-lg"><ArrowUp className="w-4 h-4 rotate-45" /></button><div className="absolute right-0 top-full w-32 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden hidden group-hover/move:block z-50 pt-1">{RARITIES.filter(r => r !== rarity).map(r => (<button key={r} onClick={() => { updateData(prev => ({ ...prev, lotteryPrizes: movePoolPrize(prev.lotteryPrizes, rarity, r, prize, pIdx) })); }} className="w-full text-left px-4 py-2 text-xs font-bold text-gray-600 hover:bg-sky-50 hover:text-sky-600">移到 {r}</button>))}</div></div>
+                              <button onClick={() => { if(confirm('確定要刪除這個獎品嗎？刪除後無法復原，已抽到的紀錄不受影響。')) updateData(prev => ({ ...prev, lotteryPrizes: removePoolPrize(prev.lotteryPrizes, rarity, prize, pIdx) })) }} title="刪除獎品" aria-label="刪除獎品" className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                             </div>
                             {prize.type === 'image-pool' && expandedImagePools[prize.id] && (
                               <div className="mt-4 p-4 bg-gray-50/80 rounded-2xl border border-gray-100 animate-in slide-down">

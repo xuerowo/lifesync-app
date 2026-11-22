@@ -8,8 +8,13 @@ import {
   hasAnyUsablePrize,
   isUsablePrize,
   getPrizeSortName,
+  findPrizeIndex,
+  updatePoolPrize,
+  removePoolPrize,
+  movePoolPrize,
+  prizeKeys,
 } from '../src/domain/lottery.ts';
-import type { PrizePools } from '../src/domain/lottery.ts';
+import type { FullPrizePools, PrizePools } from '../src/domain/lottery.ts';
 import type { ImagePoolPrize, ImagePrize, LotteryPrize, Rarity, TextPrize } from '../src/types/data.ts';
 
 /** 五個稀有度都有清單（可以是空的） */
@@ -261,5 +266,68 @@ describe('其他輔助函式', () => {
     const names = [{ type: 'text', content: ['x'] }, { type: 'text', content: 'b' }, { type: 'image', content: 'g\\a.png' }]
       .map(getPrizeSortName);
     expect(() => names.sort((a, b) => a.localeCompare(b))).not.toThrow();
+  });
+});
+
+describe('卡池設定：編輯、刪除、移動獎品只動到點的那一個', () => {
+  const text = (id: string, content: string): LotteryPrize => ({ id, type: 'text', content });
+  // 資料壞掉時才會有的情況：兩個獎品 id 相同（例如手動改檔）
+  const pools = (): FullPrizePools => ({
+    N: [text('a', '甲'), text('dup', '乙'), text('dup', '丙')],
+    R: [text('r', 'R1')],
+    SR: [], SSR: [], UR: [],
+  });
+
+  it('findPrizeIndex：同 id 也只找到畫面上那一個', () => {
+    const p = pools();
+    expect(findPrizeIndex(p.N, p.N[2], 2)).toBe(2);
+    expect(findPrizeIndex(p.N, p.N[1], 1)).toBe(1);
+    // 位置對不上（上面的獎品剛被刪掉）時，照同一個物件找
+    expect(findPrizeIndex(p.N.slice(1), p.N[2], 2)).toBe(1);
+    // 物件換過（文字剛改過）時，位置上的 id 相同就用那個位置
+    expect(findPrizeIndex([p.N[0], p.N[1], text('dup', '丙改')], p.N[2], 2)).toBe(2);
+    // 都對不上就找第一個同 id 的
+    expect(findPrizeIndex([text('x', ''), text('a', '甲改')], p.N[0], 5)).toBe(1);
+    expect(findPrizeIndex(p.N, text('none', ''), 0)).toBe(-1);
+  });
+
+  it('removePoolPrize 只刪一個，其他稀有度不變', () => {
+    const p = pools();
+    const next = removePoolPrize(p, 'N', p.N[2], 2);
+    expect(next.N).toEqual([text('a', '甲'), text('dup', '乙')]);
+    expect(next.R).toBe(p.R);
+    expect(p.N).toHaveLength(3); // 不修改傳入的資料
+    expect(removePoolPrize(p, 'N', text('none', ''), 0)).toBe(p);
+  });
+
+  it('movePoolPrize 從舊稀有度拿掉一個、在新稀有度接上同一個', () => {
+    const p = pools();
+    const next = movePoolPrize(p, 'N', 'R', p.N[1], 1);
+    expect(next.N).toEqual([text('a', '甲'), text('dup', '丙')]);
+    expect(next.R).toEqual([text('r', 'R1'), text('dup', '乙')]);
+    expect(next.N.length + next.R.length).toBe(p.N.length + p.R.length);
+    expect(movePoolPrize(p, 'N', 'N', p.N[0], 0)).toBe(p);
+    expect(movePoolPrize(p, 'N', 'R', text('none', ''), 0)).toBe(p);
+  });
+
+  it('movePoolPrize 搬的是卡池裡現在的那一筆', () => {
+    const p = pools();
+    const stale = p.N[0];
+    const edited = { ...p, N: [text('a', '甲改'), ...p.N.slice(1)] };
+    expect(movePoolPrize(edited, 'N', 'UR', stale, 0).UR).toEqual([text('a', '甲改')]);
+  });
+
+  it('updatePoolPrize 只改一個', () => {
+    const p = pools();
+    const next = updatePoolPrize(p, 'N', p.N[1], 1, (x) => (x.type === 'text' ? { ...x, content: '改' } : x));
+    expect(next.N.map((x) => x.content)).toEqual(['甲', '改', '丙']);
+    expect(p.N[1].content).toBe('乙');
+  });
+
+  it('prizeKeys 不重複，平常就是 id', () => {
+    expect(prizeKeys([text('a', ''), text('b', '')])).toEqual(['a', 'b']);
+    const keys = prizeKeys([text('dup', ''), text('dup', ''), withoutId({ type: 'text', content: '' }), text('dup#1', '')]);
+    expect(keys[0]).toBe('dup');
+    expect(new Set(keys).size).toBe(4);
   });
 });

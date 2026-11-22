@@ -161,7 +161,8 @@ describe('normalizeData', () => {
 
   it('lotteryPrizes 缺稀有度或不是陣列時補成陣列', () => {
     const result = normalizeData({ lotteryPrizes: { N: [{ name: 'a' }], SR: 'bad' } })
-    expect(result.lotteryPrizes).toEqual({ N: [{ name: 'a' }], R: [], SR: [], SSR: [], UR: [] })
+    // 沒有 id 的獎品會補上 id，見下面「卡池獎品補上 id」
+    expect(result.lotteryPrizes).toEqual({ N: [{ name: 'a', id: expect.any(String) }], R: [], SR: [], SSR: [], UR: [] })
     expect(normalizeData({ lotteryPrizes: null }).lotteryPrizes).toEqual(DEFAULT_LOTTERY_PRIZES())
   })
 
@@ -195,7 +196,71 @@ describe('normalizeData', () => {
     expect(result.majorTasks).toEqual([{ id: 'm', sortOrder: 0 }])
     expect(result.lotteryTickets).toBe(4)
     expect(result.lotteryPrizes.N).toEqual([])
-    expect(result.lotteryPrizes.UR).toEqual([{ name: 'u' }])
+    expect(result.lotteryPrizes.UR).toEqual([{ name: 'u', id: expect.any(String) }])
+  })
+})
+
+describe('normalizeData：卡池獎品補上 id', () => {
+
+  it('只幫沒有 id 的獎品補上不重複的 id，其他欄位不變', () => {
+    const raw = {
+      lotteryPrizes: {
+        // 舊版的單張圖片獎品沒有 id，同一個稀有度可能有好幾個
+        R: [
+          { type: 'image', content: 'old/a.png' },
+          { type: 'image', content: 'old/b.png' },
+          { id: 'keep', type: 'text', content: '有 id' },
+        ],
+        SR: [{ type: 'text', content: '沒有 id 的文字' }],
+      },
+    }
+    const prizes = normalizeData(raw).lotteryPrizes
+    const [a, b, kept] = prizes.R
+    expect(a).toEqual({ type: 'image', content: 'old/a.png', id: 'legacy-R-0' })
+    expect(b).toEqual({ type: 'image', content: 'old/b.png', id: 'legacy-R-1' })
+    expect(a.id).not.toBe(b.id)
+    expect(prizes.SR[0]).toEqual({ type: 'text', content: '沒有 id 的文字', id: 'legacy-SR-0' })
+    // 已有 id 的獎品原封不動（同一個物件）
+    expect(kept).toBe(raw.lotteryPrizes.R[2])
+  })
+
+  it('id 是空字串、null 或不是字串時換成新的 id', () => {
+    const prizes = normalizeData({
+      lotteryPrizes: { N: [{ id: '', type: 'text', content: 'a' }, { id: null, type: 'text', content: 'b' }, { id: 7, type: 'text', content: 'c' }] },
+    }).lotteryPrizes.N
+    expect(prizes.map((p) => p.id)).toEqual(['legacy-N-0', 'legacy-N-1', 'legacy-N-2'])
+  })
+
+  it('補上的 id 是固定的：每次讀檔、每台裝置讀到的都一樣；和已有的 id 撞到時加上 -2', () => {
+    const raw = { lotteryPrizes: { UR: [{ type: 'text', content: 'x' }, { id: 'legacy-UR-1', type: 'text', content: 'y' }, { type: 'text', content: 'z' }] } }
+    const first = normalizeData(raw).lotteryPrizes.UR.map((p) => p.id)
+    const second = normalizeData(raw).lotteryPrizes.UR.map((p) => p.id)
+    expect(first).toEqual(['legacy-UR-0', 'legacy-UR-1', 'legacy-UR-2'])
+    expect(second).toEqual(first)
+    const clash = normalizeData({ lotteryPrizes: { N: [{ id: 'legacy-N-1', type: 'text', content: 'a' }, { type: 'text', content: 'b' }] } }).lotteryPrizes.N
+    expect(clash.map((p) => p.id)).toEqual(['legacy-N-1', 'legacy-N-1-2'])
+  })
+
+  it('不是物件的項目原樣保留', () => {
+    const prizes = normalizeData({ lotteryPrizes: { N: ['x', null, 3, [1]] } }).lotteryPrizes.N as unknown[]
+    expect(prizes).toEqual(['x', null, 3, [1]])
+  })
+
+  it('不修改傳入的資料', () => {
+    const raw = deepFreeze({ lotteryPrizes: { R: [{ type: 'image', content: 'a.png' }] } })
+    const snapshot = JSON.stringify(raw)
+    expect(() => normalizeData(raw)).not.toThrow()
+    expect(JSON.stringify(raw)).toBe(snapshot)
+    expect('id' in raw.lotteryPrizes.R[0]).toBe(false)
+  })
+
+  it('已經整理過的資料再整理一次不會變（id 不會重新產生）', () => {
+    const once = normalizeData({ lotteryPrizes: { R: [{ type: 'image', content: 'a.png' }], UR: [{ id: 'u', type: 'text', content: 'u' }] } })
+    const twice = normalizeData(once)
+    expect(twice).toEqual(once)
+    // 每個獎品都已經有 id，陣列也沿用原本的
+    expect(twice.lotteryPrizes.R).toBe(once.lotteryPrizes.R)
+    expect(twice.lotteryPrizes.UR).toBe(once.lotteryPrizes.UR)
   })
 })
 

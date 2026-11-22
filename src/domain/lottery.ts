@@ -124,3 +124,88 @@ export function getPrizeSortName(prize: { type?: string; content?: unknown } | n
   // split 至少回傳一個元素，pop() 一定拿得到字串
   return prize?.type === 'image' ? (content.split('\\').pop() as string) : content;
 }
+
+// ---------------------------------------------------------------------------
+// 卡池設定：編輯、刪除、移動獎品
+// ---------------------------------------------------------------------------
+
+/** 各稀有度的卡池（完整五個稀有度，和 LifeSyncData.lotteryPrizes 相同） */
+export type FullPrizePools = Record<Rarity, LotteryPrize[]>;
+
+/**
+ * 找出畫面上這張獎品卡片在卡池清單裡是哪一筆，只會找到一筆（找不到回傳 -1）。
+ * 讀檔時 normalizeData 會幫每個獎品補上 id，平常靠 id 就分得出來；
+ * 這裡另外用「同一個物件」和畫面上的位置確認，就算資料壞掉、有兩個獎品 id 相同，也只會動到使用者點的那一個。
+ *
+ * 依序比對：
+ * 1. 畫面上的位置（indexHint）放的就是同一個物件
+ * 2. 清單裡別的位置放著同一個物件（例如上面的獎品剛被刪掉，位置往前移了）
+ * 3. 畫面上的位置放的是同一個 id（物件換過了，例如文字剛改過、畫面還沒更新）
+ * 4. 第一個同 id 的獎品
+ *
+ * @param indexHint 畫面上顯示這張卡片時，它在清單裡的位置
+ */
+export function findPrizeIndex(list: readonly LotteryPrize[], prize: LotteryPrize, indexHint: number): number {
+  if (list[indexHint] === prize) return indexHint;
+  const sameObject = list.indexOf(prize);
+  if (sameObject !== -1) return sameObject;
+  if (!prize.id) return -1;
+  if (list[indexHint]?.id === prize.id) return indexHint;
+  return list.findIndex(p => p?.id === prize.id);
+}
+
+/** 改掉卡池裡的一個獎品；找不到時回傳原本的 pools */
+export function updatePoolPrize(
+  pools: FullPrizePools,
+  rarity: Rarity,
+  prize: LotteryPrize,
+  indexHint: number,
+  update: (current: LotteryPrize) => LotteryPrize,
+): FullPrizePools {
+  const list = pools[rarity];
+  const index = findPrizeIndex(list, prize, indexHint);
+  if (index === -1) return pools;
+  return { ...pools, [rarity]: list.map((p, i) => (i === index ? update(p) : p)) };
+}
+
+/** 從卡池刪掉一個獎品；找不到時回傳原本的 pools */
+export function removePoolPrize(pools: FullPrizePools, rarity: Rarity, prize: LotteryPrize, indexHint: number): FullPrizePools {
+  const list = pools[rarity];
+  const index = findPrizeIndex(list, prize, indexHint);
+  if (index === -1) return pools;
+  return { ...pools, [rarity]: list.filter((_, i) => i !== index) };
+}
+
+/**
+ * 把一個獎品從 from 移到 to（接在最後面）。搬過去的是卡池裡現在的那一筆，不是畫面上可能較舊的複本。
+ * 找不到、或 from 和 to 相同時回傳原本的 pools。
+ */
+export function movePoolPrize(
+  pools: FullPrizePools,
+  from: Rarity,
+  to: Rarity,
+  prize: LotteryPrize,
+  indexHint: number,
+): FullPrizePools {
+  if (from === to) return pools;
+  const list = pools[from];
+  const index = findPrizeIndex(list, prize, indexHint);
+  if (index === -1) return pools;
+  return { ...pools, [from]: list.filter((_, i) => i !== index), [to]: [...pools[to], list[index]] };
+}
+
+/**
+ * 卡池清單裡每個獎品的 React key，保證不重複。
+ * 平常就是獎品的 id；資料壞掉、id 重複或沒有 id 時，後面那幾個加上位置區分。
+ */
+export function prizeKeys(list: readonly LotteryPrize[]): string[] {
+  const seen = new Set<string>();
+  return list.map((prize, i) => {
+    const id = prize?.id;
+    let key = typeof id === 'string' && id !== '' ? id : `${String(id ?? '')}#${i}`;
+    if (seen.has(key)) key = `${key}#${i}`;
+    while (seen.has(key)) key += '#';
+    seen.add(key);
+    return key;
+  });
+}

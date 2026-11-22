@@ -85,6 +85,31 @@ const ARRAY_FIELDS = [
 
 type ArrayField = (typeof ARRAY_FIELDS)[number];
 
+const hasValidId = (item: Record<string, unknown>): boolean => typeof item.id === 'string' && item.id !== '';
+
+/**
+ * 卡池某個稀有度的獎品清單：是物件但沒有 id（或 id 不是非空字串）的，複製一份補上 id。
+ * 舊版加的單張圖片獎品沒有 id；沒有 id 時，卡池設定刪除、移動其中一個會連帶影響其他沒有 id 的獎品。
+ * - 補上的 id 是固定的「legacy-稀有度-位置」（例如 legacy-UR-0），不是亂數：
+ *   補上的 id 要等下一次存檔才會寫進檔案，在那之前每次讀檔、每台電腦（以後的手機）讀到的都要一樣，
+ *   同步時才不會把同一個獎品當成兩個。同一個稀有度裡位置不同，所以不會重複；
+ *   萬一剛好和已有的 id 相同，就在後面加上 -2、-3……
+ * - 已有 id 的獎品沿用原本的參考；沒有要補的時候回傳原本的陣列
+ * - 不是物件的項目原樣保留（陣列裡每一筆的內容不逐筆檢查，見 src/types/data.ts 開頭）
+ */
+function ensurePrizeIds(list: unknown[], rarity: string): unknown[] {
+  if (!list.some((item) => isPlainObject(item) && !hasValidId(item))) return list;
+  const used = new Set(list.filter((item) => isPlainObject(item) && hasValidId(item)).map((item) => (item as { id: string }).id));
+  return list.map((item, index) => {
+    if (!isPlainObject(item) || hasValidId(item)) return item;
+    const base = `legacy-${rarity}-${index}`;
+    let id = base;
+    for (let n = 2; used.has(id); n++) id = `${base}-${n}`;
+    used.add(id);
+    return { ...item, id };
+  });
+}
+
 export function createDefaultData(): LifeSyncData {
   return {
     goals: { growth: [], health: [], happiness: [] },
@@ -117,6 +142,7 @@ type Draft = Record<string, unknown> & Record<ArrayField, unknown[]>;
 // - 不修改傳入的 raw（只做淺層複製，巢狀的陣列/物件沿用原本的參考）
 // - 保留 raw 中未知的額外欄位，避免丟資料
 // - 處理舊格式：刪除 rewards；沒有 notes 但有 diaries 時轉成 notes；舊的維度代號換成新的（見 LEGACY_INDICATOR_IDS）
+// - 卡池裡沒有 id 的獎品補上固定的 id（見 ensurePrizeIds）
 export function normalizeData(raw: unknown): LifeSyncData {
   if (!isPlainObject(raw)) return createDefaultData();
 
@@ -172,7 +198,7 @@ export function normalizeData(raw: unknown): LifeSyncData {
 
   const prizes: Record<string, unknown> = isPlainObject(raw.lotteryPrizes) ? { ...raw.lotteryPrizes } : {};
   for (const rarity of RARITIES) {
-    prizes[rarity] = toArray(prizes[rarity]);
+    prizes[rarity] = ensurePrizeIds(toArray(prizes[rarity]), rarity);
   }
   result.lotteryPrizes = prizes;
 
@@ -193,7 +219,7 @@ export function normalizeData(raw: unknown): LifeSyncData {
   result.lotteryTickets = raw.lotteryTickets !== null && Number.isFinite(tickets) ? tickets : 0;
 
   // 到這裡，頂層每個欄位都已經是正確的格式（陣列欄位是陣列、goals／lotteryPrizes／lotteryProbability／cloudConfig
-  // 有該有的鍵、rewardFolderPath 是字串、lotteryTickets 是數字）。陣列裡每一筆的內容沒有逐筆檢查，
+  // 有該有的鍵、rewardFolderPath 是字串、lotteryTickets 是數字、卡池裡是物件的獎品都有 id）。陣列裡每一筆的內容沒有逐筆檢查，
   // 沿用原檔（這是原本的行為），所以讀巢狀欄位時仍要保留防呆，見 src/types/data.ts 開頭的說明。
   return result as unknown as LifeSyncData;
 }
