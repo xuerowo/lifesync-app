@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { Trophy, Clock, CheckCircle2, Zap, Timer, X, Calendar, ArrowRight, Sparkles, Pause, Play, Coffee, Flag, Target, BellRing } from 'lucide-react';
 import { formatFlowTime, calculatePomodoroStats, pomodoroWorkSeconds } from '../../utils';
+import { formatDisplayTime } from '../../utils/displayFormat';
 
 const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
   // hooks 必須在任何條件 return 之前呼叫，所以先用 ?. 取值，沒有 stats 時等 hooks 跑完才 return
@@ -11,15 +12,6 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
   const totalDuration = stats?.totalDuration;
   const timeline = stats?.timeline;
   const tasks = stats?.tasks;
-
-  const formatTimeStr = (isoStr) => {
-    const d = new Date(isoStr);
-    const h = d.getHours();
-    const m = d.getMinutes();
-    const ampm = h >= 12 ? '下午' : '上午';
-    const displayH = h % 12 || 12;
-    return `${ampm} ${displayH}:${m.toString().padStart(2, '0')}`;
-  };
 
   const { segments: statsSegments } = useMemo(() => {
     return calculatePomodoroStats(timeline);
@@ -78,13 +70,10 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
             <div className="w-12 h-12 bg-sky-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-sky-200">
               <Trophy className="w-6 h-6" />
             </div>
-            <div>
-              <h2 className="text-2xl font-black text-sky-900">專注結算</h2>
-              <p className="text-[10px] font-black text-sky-400 uppercase tracking-widest">Focus Session Summary</p>
-            </div>
+            <h2 className="text-2xl font-black text-sky-900">這次專注的紀錄</h2>
           </div>
           {onClose && (
-            <button onClick={onClose} className="p-2 hover:bg-sky-50 rounded-full text-sky-400 hover:text-sky-600 transition-colors">
+            <button onClick={onClose} title="關閉" aria-label="關閉" className="p-2 hover:bg-sky-50 rounded-full text-sky-400 hover:text-sky-600 transition-colors">
               <X className="w-6 h-6" />
             </button>
           )}
@@ -94,11 +83,12 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
           {/* Stats Grid */}
           <div className="grid grid-cols-3 gap-4">
             <div className="bg-sky-50/50 p-6 rounded-[32px] border border-sky-100 text-center">
-              <span className="text-[10px] font-black text-sky-600 uppercase tracking-widest block mb-2">總耗時</span>
-              <p className="text-3xl font-black text-sky-800 font-mono">{Math.floor(totalDuration / 60)}<span className="text-sm ml-1 font-sans">m</span></p>
+              <span className="text-[10px] font-black text-sky-600 uppercase tracking-widest block mb-2">全程時間</span>
+              {/* 和旁邊的專注時間用同一種寫法（分:秒），方便比較 */}
+              <p className="text-3xl font-black text-sky-800 font-mono">{formatFlowTime(Math.round(totalDuration || 0))}</p>
             </div>
             <div className="bg-indigo-50/50 p-6 rounded-[32px] border border-indigo-100 text-center">
-              <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest block mb-2">純專注</span>
+              <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest block mb-2">專注時間（含心流）</span>
               <p className="text-3xl font-black text-indigo-800 font-mono">
                 {/* 和結算畫面、抽卡券用同一個數字 */}
                 {formatFlowTime(pomodoroWorkSeconds(timeline))}
@@ -131,7 +121,7 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="w-2 h-2 rounded-full bg-amber-300" />
-                  <span className="text-[10px] font-bold text-slate-500">時間到、等待</span>
+                  <span className="text-[10px] font-bold text-slate-500">等待中</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="w-2 h-2 rounded-full bg-slate-300" />
@@ -211,7 +201,7 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
                           isBreak ? 'text-emerald-600' :
                           isAwait ? 'text-amber-600' :
                           'text-slate-600 group-hover/time:text-sky-700'
-                        }`}>{formatTimeStr(e.time)}</span>
+                        }`}>{formatDisplayTime(e.time)}</span>
                       </div>
                     </div>
                   );
@@ -228,7 +218,7 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
                     <div className="absolute top-[44px] flex flex-col items-center -translate-x-1/2 -translate-y-full pointer-events-auto">
                       <div className="bg-emerald-500/20 backdrop-blur-xl px-2 py-1 rounded-xl shadow-xl border border-white/40 flex flex-col items-center min-w-[70px] transition-all group-hover/task:scale-110 group-hover/task:bg-emerald-500/40 group-hover/task:border-emerald-300">
                         <p className="text-[9px] font-black text-emerald-900 whitespace-nowrap mb-0.5 group-hover/task:text-emerald-950">{m.taskTitle}</p>
-                        <p className="text-[8px] font-black text-emerald-800 whitespace-nowrap opacity-70 group-hover/task:opacity-100">{formatTimeStr(m.time)}</p>
+                        <p className="text-[8px] font-black text-emerald-800 whitespace-nowrap opacity-70 group-hover/task:opacity-100">{formatDisplayTime(m.time)}</p>
                         <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[5px] border-t-emerald-500/20 group-hover/task:border-t-emerald-500/40" />
                       </div>
                     </div>
@@ -266,7 +256,7 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
                   </span>
                   {task.isCompleted && (
                     <span className="ml-auto text-[10px] font-black text-emerald-400">
-                      {formatTimeStr(timeline.filter(e => e.type === 'task_complete' && e.taskId === task.id).pop()?.time)}
+                      {formatDisplayTime(timeline.filter(e => e.type === 'task_complete' && e.taskId === task.id).pop()?.time)}
                     </span>
                   )}
                 </div>

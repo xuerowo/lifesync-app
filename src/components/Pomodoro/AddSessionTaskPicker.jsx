@@ -4,10 +4,10 @@ import { Plus, Target, X } from 'lucide-react';
 import { formatTaskTime } from '../../utils';
 
 /**
- * 番茄鐘進行中，按「本次目標」旁的「＋」打開的選單：從可選的成長任務中加入目標。
+ * 專注計時進行中，按「這次要做的任務」旁的「＋」打開的選單：從可選的成長任務中加入。
  * 可選的任務和開始前的選擇清單是同一份規則（domain/pomodoro.js 的 pomodoroCandidateTasks），
- * 已經在本次目標裡的不再列出。加入後選單不關，方便一次加好幾個；Esc、背景、X、「完成」都能關閉。
- * 這裡只改目標清單，不碰計時。
+ * 已經在這次清單裡的不再列出。加入後選單不關，方便一次加好幾個；Esc、背景、X、「完成」都能關閉。
+ * 這裡只改這次的任務清單，不碰計時。
  */
 const AddSessionTaskPicker = ({ tasks, onAdd, onClose }) => {
   const closeRef = useRef(null);
@@ -39,13 +39,14 @@ const AddSessionTaskPicker = ({ tasks, onAdd, onClose }) => {
               <Target className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <h3 id="add-session-task-title" className="text-lg font-black text-sky-900">加入目標任務</h3>
+              <h3 id="add-session-task-title" className="text-lg font-black text-sky-900">加入任務</h3>
               <p className="text-[10px] md:text-xs font-bold text-sky-600">計時不會中斷</p>
             </div>
           </div>
           <button
             ref={closeRef}
             onClick={onClose}
+            title="關閉"
             aria-label="關閉"
             className="p-2 rounded-full text-sky-400 hover:text-sky-600 hover:bg-sky-50 transition-colors"
           >
@@ -58,8 +59,8 @@ const AddSessionTaskPicker = ({ tasks, onAdd, onClose }) => {
             <div className="text-center py-8 px-4">
               <p className="text-sm font-bold text-sky-700">沒有可以加入的成長任務</p>
               <p className="text-[10px] md:text-xs font-bold text-sky-500 mt-2 leading-relaxed">
-                成長任務都已經在本次目標裡，或今天已經完成。<br />
-                要新的任務，可以先到「計畫清單」新增，番茄鐘會照常計時。
+                成長任務都已經在這次的清單裡，或今天已經完成。<br />
+                要新的任務，可以先到「計畫清單」新增，這裡會照常計時。
               </p>
             </div>
           ) : (

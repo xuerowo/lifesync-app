@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import {
-  Timer, Settings2, Target, CheckCircle2, ChevronUp, ChevronDown, Play, Square, Pause, FastForward, Trophy, Gift, Infinity as InfinityIcon, Plus, Trash2, X, RotateCcw, BellOff, BellRing, Coffee
+  Timer, Settings2, Target, CheckCircle2, ChevronUp, ChevronDown, Play, Square, Pause, FastForward, Trophy, Gift, Infinity as InfinityIcon, Plus, X, RotateCcw, BellOff, BellRing, Coffee
 } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
 import { formatTime, formatFlowTime, calculatePomodoroStats, pomodoroWorkSeconds } from '../../utils';
@@ -53,7 +53,7 @@ const Pomodoro = ({
   const updateSettings = (patch) => setSettings(prev => normalizePomodoroSettings({ ...prev, ...patch }));
   const longBreakSettings = normalizePomodoroSettings(settings);
 
-  // 可選的目標任務（成長維度、未完成；規則見 domain/pomodoro.js，「＋」加入任務也用同一份）
+  // 可選的「這次要做的任務」（成長維度、未完成；規則見 domain/pomodoro.js，「＋」加入任務也用同一份）
   // 任務的先後和計畫清單一樣（使用者自己排的順序）
   const orderedSubTasks = useMemo(() => sortTasksLikePlanList(subTasks, data.majorTasks), [subTasks, data.majorTasks]);
   const candidateTasks = pomodoroCandidateTasks(orderedSubTasks);
@@ -277,17 +277,6 @@ const Pomodoro = ({
     }
   };
 
-  const moveSessionTask = (index, direction) => {
-    const newTasks = [...sessionTasks];
-    const targetIndex = index + direction;
-    if (targetIndex >= 0 && targetIndex < newTasks.length) {
-      [newTasks[index], newTasks[targetIndex]] = [newTasks[targetIndex], newTasks[index]];
-      setSessionTasks(newTasks);
-      // 同步更新 selectedTaskIds 以保持順序一致性
-      setSelectedTaskIds(newTasks.map(t => t.id));
-    }
-  };
-
   const addSessionTask = (task) => {
     if (!sessionTasks.find(t => t.id === task.id)) {
       const newTasks = [...sessionTasks, task];
@@ -305,7 +294,7 @@ const Pomodoro = ({
               <Timer className="w-6 h-6 md:w-7 md:h-7" />
             </div>
             <div>
-              <h2 className="text-2xl md:text-3xl font-black text-sky-900">心流番茄鐘</h2>
+              <h2 className="text-2xl md:text-3xl font-black text-sky-900">專注計時</h2>
               <p className="text-[8px] md:text-[10px] font-black text-sky-600 uppercase tracking-widest">專注當下，享受心流</p>
             </div>
           </div>
@@ -318,7 +307,7 @@ const Pomodoro = ({
                 </h3>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-[10px] md:text-xs font-bold text-sky-800 mb-2">專注時間 (分鐘)</label>
+                    <label className="block text-[10px] md:text-xs font-bold text-sky-800 mb-2">每輪專注時間（分鐘）</label>
                     <input
                       type="range"
                       min="5"
@@ -328,10 +317,10 @@ const Pomodoro = ({
                       onChange={(e) => updateSettings({ focus: Number(e.target.value) })}
                       className="w-full accent-sky-500 h-1.5 md:h-2"
                     />
-                    <div className="text-right text-lg md:text-xl font-black text-sky-700 mt-1">{settings.focus} min</div>
+                    <div className="text-right text-lg md:text-xl font-black text-sky-700 mt-1">{settings.focus} 分鐘</div>
                   </div>
                   <div>
-                    <label className="block text-[10px] md:text-xs font-bold text-sky-800 mb-2">休息時間 (分鐘)</label>
+                    <label className="block text-[10px] md:text-xs font-bold text-sky-800 mb-2">休息時間（分鐘）</label>
                     <input
                       type="range"
                       min="1"
@@ -340,9 +329,9 @@ const Pomodoro = ({
                       onChange={(e) => updateSettings({ break: Number(e.target.value) })}
                       className="w-full accent-emerald-500 h-1.5 md:h-2"
                     />
-                    <div className="text-right text-lg md:text-xl font-black text-emerald-600 mt-1">{settings.break} min</div>
+                    <div className="text-right text-lg md:text-xl font-black text-emerald-600 mt-1">{settings.break} 分鐘</div>
                   </div>
-                  {/* 長休息：每完成幾個番茄，那一次休息改用長休息的分鐘數 */}
+                  {/* 長休息：每完成幾輪，那一次休息改用長休息的分鐘數 */}
                   <div className="pt-3 border-t border-white/60">
                     <label className="flex items-center justify-between gap-3 cursor-pointer">
                       <span className="text-[10px] md:text-xs font-bold text-sky-800">長休息</span>
@@ -356,7 +345,7 @@ const Pomodoro = ({
                     {longBreakSettings.longBreakEnabled ? (
                       <div className="space-y-3 mt-3">
                         <div>
-                          <label className="block text-[10px] md:text-xs font-bold text-sky-800 mb-2">長休息時間 (分鐘)</label>
+                          <label className="block text-[10px] md:text-xs font-bold text-sky-800 mb-2">長休息時間（分鐘）</label>
                           <input
                             type="range"
                             min={POMODORO_RANGES.longBreakMinutes.min}
@@ -366,10 +355,10 @@ const Pomodoro = ({
                             onChange={(e) => updateSettings({ longBreakMinutes: Number(e.target.value) })}
                             className="w-full accent-emerald-500 h-1.5 md:h-2"
                           />
-                          <div className="text-right text-lg md:text-xl font-black text-emerald-600 mt-1">{longBreakSettings.longBreakMinutes} min</div>
+                          <div className="text-right text-lg md:text-xl font-black text-emerald-600 mt-1">{longBreakSettings.longBreakMinutes} 分鐘</div>
                         </div>
                         <div>
-                          <label className="block text-[10px] md:text-xs font-bold text-sky-800 mb-2">每幾個番茄一次</label>
+                          <label className="block text-[10px] md:text-xs font-bold text-sky-800 mb-2">每完成幾輪，休息一次長的</label>
                           <input
                             type="range"
                             min={POMODORO_RANGES.longBreakEvery.min}
@@ -379,14 +368,14 @@ const Pomodoro = ({
                             onChange={(e) => updateSettings({ longBreakEvery: Number(e.target.value) })}
                             className="w-full accent-emerald-500 h-1.5 md:h-2"
                           />
-                          <div className="text-right text-lg md:text-xl font-black text-emerald-600 mt-1">每 {longBreakSettings.longBreakEvery} 個</div>
+                          <div className="text-right text-lg md:text-xl font-black text-emerald-600 mt-1">每 {longBreakSettings.longBreakEvery} 輪</div>
                         </div>
                         <p className="text-[10px] md:text-[11px] font-bold text-slate-500">
-                          完成第 {longBreakSettings.longBreakEvery}、{longBreakSettings.longBreakEvery * 2}…個番茄後，休息 {longBreakSettings.longBreakMinutes} 分鐘
+                          完成第 {longBreakSettings.longBreakEvery}、{longBreakSettings.longBreakEvery * 2}……輪後，休息 {longBreakSettings.longBreakMinutes} 分鐘
                         </p>
                       </div>
                     ) : (
-                      <p className="mt-1 text-[10px] md:text-[11px] font-bold text-slate-500">關閉：每次都休息 {settings.break} 分鐘</p>
+                      <p className="mt-1 text-[10px] md:text-[11px] font-bold text-slate-500">未開啟：每次都休息 {settings.break} 分鐘</p>
                     )}
                   </div>
                 </div>
@@ -398,18 +387,20 @@ const Pomodoro = ({
                   <span className="font-black text-sky-800 text-sm md:text-base">獎勵規則</span>
                 </div>
                 <p className="text-[10px] md:text-xs font-bold text-sky-800 leading-relaxed">
-                  累積專注（專注 + 心流）滿 <span className="text-amber-600">50 分鐘</span>，
+                  專注時間（含心流）累積滿 <span className="text-amber-600">50 分鐘</span>，
                   可獲得 <span className="text-amber-600">1 張</span> 抽卡券；
                   <br className="hidden md:block" />
-                  滿 <span className="text-amber-600">100 分鐘</span>可獲得 <span className="text-amber-600">1+2 張</span>；
+                  滿 <span className="text-amber-600">100 分鐘</span>可獲得 <span className="text-amber-600">共 3 張（1＋2）</span>；
                   <br className="hidden md:block" />
-                  滿 <span className="text-amber-600">150 分鐘</span>可獲得 <span className="text-amber-600">1+2+3 張</span>……以此類推。
+                  滿 <span className="text-amber-600">150 分鐘</span>可獲得 <span className="text-amber-600">共 6 張（1＋2＋3）</span>……以此類推。
                   <br />
-                  <span className="text-rose-500 font-black">* 獎勵上限為 300 分鐘 (21 張券)</span>
+                  <span className="text-sky-700">* 心流：時間到也不停、想繼續就繼續計時（專注中按 ∞），這段時間也算專注時間</span>
                   <br />
-                  <span className="text-amber-600">* 在番茄鐘裡完成任務，照任務設定的張數給券，結算時和時間的券一起領取</span>
+                  <span className="text-rose-500 font-black">* 獎勵上限為 300 分鐘（21 張券）</span>
                   <br />
-                  <span className="text-[8px] md:text-[10px] text-sky-700 italic">* 休息時間不計入累積時長</span>
+                  <span className="text-amber-600">* 在專注計時裡完成任務，照任務設定的張數給券，結算時和時間的券一起領取</span>
+                  <br />
+                  <span className="text-[8px] md:text-[10px] text-sky-700 italic">* 休息時間不算專注時間</span>
                 </p>
               </div>
             </div>
@@ -417,11 +408,14 @@ const Pomodoro = ({
             <div className="flex flex-col h-full min-h-[300px]">
               <div className="bg-white/40 rounded-2xl md:rounded-[32px] p-5 md:p-6 border border-white/40 flex-grow mb-4 md:mb-6 overflow-hidden flex flex-col">
                 <h3 className="font-black text-sky-800 mb-3 md:mb-4 flex items-center gap-2 flex-shrink-0 text-sm md:text-base">
-                  <Target className="w-4 h-4 md:w-5 md:h-5" /> 選擇目標任務 (成長)
+                  <Target className="w-4 h-4 md:w-5 md:h-5" /> 選擇這次要做的任務（只列成長類）
                 </h3>
                 <div className="overflow-y-auto custom-scrollbar flex-grow pr-2 space-y-2">
                   {candidateTasks.length === 0 ? (
-                    <div className="text-center py-8 text-sky-500 font-bold text-xs md:text-sm">目前沒有未完成的成長任務</div>
+                    <div className="text-center py-8 px-4 text-sky-500 font-bold text-xs md:text-sm">
+                      <p>目前沒有未完成的成長任務</p>
+                      <p className="mt-2 text-[10px] md:text-xs text-sky-400 leading-relaxed">可以直接開始專注，或先到「計畫清單」新增成長任務</p>
+                    </div>
                   ) : (
                     candidateTasks.map(task => {
                       const isSelected = selectedTaskIds.includes(task.id);
@@ -467,6 +461,8 @@ const Pomodoro = ({
                                   }
                                 }}
                                 disabled={selectedIndex === 0}
+                                title="上移"
+                                aria-label="上移"
                                 className="p-0.5 text-sky-500 hover:text-sky-700 disabled:opacity-30 hover:bg-sky-50 rounded"
                               >
                                 <ChevronUp className="w-3 h-3" />
@@ -480,6 +476,8 @@ const Pomodoro = ({
                                   }
                                 }}
                                 disabled={selectedIndex === selectedTaskIds.length - 1}
+                                title="下移"
+                                aria-label="下移"
                                 className="p-0.5 text-sky-500 hover:text-sky-700 disabled:opacity-30 hover:bg-sky-50 rounded"
                               >
                                 <ChevronDown className="w-3 h-3" />
@@ -535,7 +533,7 @@ const Pomodoro = ({
             status === 'break' ? 'text-emerald-400' :
             status === 'flow' ? 'text-indigo-400' :
             'text-sky-600'
-          }`}>Status</span>
+          }`}>目前狀態</span>
           <h2 className={`text-xl md:text-3xl font-black ${
             status === 'break' ? 'text-emerald-800' :
             status === 'flow' ? 'text-indigo-800' :
@@ -545,7 +543,7 @@ const Pomodoro = ({
           </h2>
         </div>
         <div className="text-right">
-          <span className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Total</span>
+          <span className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">專注時間（含心流）</span>
           <p className="text-lg md:text-2xl font-black text-slate-600 font-mono">{formatFlowTime(totalAccumulated)}</p>
         </div>
       </div>
@@ -564,7 +562,7 @@ const Pomodoro = ({
             'text-sky-600/60'
         }`}>
           {awaiting
-            ? (status === 'break' ? '休息時間到了，準備好就開始專注' : `時間到！完成第 ${cycles} 個番茄`)
+            ? (status === 'break' ? '休息時間到了，準備好就開始專注' : `時間到！完成第 ${cycles} 輪`)
             : status === 'flow' ? '享受心流時刻' : status === 'break' ? '深呼吸，放鬆一下' : '保持專注，你做得到'}
         </p>
         {isPausedByAppClose(sessionTimeline, isPaused) && (
@@ -578,11 +576,11 @@ const Pomodoro = ({
         <div className="bg-white/40 backdrop-blur-sm rounded-2xl md:rounded-[32px] p-4 md:p-6 border border-white/40 shadow-sm">
           <div className="flex justify-between items-center mb-3 md:mb-4 px-1 md:px-2">
             <div className="w-8" />
-            <p className="text-[8px] md:text-[10px] font-black text-slate-600 uppercase tracking-widest text-center">本次目標</p>
+            <p className="text-[8px] md:text-[10px] font-black text-slate-600 uppercase tracking-widest text-center">這次要做的任務</p>
             <button
               onClick={() => setIsAddingTask(true)}
-              title="加入目標任務"
-              aria-label="加入目標任務"
+              title="加入任務"
+              aria-label="加入任務"
               className="p-1 md:p-1.5 bg-sky-500/10 text-sky-600 rounded-lg hover:bg-sky-500/20 transition-all"
             >
               <Plus className="w-3.5 h-3.5 md:w-4 md:h-4" />
@@ -592,7 +590,7 @@ const Pomodoro = ({
           <div className="space-y-2 max-h-[180px] md:max-h-[240px] overflow-y-auto custom-scrollbar pr-1 md:pr-2">
             {sessionTasks.length === 0 ? (
               <div className="text-center py-6">
-                <p className="text-[10px] md:text-xs font-bold text-slate-400">目前沒有目標任務</p>
+                <p className="text-[10px] md:text-xs font-bold text-slate-400">還沒有加入任務</p>
               </div>
             ) : (
               sessionTasks.map((task, index) => {
@@ -608,6 +606,8 @@ const Pomodoro = ({
                   }`}>
                     <button
                       onClick={() => handleSessionTaskComplete(task.id)}
+                      title={isInfinite ? '完成一次' : isCompleted ? '撤銷完成' : '完成'}
+                      aria-label={isInfinite ? '完成一次' : isCompleted ? '撤銷完成' : '完成'}
                       className={`flex-shrink-0 w-7 h-7 md:w-8 md:h-8 rounded-lg md:rounded-xl flex items-center justify-center transition-all ${
                         !isInfinite && isCompleted
                           ? 'bg-emerald-500 text-white shadow-lg scale-110'
@@ -629,6 +629,8 @@ const Pomodoro = ({
                           <div className="flex items-center gap-1 shrink-0">
                             <button
                               onClick={(e) => { e.stopPropagation(); handleSessionTaskRevert(task.id); }}
+                              title="撤銷最近一次完成"
+                              aria-label="撤銷最近一次完成"
                               className="p-0.5 text-rose-300 hover:text-rose-500 transition-colors"
                             >
                               <RotateCcw className="w-2.5 h-2.5 md:w-3 md:h-3" />
@@ -641,14 +643,16 @@ const Pomodoro = ({
                       </div>
                     </div>
                     
-                    {/* 這次已經完成過的任務不能移出目標（要先撤銷），否則畫面上的完成數會和結算的券數對不上 */}
+                    {/* 這次已經完成過的任務不能移出清單（要先撤銷），否則畫面上的完成數會和結算的券數對不上 */}
                     {((!isInfinite && !isCompleted) || (isInfinite && sessionCount === 0)) && (
                       <div className="flex items-center gap-0.5 md:gap-1 opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0">
                         <button
                           onClick={() => removeSessionTask(task.id)}
+                          title="從這次的清單移除（任務本身不會刪掉）"
+                          aria-label="從這次的清單移除（任務本身不會刪掉）"
                           className="p-1 text-slate-400 hover:text-rose-500"
                         >
-                          <Trash2 className="w-3 md:w-3.5 h-3 md:h-3.5" />
+                          <X className="w-3 md:w-3.5 h-3 md:h-3.5" />
                         </button>
                       </div>
                     )}
@@ -666,8 +670,8 @@ const Pomodoro = ({
           <div className="flex items-center gap-3 md:gap-4 w-full">
             <button
               onClick={stopTimer}
-              title="結束這次番茄鐘"
-              aria-label="結束這次番茄鐘"
+              title="結束並結算"
+              aria-label="結束並結算"
               className="p-3.5 md:p-4 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded-2xl md:rounded-[24px] shadow-lg border border-transparent transition-all hover:scale-110 active:scale-95 shrink-0"
             >
               <Square className="w-5 h-5 md:w-6 md:h-6 fill-current" />
@@ -716,6 +720,7 @@ const Pomodoro = ({
                 </button>
                 <button
                   onClick={enterFlow}
+                  title="時間到也不停，繼續計時"
                   className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/80 hover:bg-white text-[11px] md:text-xs font-bold text-slate-500 hover:text-indigo-600 shadow-sm transition-all"
                 >
                   <InfinityIcon className="w-3.5 h-3.5" /> 繼續心流
@@ -733,6 +738,8 @@ const Pomodoro = ({
       <div className="relative z-10 flex items-center gap-4 md:gap-6">
         <button
           onClick={stopTimer}
+          title="結束並結算"
+          aria-label="結束並結算"
           className="p-3.5 md:p-4 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded-2xl md:rounded-[24px] shadow-lg border border-transparent transition-all hover:scale-110 active:scale-95"
         >
           <Square className="w-5 h-5 md:w-6 md:h-6 fill-current" />
@@ -740,6 +747,8 @@ const Pomodoro = ({
 
         <button
           onClick={togglePause}
+          title={isPaused ? '繼續' : '暫停'}
+          aria-label={isPaused ? '繼續' : '暫停'}
           className={`p-5 md:p-6 rounded-[24px] md:rounded-[32px] shadow-xl text-white transition-all hover:scale-105 active:scale-95 ${
             status === 'break' ? 'bg-emerald-400 hover:bg-emerald-500' :
             status === 'flow' ? 'bg-indigo-400 hover:bg-indigo-500' :
@@ -753,12 +762,16 @@ const Pomodoro = ({
           <React.Fragment>
             <button
               onClick={skipToBreak}
+              title="提早休息（專注時間照算，但這一輪不算完成）"
+              aria-label="提早休息（專注時間照算，但這一輪不算完成）"
               className="p-3.5 md:p-4 bg-white hover:bg-emerald-50 text-slate-400 hover:text-emerald-500 rounded-2xl md:rounded-[24px] shadow-lg border border-transparent transition-all hover:scale-110 active:scale-95"
             >
               <FastForward className="w-5 h-5 md:w-6 md:h-6 fill-current" />
             </button>
             <button
               onClick={enterFlow}
+              title="進入心流：時間到也不停，繼續計時"
+              aria-label="進入心流：時間到也不停，繼續計時"
               className="p-3.5 md:p-4 bg-white hover:bg-indigo-50 text-slate-400 hover:text-indigo-500 rounded-2xl md:rounded-[24px] shadow-lg border border-transparent transition-all hover:scale-110 active:scale-95"
             >
               <InfinityIcon className="w-5 h-5 md:w-6 md:h-6" />
@@ -769,6 +782,8 @@ const Pomodoro = ({
         {(status === 'flow' || status === 'break') && (
           <button
             onClick={status === 'flow' ? endFlow : skipToFocus}
+            title={status === 'flow' ? '結束心流，開始休息' : '跳過休息，開始專注'}
+            aria-label={status === 'flow' ? '結束心流，開始休息' : '跳過休息，開始專注'}
             className="p-3.5 md:p-4 bg-white hover:bg-emerald-50 text-slate-400 hover:text-emerald-500 rounded-2xl md:rounded-[24px] shadow-lg border border-transparent transition-all hover:scale-110 active:scale-95"
           >
             <FastForward className="w-5 h-5 md:w-6 md:h-6 fill-current" />
@@ -777,7 +792,7 @@ const Pomodoro = ({
       </div>
       )}
 
-      {/* 進行中加入目標任務（專注、心流、休息都可以）；只是畫面上的清單，不影響計時 */}
+      {/* 進行中加入任務（專注、心流、休息都可以）；只是畫面上的清單，不影響計時 */}
       {isAddingTask && !showSummary && !showSettlement && (
         <AddSessionTaskPicker
           tasks={addableSessionTasks(orderedSubTasks, sessionTasks)}
@@ -810,7 +825,7 @@ const Pomodoro = ({
 
           <div className="grid grid-cols-2 gap-4 md:gap-8 mb-8 md:mb-12 w-full max-w-lg">
             <div className="bg-sky-50 rounded-2xl md:rounded-[32px] p-4 md:p-6 text-center border border-sky-100">
-              <span className="text-[8px] md:text-[10px] font-black text-sky-600 uppercase tracking-widest block mb-1 md:mb-2">專注時長</span>
+              <span className="text-[8px] md:text-[10px] font-black text-sky-600 uppercase tracking-widest block mb-1 md:mb-2">專注時間（含心流）</span>
               <p className="text-xl md:text-3xl font-black text-sky-800">{formatFlowTime(settledWorkSeconds)}</p>
             </div>
             <div className="bg-emerald-50 rounded-2xl md:rounded-[32px] p-4 md:p-6 text-center border border-emerald-100">
@@ -838,11 +853,11 @@ const Pomodoro = ({
               onClick={() => handleSettlement({ claim: false })}
               className="w-full py-3 md:py-4 bg-sky-100 hover:bg-sky-200 text-sky-700 rounded-2xl md:rounded-[24px] font-black text-base md:text-lg transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 md:gap-3"
             >
-              <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" /> 結束
+              <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" /> {settlementTickets.total > 0 ? '不領取，直接結束' : '結束'}
             </button>
             {settlementTickets.total > 0 && (
               <p className="text-center text-[10px] md:text-xs font-bold text-rose-400">
-                按「結束」不會領券，這次的 {settlementTickets.total} 張抽卡券就不給了
+                這次的 {settlementTickets.total} 張抽卡券會作廢
               </p>
             )}
           </div>
