@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
-  LayoutDashboard, Zap, CheckCircle2, CalendarDays, Lock, Edit3, Archive, Trash2, Plus, ChevronUp, ChevronDown, Settings2, RotateCcw, GripVertical
+  LayoutDashboard, Zap, CheckCircle2, CalendarDays, Lock, Edit3, Archive, Trash2, Plus, ChevronUp, ChevronDown, Settings2, RotateCcw, GripVertical, Tag
 } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, useSortable, rectSortingStrategy, verticalListSortingStrategy, sortableKeyboardCoordinates, defaultAnimateLayoutChanges } from '@dnd-kit/sortable';
@@ -13,6 +13,7 @@ import {
   completeMajorTaskMessage, deleteMajorTaskMessage, deleteSubTaskMessage, revertCompletionMessage
 } from '../../domain/confirmations.js';
 import { applySortOrders, reorderSortOrders, sortBySortOrder } from '../../shared/taskOrder';
+import { completionRewardTickets } from '../../domain/tasks';
 
 // 可以拖曳換位置的一格。拖曳只從「把手」開始（handleProps 給把手按鈕），點卡片其他地方照常操作。
 // 位移用 dnd-kit 的 transform，所以裡面的動畫不要用 framer-motion 的 layout（兩者都改 transform 會互相干擾）。
@@ -364,6 +365,20 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                     <div className="relative flex items-center mt-1 min-h-[24px]">
                       <div className="flex items-center gap-1.5 flex-wrap min-w-0">
                         <span className="text-[10px] md:text-[11px] font-semibold text-sky-600/90">{formatTaskTime(sub)}</span>
+                        {(() => {
+                          // 完成一次可以拿幾張抽卡券（任務設定裡的張數）；0 張時淡淡地顯示
+                          const reward = completionRewardTickets(sub);
+                          return (
+                            <span
+                              className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] md:text-[10px] font-black leading-none border ${
+                                reward > 0 ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-slate-50 text-slate-400 border-slate-200'
+                              }`}
+                              title={`完成一次可得 ${reward} 張抽卡券`}
+                            >
+                              <Tag className="w-2.5 h-2.5 md:w-3 md:h-3 fill-current" />+{reward}
+                            </span>
+                          );
+                        })()}
                         {(sub.type === 'daily' || sub.type === 'weekly' || sub.type === 'infinite') && sub.completionCount > 0 && (
                           <>
                             <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 text-[9px] md:text-[10px] font-black leading-none border border-emerald-500/20" title={`已完成 ${sub.completionCount} 次`}>
