@@ -46,7 +46,7 @@ export function getUsablePrizes(lotteryPrizes, rarity) {
   return Array.isArray(list) ? list.filter(isUsablePrize) : [];
 }
 
-/** 獎池裡是否至少有一個抽得出東西的獎品 */
+/** 卡池裡是否至少有一個抽得出東西的獎品 */
 export function hasAnyUsablePrize(lotteryPrizes) {
   return RARITIES.some(r => getUsablePrizes(lotteryPrizes, r).length > 0);
 }
@@ -85,7 +85,7 @@ export function drawFromRarity(lotteryPrizes, rarity, rand = Math.random) {
 
 /**
  * 抽一次：依機率抽稀有度，該稀有度沒有獎品時往低、再往高找。
- * 整個獎池都沒有可用獎品時回傳 null（呼叫端不應扣券）。
+ * 整個卡池都沒有可用獎品時回傳 null（呼叫端不應扣券）。
  *
  * @returns {{ rarity: string, prize: object } | null}
  */

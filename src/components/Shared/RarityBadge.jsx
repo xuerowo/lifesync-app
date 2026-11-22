@@ -1,5 +1,5 @@
 import React from 'react';
-import { RARITY_STYLES } from '../../constants/index.jsx';
+import { RARITY_NAMES } from '../../constants/index.jsx';
 
 const RarityBadge = ({ rarity, size = 'sm' }) => {
   const isLarge = size === 'lg';
@@ -14,7 +14,7 @@ const RarityBadge = ({ rarity, size = 'sm' }) => {
   };
 
   return (
-    <div className={`relative inline-flex items-center justify-center font-black backdrop-blur-md overflow-hidden group transition-all duration-300 hover:scale-110 hover:-translate-y-1 active:scale-95 border ${
+    <div title={RARITY_NAMES[rarity] ? `${rarity}（${RARITY_NAMES[rarity]}）` : undefined} className={`relative inline-flex items-center justify-center font-black backdrop-blur-md overflow-hidden group transition-all duration-300 hover:scale-110 hover:-translate-y-1 active:scale-95 border ${
       isLarge ? 'px-6 py-2 rounded-2xl text-xl tracking-tighter shadow-xl' : 'px-3 py-1 rounded-full text-[10px] tracking-wider shadow-sm'
     } ${glassConfigs[rarity]}`}>
       {/* Inner Glossy Gradient */}

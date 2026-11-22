@@ -13,7 +13,7 @@ import { commitCountDraft, sanitizeCountDraft } from '../../domain/inputs';
  * 但數字欄位在有游標時，滑鼠滾輪滾過去會偷偷改掉數字，所以把滾輪改成照常捲動頁面。
  * 上下方向鍵加減 1（最少 1）；數字以外的字元（e、-、小數點）打不進去。
  */
-export default function AchievementConditionInput({ value, onCommit, className }) {
+export default function AchievementConditionInput({ value, onCommit, className, ariaLabel = '要完成幾次任務' }) {
   const [draft, setDraft] = useState(null); // null = 沒在編輯，直接顯示目前的次數
   const cancelRef = useRef(false);
   const startValueRef = useRef(value); // 開始編輯時的次數：沒改就不存，避免蓋掉編輯途中從別處來的新值
@@ -46,6 +46,7 @@ export default function AchievementConditionInput({ value, onCommit, className }
       type="number"
       min="1"
       className={className}
+      aria-label={ariaLabel}
       value={draft ?? String(value ?? '')}
       onFocus={() => {
         cancelRef.current = false;

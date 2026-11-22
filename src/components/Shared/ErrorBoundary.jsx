@@ -7,7 +7,7 @@ const MAX_MESSAGE_LENGTH = 300;
 
 const summarize = (error) => {
   const text = String(error?.message || error || '未知的錯誤').trim();
-  return text.length > MAX_MESSAGE_LENGTH ? `${text.slice(0, MAX_MESSAGE_LENGTH)}…` : text;
+  return text.length > MAX_MESSAGE_LENGTH ? `${text.slice(0, MAX_MESSAGE_LENGTH)}……` : text;
 };
 
 /**

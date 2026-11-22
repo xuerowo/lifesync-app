@@ -30,7 +30,7 @@ describe('ErrorBoundary', () => {
 
   it('過長的錯誤訊息會被截短', () => {
     const html = renderWithState({ error: new Error('x'.repeat(1000)) });
-    expect(html).toContain(`${'x'.repeat(300)}…`);
+    expect(html).toContain(`${'x'.repeat(300)}……`);
     expect(html).not.toContain('x'.repeat(301));
   });
 

@@ -56,6 +56,15 @@ export const RARITY_STYLES = {
   }
 };
 
+/** 稀有度的中文名稱（畫面上保留 N／R／SR／SSR／UR，旁邊用這個說明） */
+export const RARITY_NAMES = {
+  N: '普通',
+  R: '稀有',
+  SR: '超稀有',
+  SSR: '傳說',
+  UR: '神話'
+};
+
 export const INDICATORS = [
   { id: 'growth', name: '成長', icon: <Sprout className="w-5 h-5" />, color: 'from-blue-400 to-indigo-400' },
   { id: 'health', name: '健康', icon: <Heart className="w-5 h-5" />, color: 'from-cyan-400 to-teal-400' },

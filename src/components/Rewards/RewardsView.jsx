@@ -4,14 +4,22 @@ import IpcImage from '../Shared/IpcImage';
 import { Gift, Percent, CheckCircle2, Zap, ImageIcon, Search, ChevronDown, Plus, BarChart3, Edit3, Trash2, ChevronLeft, ChevronRight, Sprout, Heart, Smile, Trophy, RotateCw, Star, ArrowUp, ArrowDown, Sparkles, History, Tag, Layers } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
 import { useLottery } from '../../hooks/useLottery';
-import { RARITY_STYLES, ITEMS_PER_PAGE } from '../../constants/index.jsx';
+import { RARITY_STYLES, RARITY_NAMES, ITEMS_PER_PAGE } from '../../constants/index.jsx';
 import RarityBadge from '../Shared/RarityBadge';
 import { deleteAchievementMessage } from '../../domain/confirmations.js';
 import { getPrizeSortName } from '../../domain/lottery';
-import { clampPage, getTotalPages } from '../../domain/pagination';
+import { clampPage, formatPageRange, getTotalPages } from '../../domain/pagination';
 import { toNonNegativeInt, toNonNegativeNumber } from '../../domain/inputs';
 import AchievementConditionInput from './AchievementConditionInput';
 import { focusCardTextField } from '../../utils/cardFocus.js';
+import { formatDisplayDate, formatDisplayTime } from '../../utils/displayFormat.js';
+
+// 刪除抽卡紀錄的確認文字：抽卡券不會退回；還沒領取的會從「待領取」一起消失
+const deleteRewardRecordsMessage = (records) => {
+  const head = records.length === 1 ? '確定要刪除這筆抽卡紀錄嗎？' : `確定要刪除選取的 ${records.length} 筆抽卡紀錄嗎？`;
+  const hasUnclaimed = records.some(r => r && !r.claimed);
+  return `${head}\n抽卡券不會退回${hasUnclaimed ? '；還沒領取的獎勵也會一起消失' : ''}。刪除後無法復原。`;
+};
 
 const EditableContent = ({ initialValue, onSave, className, placeholder }) => {
   const [localValue, setLocalValue] = useState(initialValue);
@@ -114,17 +122,17 @@ const RewardsView = ({
         if (failedCount > 0) {
           alert(`已加入 ${targetRarity} 級卡池，但有部分圖片複製失敗：成功 ${finalImages.length} 張，失敗 ${failedCount} 張。`);
         } else {
-          alert(`成功載入並同步圖片池 (${finalImages.length} 張) 到 ${targetRarity} 級卡池！`);
+          alert(`已把 ${finalImages.length} 張圖片加入 ${targetRarity} 級卡池。`);
         }
       } else { alert(`掃描失敗：${result.error}`); }
-    } catch (error) { alert(`掃描失敗: ${error.message}`); } finally { setIsScanning(false); }
+    } catch (error) { alert(`掃描失敗：${error.message}`); } finally { setIsScanning(false); }
   };
 
   const claimAchievementReward = (achievement) => {
     if (achievement.claimed) return;
     const currentCount = getIndicatorStats(achievement.type);
     if (currentCount < achievement.condition) {
-      alert(`尚未達成條件！目前進度：${currentCount}/${achievement.condition}`);
+      alert(`還沒達成條件：已完成 ${currentCount} 次任務，需要 ${achievement.condition} 次。`);
       return;
     }
     updateData(prev => ({
@@ -156,7 +164,7 @@ const RewardsView = ({
     }
 
     if (results.length === 0) {
-      alert('獎池沒有可用的獎品，請先新增獎品');
+      alert('卡池裡還沒有可以抽的獎品，請先到「卡池設定」新增獎品。');
       return;
     }
 
@@ -186,13 +194,13 @@ const RewardsView = ({
             <Gift className="w-6 h-6 md:w-8 md:h-8" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-2xl md:text-4xl font-black text-sky-900 tracking-tight">獎勵寶庫</h2>
+            <h2 className="text-2xl md:text-4xl font-black text-sky-900 tracking-tight">獎勵庫</h2>
             <nav className="flex gap-4 mt-1 overflow-x-auto no-scrollbar pb-1">
               {[
                 { id: 'lottery', name: '抽卡大廳' },
-                { id: 'config', name: '卡池配置' },
+                { id: 'config', name: '卡池設定' },
                 { id: 'pending', name: '待領取', count: data.rewardHistory.filter(h => !h.claimed).length },
-                { id: 'history', name: '中獎紀錄' },
+                { id: 'history', name: '抽卡紀錄' },
                 { id: 'achievements', name: '成就區', count: data.achievements.filter(a => {
                   const currentCount = getIndicatorStats(a.type);
                   return currentCount >= a.condition && !a.claimed;
@@ -222,7 +230,7 @@ const RewardsView = ({
         </div>
         <div className="flex flex-wrap gap-2">
           {['UR', 'SSR', 'SR', 'R', 'N'].map(r => (
-            <div key={r} className={`px-2 py-1 md:px-3 md:py-1.5 rounded-xl md:rounded-2xl bg-white/60 backdrop-blur-sm border-2 ${RARITY_STYLES[r].border} flex items-center gap-1.5 md:gap-2 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 md:hover:-translate-y-1.5 hover:scale-105`}>
+            <div key={r} title={`${r} 卡池裡有 ${data.lotteryPrizes[r].length} 個獎品`} className={`px-2 py-1 md:px-3 md:py-1.5 rounded-xl md:rounded-2xl bg-white/60 backdrop-blur-sm border-2 ${RARITY_STYLES[r].border} flex items-center gap-1.5 md:gap-2 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 md:hover:-translate-y-1.5 hover:scale-105`}>
               <RarityBadge rarity={r} size="xs" />
               <span className={`text-[10px] md:text-xs font-black ${RARITY_STYLES[r].color}`}>{data.lotteryPrizes[r].length}</span>
             </div>
@@ -248,13 +256,14 @@ const RewardsView = ({
                       onChange={(e) => updateData(prev => ({ ...prev, lotteryTickets: toNonNegativeInt(e.target.value) }))}
                       style={{ width: `${(data.lotteryTickets || 0).toString().length + 1.5}ch`, minWidth: '3ch' }}
                       className="bg-sky-50/50 hover:bg-white focus:bg-white text-amber-500 text-xl md:text-2xl font-black px-2 rounded-xl outline-none border-2 border-transparent focus:border-amber-300 transition-all text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      title="點擊編輯數量"
+                      title="點一下可以修改張數"
+                      aria-label="持有抽卡券張數"
                     />
                     <span className="text-sm md:text-lg font-black text-sky-900">張</span>
                   </div>
                 </div>
                 <h3 className="text-3xl md:text-4xl font-black text-sky-900 tracking-tight mb-1 md:mb-2">幸運抽卡</h3>
-                <p className="text-xs md:text-sm text-sky-500 font-bold">消耗抽卡券，獲取隨機獎勵</p>
+                <p className="text-xs md:text-sm text-sky-500 font-bold">消耗抽卡券，抽一個隨機獎勵</p>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-4 md:gap-6 w-full max-w-2xl justify-center">
@@ -267,7 +276,7 @@ const RewardsView = ({
                     <Sparkles className="w-8 h-8 md:w-12 md:h-12" />
                   </div>
                   <div className="text-center">
-                    <h4 className="text-xl md:text-2xl font-black text-sky-900 mb-0.5 md:mb-1">單次召喚</h4>
+                    <h4 className="text-xl md:text-2xl font-black text-sky-900 mb-0.5 md:mb-1">單抽</h4>
                     <p className="text-sky-500 font-bold text-xs md:text-sm">消耗 1 張抽卡券</p>
                   </div>
                 </button>
@@ -277,7 +286,7 @@ const RewardsView = ({
                   disabled={(data.lotteryTickets || 0) < 9}
                   className="group relative flex-1 aspect-[4/5] sm:aspect-auto sm:w-64 sm:h-80 bg-gradient-to-br from-amber-50 to-orange-50 hover:from-white hover:to-white rounded-[32px] border-2 border-amber-200 hover:border-amber-300 shadow-xl transition-all hover:-translate-y-2 hover:shadow-2xl flex flex-col items-center justify-center gap-4 md:gap-6 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-xl p-6"
                 >
-                  <div className="absolute top-3 right-3 md:top-4 md:right-4 px-2 md:px-3 py-1 bg-rose-500 text-white text-[8px] md:text-[10px] font-black rounded-full shadow-md">九折優惠</div>
+                  <div className="absolute top-3 right-3 md:top-4 md:right-4 px-2 md:px-3 py-1 bg-rose-500 text-white text-[8px] md:text-[10px] font-black rounded-full shadow-md">10 抽只要 9 張</div>
                   <div className="w-16 h-16 md:w-24 md:h-24 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform duration-500">
                     <div className="relative">
                       <Sparkles className="w-8 h-8 md:w-12 md:h-12" />
@@ -285,7 +294,7 @@ const RewardsView = ({
                     </div>
                   </div>
                   <div className="text-center">
-                    <h4 className="text-xl md:text-2xl font-black text-amber-800 mb-0.5 md:mb-1">十連召喚</h4>
+                    <h4 className="text-xl md:text-2xl font-black text-amber-800 mb-0.5 md:mb-1">十連抽</h4>
                     <p className="text-amber-600 font-bold text-xs md:text-sm">消耗 <span className="line-through opacity-50 mr-1">10</span> <span className="text-rose-500 font-black">9</span> 張抽卡券</p>
                   </div>
                 </button>
@@ -319,12 +328,12 @@ const RewardsView = ({
                     >
                       {total === 100 ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Zap className="w-3.5 h-3.5 animate-pulse" />}
                       目前總和：{total}%
-                      {total !== 100 && <span className="opacity-60 ml-1">(需等於 100%)</span>}
+                      {total !== 100 && <span className="opacity-60">（總和要剛好 100%）</span>}
                     </motion.div>
                   );
                 })()}
               </div>
-              <div className="h-16 w-full bg-gray-900/5 rounded-[2rem] p-1.5 mb-10 shadow-inner border border-white/60 flex overflow-hidden">
+              <div className="h-16 w-full bg-gray-900/5 rounded-[2rem] p-1.5 mb-4 shadow-inner border border-white/60 flex overflow-hidden">
                 <div className="flex-grow flex rounded-[1.6rem] overflow-hidden shadow-2xl relative">
                   <div className="absolute inset-0 z-10 pointer-events-none bg-gradient-to-b from-white/30 via-white/5 to-black/10" />
                   {['UR', 'SSR', 'SR', 'R', 'N'].map(r => {
@@ -335,15 +344,18 @@ const RewardsView = ({
                   })}
                 </div>
               </div>
+              <p className="text-xs font-bold text-sky-500 mb-6">
+                稀有度由低到高：{['N', 'R', 'SR', 'SSR', 'UR'].map(r => `${r} ${RARITY_NAMES[r]}`).join('、')}
+              </p>
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-4">
                 {['UR', 'SSR', 'SR', 'R', 'N'].map(r => (
-                  <div key={r} className={`relative group p-4 rounded-3xl border-2 transition-all ${RARITY_STYLES[r].lightBg} ${RARITY_STYLES[r].border} hover:bg-white`}><div className="flex justify-between items-start mb-2"><span className={`text-xs font-black ${RARITY_STYLES[r].color}`}>{r}</span>{RARITY_STYLES[r].icon}</div><div className="flex items-baseline gap-1"><input type="number" min="0" value={data.lotteryProbability[r]} onChange={(e) => updateData(prev => ({ ...prev, lotteryProbability: { ...prev.lotteryProbability, [r]: toNonNegativeNumber(e.target.value) } }))} className={`w-full bg-transparent text-2xl font-black ${RARITY_STYLES[r].color} outline-none`} /><span className="text-xs font-bold text-gray-400">%</span></div></div>
+                  <div key={r} className={`relative group p-4 rounded-3xl border-2 transition-all ${RARITY_STYLES[r].lightBg} ${RARITY_STYLES[r].border} hover:bg-white`}><div className="flex justify-between items-start mb-2"><span className={`text-xs font-black ${RARITY_STYLES[r].color}`}>{r}</span>{RARITY_STYLES[r].icon}</div><div className="flex items-baseline gap-1"><input type="number" min="0" aria-label={`${r}（${RARITY_NAMES[r]}）的機率`} value={data.lotteryProbability[r]} onChange={(e) => updateData(prev => ({ ...prev, lotteryProbability: { ...prev.lotteryProbability, [r]: toNonNegativeNumber(e.target.value) } }))} className={`w-full bg-transparent text-2xl font-black ${RARITY_STYLES[r].color} outline-none`} /><span className="text-xs font-bold text-gray-400">%</span></div></div>
                 ))}
               </div>
             </div>
             <div className="bg-sky-900/5 backdrop-blur-xl rounded-[40px] p-8 border border-white/50 shadow-xl flex flex-col justify-between">
-              <div><div className="flex items-center gap-3 mb-6"><div className="p-2 bg-sky-100 rounded-xl text-sky-500"><ImageIcon className="w-5 h-5" /></div><h3 className="text-xl font-black text-sky-900">圖庫同步</h3></div><div className="space-y-4"><div className="relative"><input type="text" value={data.rewardFolderPath} onChange={(e) => updateData(prev => ({ ...prev, rewardFolderPath: e.target.value }))} placeholder="資料夾路徑..." className="w-full bg-white p-4 pl-10 rounded-2xl text-sm font-bold text-sky-800 outline-none border-2 border-transparent focus:border-sky-300 shadow-sm" /><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /></div><div className="relative flex-grow"><select id="targetRarity" className="w-full appearance-none bg-white p-4 rounded-2xl text-sm font-black text-sky-800 outline-none border-2 border-transparent focus:border-sky-300 cursor-pointer"><option value="N">N 級卡池</option><option value="R">R 級卡池</option><option value="SR">SR 級卡池</option><option value="SSR">SSR 級卡池</option><option value="UR">UR 級卡池</option></select><ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-sky-400 pointer-events-none" /></div></div></div>
-              <button onClick={() => { const targetRarity = document.getElementById('targetRarity').value; scanRewardFolder(data.rewardFolderPath, targetRarity); }} disabled={isScanning} className={`group relative w-full mt-6 py-4 rounded-[1.5rem] font-black transition-all hover:-translate-y-2 hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 overflow-hidden shadow-xl ${isScanning ? 'bg-slate-400/20 text-slate-400 cursor-wait' : 'bg-slate-900/10 backdrop-blur-md border border-slate-900/20 text-slate-900 hover:bg-slate-900/20'}`}>{!isScanning && (<div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:animate-shine pointer-events-none" />)}{isScanning ? <RotateCw className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform duration-500" />}{isScanning ? '掃描中...' : '加入卡池'}</button>
+              <div><div className="flex items-center gap-3 mb-6"><div className="p-2 bg-sky-100 rounded-xl text-sky-500"><ImageIcon className="w-5 h-5" /></div><h3 className="text-xl font-black text-sky-900">從資料夾加入圖片</h3></div><div className="space-y-4"><div className="relative"><input type="text" value={data.rewardFolderPath} onChange={(e) => updateData(prev => ({ ...prev, rewardFolderPath: e.target.value }))} placeholder="資料夾路徑" aria-label="圖片資料夾路徑" className="w-full bg-white p-4 pl-10 rounded-2xl text-sm font-bold text-sky-800 outline-none border-2 border-transparent focus:border-sky-300 shadow-sm" /><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /></div><div className="relative flex-grow"><select id="targetRarity" aria-label="加入哪個稀有度的卡池" className="w-full appearance-none bg-white p-4 rounded-2xl text-sm font-black text-sky-800 outline-none border-2 border-transparent focus:border-sky-300 cursor-pointer"><option value="N">N 級卡池</option><option value="R">R 級卡池</option><option value="SR">SR 級卡池</option><option value="SSR">SSR 級卡池</option><option value="UR">UR 級卡池</option></select><ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-sky-400 pointer-events-none" /></div></div></div>
+              <button onClick={() => { const targetRarity = document.getElementById('targetRarity').value; scanRewardFolder(data.rewardFolderPath, targetRarity); }} disabled={isScanning} className={`group relative w-full mt-6 py-4 rounded-[1.5rem] font-black transition-all hover:-translate-y-2 hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 overflow-hidden shadow-xl ${isScanning ? 'bg-slate-400/20 text-slate-400 cursor-wait' : 'bg-slate-900/10 backdrop-blur-md border border-slate-900/20 text-slate-900 hover:bg-slate-900/20'}`}>{!isScanning && (<div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:animate-shine pointer-events-none" />)}{isScanning ? <RotateCw className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform duration-500" />}{isScanning ? '掃描中……' : '加入卡池'}</button>
             </div>
           </div>
           <div className="space-y-8">
@@ -354,7 +366,7 @@ const RewardsView = ({
                 <div key={rarity} className={`bg-white/40 backdrop-blur-md rounded-[40px] border-2 ${style.border} shadow-xl relative`} style={{ zIndex: 10 - idx }}>
                   <div className={`p-6 bg-gradient-to-r ${style.gradient} relative overflow-hidden flex justify-between items-center rounded-t-[38px]`}><div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" /><div className="relative z-10 flex items-center gap-4"><div className="p-2 bg-white/20 backdrop-blur-sm rounded-xl text-white">{style.icon}</div><h3 className="text-3xl font-black text-white italic tracking-tighter">{rarity}</h3><span className="px-3 py-1 bg-white/20 rounded-full text-xs font-bold text-white backdrop-blur-sm border border-white/30">{prizes.length} 個獎品</span></div><button onClick={() => { updateData(prev => ({ ...prev, lotteryPrizes: { ...prev.lotteryPrizes, [rarity]: [...prev.lotteryPrizes[rarity], { id: crypto.randomUUID(), type: 'text', content: '' }] } })); }} className="group relative z-10 p-3 bg-white/20 hover:bg-white text-white hover:text-sky-600 rounded-2xl transition-all backdrop-blur-sm shadow-xl border border-white/30 hover:scale-110 active:scale-90" title="新增文字獎品"><Plus className="w-6 h-6 group-hover:rotate-90 transition-transform duration-500" /></button></div>
                   <div className="p-6">
-                    {prizes.length === 0 ? (<div className={`py-12 text-center border-2 border-dashed ${style.border} rounded-3xl bg-white/30`}><p className={`${style.color} font-bold text-sm opacity-60`}>暫無獎品</p></div>) : (
+                    {prizes.length === 0 ? (<div className={`py-12 text-center border-2 border-dashed ${style.border} rounded-3xl bg-white/30`}><p className={`${style.color} font-bold text-sm opacity-60`}>還沒有獎品</p></div>) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {prizes.map((prize, pIdx) => (
                           <div key={prize.id} onMouseDown={prize.type === 'text' ? focusCardTextField : undefined} className={`group bg-white hover:bg-sky-50 p-4 rounded-3xl border border-sky-100 shadow-sm hover:shadow-md transition-all duration-200 relative hover:z-20 flex flex-col h-auto ${prize.type === 'text' ? 'cursor-text' : ''}`}>{/* 文字獎品：點卡片上的空白也能直接打字，見 utils/cardFocus.js */}
@@ -372,16 +384,16 @@ const RewardsView = ({
                                     }));
                                   }}
                                   className="w-full bg-transparent font-bold text-gray-700 outline-none focus:text-sky-600 transition-colors border-b border-transparent focus:border-sky-200 pb-1 resize-none overflow-hidden block break-words whitespace-pre-wrap min-h-[1.5em]"
-                                  placeholder="請輸入獎勵內容..."
+                                  placeholder="請輸入獎勵內容"
                                 />
                               ) : (
                                 <div className="flex items-center gap-3">{prize.type === 'image-pool' ? (<div className="flex items-center gap-3 w-full"><div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-500"><ImageIcon className="w-5 h-5" /></div><div className="min-w-0"><div className="flex items-center gap-2"><span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[9px] font-black">圖庫</span><p className="font-bold text-gray-700 break-all text-sm">{prize.folderPath?.split('\\').pop()}</p></div><p className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">{prize.content.length} 張圖片</p></div></div>) : (<div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center text-sky-500"><ImageIcon className="w-5 h-5" /></div><span className="font-bold text-gray-700 break-all text-sm">{prize.content.split('\\').pop()}</span></div>)}</div>
                               )}
                             </div></div>
                             <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm p-1 rounded-xl shadow-sm z-30 pointer-events-none group-hover:pointer-events-auto">
-                              {prize.type === 'image-pool' && (<button onClick={() => setExpandedImagePools(prev => ({ ...prev, [prize.id]: !prev[prize.id] }))} className="p-2 text-sky-400 hover:bg-sky-50 rounded-lg">{expandedImagePools[prize.id] ? <ChevronDown className="w-4 h-4" /> : <ImageIcon className="w-4 h-4" />}</button>)}
-                              <div className="relative group/move"><button className="p-2 text-gray-400 hover:bg-gray-100 rounded-lg"><ArrowUp className="w-4 h-4 rotate-45" /></button><div className="absolute right-0 top-full w-32 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden hidden group-hover/move:block z-50 pt-1">{['UR', 'SSR', 'SR', 'R', 'N'].filter(r => r !== rarity).map(r => (<button key={r} onClick={() => { updateData(prev => ({ ...prev, lotteryPrizes: { ...prev.lotteryPrizes, [rarity]: prev.lotteryPrizes[rarity].filter(p => p.id !== prize.id), [r]: [...prev.lotteryPrizes[r], prize] } })); }} className="w-full text-left px-4 py-2 text-xs font-bold text-gray-600 hover:bg-sky-50 hover:text-sky-600">移至 {r}</button>))}</div></div>
-                              <button onClick={() => { if(confirm('確定要刪除？')) updateData(prev => ({ ...prev, lotteryPrizes: { ...prev.lotteryPrizes, [rarity]: prev.lotteryPrizes[rarity].filter(p => p.id !== prize.id) } })) }} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                              {prize.type === 'image-pool' && (<button onClick={() => setExpandedImagePools(prev => ({ ...prev, [prize.id]: !prev[prize.id] }))} title={expandedImagePools[prize.id] ? '收合圖片' : '展開圖片'} aria-label={expandedImagePools[prize.id] ? '收合圖片' : '展開圖片'} className="p-2 text-sky-400 hover:bg-sky-50 rounded-lg">{expandedImagePools[prize.id] ? <ChevronDown className="w-4 h-4" /> : <ImageIcon className="w-4 h-4" />}</button>)}
+                              <div className="relative group/move"><button title="移到其他稀有度" aria-label="移到其他稀有度" className="p-2 text-gray-400 hover:bg-gray-100 rounded-lg"><ArrowUp className="w-4 h-4 rotate-45" /></button><div className="absolute right-0 top-full w-32 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden hidden group-hover/move:block z-50 pt-1">{['UR', 'SSR', 'SR', 'R', 'N'].filter(r => r !== rarity).map(r => (<button key={r} onClick={() => { updateData(prev => ({ ...prev, lotteryPrizes: { ...prev.lotteryPrizes, [rarity]: prev.lotteryPrizes[rarity].filter(p => p.id !== prize.id), [r]: [...prev.lotteryPrizes[r], prize] } })); }} className="w-full text-left px-4 py-2 text-xs font-bold text-gray-600 hover:bg-sky-50 hover:text-sky-600">移到 {r}</button>))}</div></div>
+                              <button onClick={() => { if(confirm('確定要刪除這個獎品嗎？刪除後無法復原，已抽到的紀錄不受影響。')) updateData(prev => ({ ...prev, lotteryPrizes: { ...prev.lotteryPrizes, [rarity]: prev.lotteryPrizes[rarity].filter(p => p.id !== prize.id) } })) }} title="刪除獎品" aria-label="刪除獎品" className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                             </div>
                             {prize.type === 'image-pool' && expandedImagePools[prize.id] && (
                               <div className="mt-4 p-4 bg-gray-50/80 rounded-2xl border border-gray-100 animate-in slide-down">
@@ -436,7 +448,7 @@ const RewardsView = ({
                     <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${category.color} flex items-center justify-center text-white shadow-lg`}>{category.icon}</div>
                     <div>
                       <h3 className="text-2xl font-black text-sky-900">{category.name}</h3>
-                      <p className="text-[10px] font-black text-sky-400 uppercase tracking-widest">目前累計：{currentCount} 次</p>
+                      <p className="text-[10px] font-black text-sky-400 uppercase tracking-widest">已完成 {currentCount} 次任務</p>
                     </div>
                   </div>
                   <button onClick={() => {
@@ -464,19 +476,19 @@ const RewardsView = ({
                           <div className="flex-grow min-w-0">
                             <input
                               className="w-full bg-transparent font-black text-sky-900 outline-none focus:text-sky-500 text-lg mb-1"
-                              placeholder="輸入成就名稱..."
+                              placeholder="輸入成就名稱"
                               value={achievement.title}
                               onChange={e => updateData(prev => ({ ...prev, achievements: prev.achievements.map(a => a.id === achievement.id ? { ...a, title: e.target.value } : a) }))}
                             />
                             <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-black text-sky-300 uppercase tracking-widest">條件：</span>
+                              <span className="text-[10px] font-black text-sky-300 uppercase tracking-widest">完成</span>
                               {/* 打字時卡片不跟著重新排序，打完（離開欄位或按 Enter）才存，見 AchievementConditionInput */}
                               <AchievementConditionInput
                                 className="w-16 bg-sky-50/50 rounded-lg px-2 py-0.5 text-xs font-black text-sky-600 outline-none"
                                 value={achievement.condition}
                                 onCommit={n => updateData(prev => ({ ...prev, achievements: prev.achievements.map(a => a.id === achievement.id ? { ...a, condition: n } : a) }))}
                               />
-                              <span className="text-[10px] font-black text-sky-300 uppercase tracking-widest">次</span>
+                              <span className="text-[10px] font-black text-sky-300 uppercase tracking-widest">次任務</span>
                             </div>
                           </div>
                           <button onClick={() => { if (confirm(deleteAchievementMessage(achievement))) updateData(prev => ({ ...prev, achievements: prev.achievements.filter(a => a.id !== achievement.id) })); }} title="刪除成就" className="p-2 text-sky-200 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-4 h-4" /></button>
@@ -500,7 +512,7 @@ const RewardsView = ({
                                   }));
                                 }}
                                 className="flex-grow bg-sky-50/50 rounded-lg px-2 py-1 text-[10px] font-black text-sky-600 outline-none border border-transparent focus:border-sky-200 resize-none overflow-hidden min-h-[24px]"
-                                placeholder="輸入獎勵內容..."
+                                placeholder="輸入獎勵內容"
                               />
                             </div>
                             <div className="flex justify-end">
@@ -510,9 +522,10 @@ const RewardsView = ({
                                   <CheckCircle2 className="w-3 h-3" /> 已領取
                                 </div>
                                 <button
-                                  onClick={() => updateData(prev => ({ ...prev, achievements: prev.achievements.map(a => a.id === achievement.id ? { ...a, claimed: false, claimedAt: null } : a) }))}
+                                  onClick={() => { if (confirm('要把這個成就改回還沒領取嗎？之後可以在成就區再領一次。')) updateData(prev => ({ ...prev, achievements: prev.achievements.map(a => a.id === achievement.id ? { ...a, claimed: false, claimedAt: null } : a) })); }}
                                   className="p-1.5 text-sky-300 hover:text-sky-500 hover:bg-sky-50 rounded-lg transition-all"
-                                  title="退回領取狀態"
+                                  title="改回未領取"
+                                  aria-label="改回未領取"
                                 >
                                   <RotateCw className="w-3.5 h-3.5" />
                                 </button>
@@ -530,7 +543,7 @@ const RewardsView = ({
                     })}
                   {categoryAchievements.length === 0 && (
                     <div className="col-span-full py-10 text-center border-2 border-dashed border-sky-100 rounded-[32px]">
-                      <p className="text-sky-300 font-bold text-sm">點擊右上角新增成就</p>
+                      <p className="text-sky-300 font-bold text-sm">按右上角的「新增成就」來新增</p>
                     </div>
                   )}
                 </div>
@@ -552,7 +565,7 @@ const RewardsView = ({
                       <Gift className="w-10 h-10" />
                     </div>
                     <div className="text-center">
-                      <p className="font-black text-xs text-sky-400 uppercase tracking-[0.2em] mb-2">暫無待領獎勵</p>
+                      <p className="font-black text-xs text-sky-400 uppercase tracking-[0.2em] mb-2">沒有待領取的獎勵</p>
                       <p className="text-[10px] text-sky-300 italic">快去抽卡大廳試試手氣吧！</p>
                     </div>
                   </div>
@@ -659,16 +672,16 @@ const RewardsView = ({
                       <RarityBadge rarity={r} size="sm" />
                       <div className="text-center">
                         <p className="text-3xl font-black text-sky-900 leading-none mb-1">{count}</p>
-                        <p className="text-[9px] font-black text-sky-300 uppercase tracking-widest">次數</p>
+                        <p className="text-[9px] font-black text-sky-300 uppercase tracking-widest">抽到次數</p>
                       </div>
                       <div className="w-full space-y-2 mt-2">
                         <div className="flex justify-between items-end">
-                          <span className="text-[10px] font-black text-sky-400">實際頻率</span>
+                          <span className="text-[10px] font-black text-sky-400">實際比例</span>
                           <span className={`text-xs font-black ${isLucky ? 'text-emerald-500' : 'text-sky-600'}`}>{actualProb.toFixed(1)}%</span>
                         </div>
                         <div className="flex justify-between items-center text-[9px] font-bold">
-                          <span className="text-gray-400">預計: {targetProb}%</span>
-                          {count > 0 && (<span className={isLucky ? 'text-emerald-500' : 'text-amber-500'}>{isLucky ? '偏高' : '偏低'}</span>)}
+                          <span className="text-gray-400">設定機率：{targetProb}%</span>
+                          {count > 0 && (<span className={isLucky ? 'text-emerald-500' : 'text-amber-500'}>{isLucky ? '比設定高' : '比設定低'}</span>)}
                         </div>
                       </div>
                     </div>
@@ -683,16 +696,16 @@ const RewardsView = ({
                 <div className="p-2 bg-sky-100 rounded-xl text-sky-500">
                   <History className="w-5 h-5" />
                 </div>
-                <h3 className="text-xl font-black text-sky-900">抽卡歷史</h3>
+                <h3 className="text-xl font-black text-sky-900">抽卡紀錄</h3>
               </div>
-              <button onClick={() => setEditingHistory({ rarity: 'R', prize: { type: 'text', content: '' }, timestamp: new Date().toISOString(), claimed: true })} className="group relative px-6 py-3 bg-sky-500/5 backdrop-blur-md text-sky-600 text-[11px] font-black rounded-2xl transition-all shadow-sm hover:bg-sky-500/10 hover:!translate-y-[-6px] hover:scale-105 active:scale-95 flex items-center gap-2 border border-sky-500/20 overflow-hidden"><div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:animate-shine pointer-events-none" /><span className="relative flex items-center gap-2"><Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" /> 手動補登紀錄</span></button>
+              <button onClick={() => setEditingHistory({ rarity: 'R', prize: { type: 'text', content: '' }, timestamp: new Date().toISOString(), claimed: true })} className="group relative px-6 py-3 bg-sky-500/5 backdrop-blur-md text-sky-600 text-[11px] font-black rounded-2xl transition-all shadow-sm hover:bg-sky-500/10 hover:!translate-y-[-6px] hover:scale-105 active:scale-95 flex items-center gap-2 border border-sky-500/20 overflow-hidden"><div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:animate-shine pointer-events-none" /><span className="relative flex items-center gap-2"><Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" /> 補登抽卡紀錄</span></button>
             </div>
             {selectedHistoryIds.length > 0 && (
               <div className="bg-rose-50/80 p-4 flex justify-between items-center border-b border-rose-100 animate-in slide-down">
-                <span className="text-xs font-black text-rose-600 ml-4">已選擇 {selectedHistoryIds.length} 筆紀錄</span>
+                <span className="text-xs font-black text-rose-600 ml-4">已選取 {selectedHistoryIds.length} 筆紀錄</span>
                 <div className="flex gap-2">
-                  <button onClick={() => setSelectedHistoryIds([])} className="px-4 py-2 text-[10px] font-black text-rose-400 hover:bg-rose-100 rounded-xl transition-colors">取消選擇</button>
-                  <button onClick={() => { if (confirm(`確定要刪除選中的 ${selectedHistoryIds.length} 筆紀錄嗎？`)) { updateData(prev => ({ ...prev, rewardHistory: prev.rewardHistory.filter(h => !selectedHistoryIds.includes(h.id)) })); setSelectedHistoryIds([]); } }} className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black rounded-xl shadow-sm transition-colors flex items-center gap-2"><Trash2 className="w-3.5 h-3.5" /> 批量刪除</button>
+                  <button onClick={() => setSelectedHistoryIds([])} className="px-4 py-2 text-[10px] font-black text-rose-400 hover:bg-rose-100 rounded-xl transition-colors">取消選取</button>
+                  <button onClick={() => { if (confirm(deleteRewardRecordsMessage(data.rewardHistory.filter(h => selectedHistoryIds.includes(h.id))))) { updateData(prev => ({ ...prev, rewardHistory: prev.rewardHistory.filter(h => !selectedHistoryIds.includes(h.id)) })); setSelectedHistoryIds([]); } }} className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black rounded-xl shadow-sm transition-colors flex items-center gap-2"><Trash2 className="w-3.5 h-3.5" /> 刪除選取的紀錄</button>
                 </div>
               </div>
             )}
@@ -702,11 +715,11 @@ const RewardsView = ({
                   <tr className="text-sky-400">
                     <th className="px-4 py-2 w-10">
                       <label className="relative flex items-center justify-center cursor-pointer group">
-                        <input type="checkbox" className="peer sr-only" checked={selectedHistoryIds.length > 0 && selectedHistoryIds.length === data.rewardHistory.slice((rewardHistoryPage - 1) * ITEMS_PER_PAGE, rewardHistoryPage * ITEMS_PER_PAGE).length} onChange={(e) => { if (e.target.checked) { const currentIds = data.rewardHistory.slice((rewardHistoryPage - 1) * ITEMS_PER_PAGE, rewardHistoryPage * ITEMS_PER_PAGE).map(h => h.id); setSelectedHistoryIds(currentIds); } else { setSelectedHistoryIds([]); } }} />
+                        <input type="checkbox" aria-label="選取這一頁的全部紀錄" className="peer sr-only" checked={selectedHistoryIds.length > 0 && selectedHistoryIds.length === data.rewardHistory.slice((rewardHistoryPage - 1) * ITEMS_PER_PAGE, rewardHistoryPage * ITEMS_PER_PAGE).length} onChange={(e) => { if (e.target.checked) { const currentIds = data.rewardHistory.slice((rewardHistoryPage - 1) * ITEMS_PER_PAGE, rewardHistoryPage * ITEMS_PER_PAGE).map(h => h.id); setSelectedHistoryIds(currentIds); } else { setSelectedHistoryIds([]); } }} />
                         <div className="w-5 h-5 rounded-lg border-2 border-sky-100 bg-white peer-checked:bg-sky-500 peer-checked:border-sky-500 transition-all duration-200 flex items-center justify-center shadow-sm group-hover:border-sky-300"><CheckCircle2 className="w-3.5 h-3.5 text-white opacity-0 peer-checked:opacity-100 transition-opacity duration-200" /></div>
                       </label>
                     </th>
-                    <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest">獲取時間</th>
+                    <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest">抽到時間</th>
                     <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest">獎勵內容</th>
                     <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-center">稀有度</th>
                     <th className="px-4 py-2 text-[10px] font-black uppercase tracking-widest">領取時間</th>
@@ -718,14 +731,14 @@ const RewardsView = ({
                     <tr key={h.id} className={`group/row transition-all duration-300 ${selectedHistoryIds.includes(h.id) ? 'translate-x-1' : ''}`}>
                       <td className={`px-4 py-4 bg-white/50 backdrop-blur-sm rounded-l-3xl border-y border-l transition-all duration-300 group-hover/row:bg-white group-hover/row:shadow-md ${selectedHistoryIds.includes(h.id) ? 'border-sky-200 bg-sky-50/50' : 'border-white'}`}>
                         <label className="relative flex items-center justify-center cursor-pointer group">
-                          <input type="checkbox" className="peer sr-only" checked={selectedHistoryIds.includes(h.id)} onChange={(e) => { if (e.target.checked) { setSelectedHistoryIds(prev => [...prev, h.id]); } else { setSelectedHistoryIds(prev => prev.filter(id => id !== h.id)); } }} />
+                          <input type="checkbox" aria-label="選取這筆紀錄" className="peer sr-only" checked={selectedHistoryIds.includes(h.id)} onChange={(e) => { if (e.target.checked) { setSelectedHistoryIds(prev => [...prev, h.id]); } else { setSelectedHistoryIds(prev => prev.filter(id => id !== h.id)); } }} />
                           <div className="w-5 h-5 rounded-lg border-2 border-sky-100 bg-white peer-checked:bg-sky-500 peer-checked:border-sky-500 transition-all duration-200 flex items-center justify-center shadow-sm group-hover:border-sky-300"><CheckCircle2 className="w-3.5 h-3.5 text-white opacity-0 peer-checked:opacity-100 transition-opacity duration-200" /></div>
                         </label>
                       </td>
                       <td className={`px-4 py-4 bg-white/50 backdrop-blur-sm border-y transition-all duration-300 group-hover/row:bg-white group-hover/row:shadow-md ${selectedHistoryIds.includes(h.id) ? 'border-sky-200 bg-sky-50/50' : 'border-white'}`}>
                         <div className="flex flex-col">
-                          <span className="text-xs font-black text-sky-800">{new Date(h.timestamp).toLocaleDateString()}</span>
-                          <span className="text-[10px] font-bold text-sky-400">{new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span className="text-xs font-black text-sky-800">{formatDisplayDate(h.timestamp)}</span>
+                          <span className="text-[10px] font-bold text-sky-400">{formatDisplayTime(h.timestamp)}</span>
                         </div>
                       </td>
                       <td className={`px-4 py-4 bg-white/50 backdrop-blur-sm border-y transition-all duration-300 group-hover/row:bg-white group-hover/row:shadow-md ${selectedHistoryIds.includes(h.id) ? 'border-sky-200 bg-sky-50/50' : 'border-white'}`}>
@@ -758,11 +771,12 @@ const RewardsView = ({
                             <div className="flex items-center gap-2">
                               {h.claimedAt ? (
                                 <>
-                                  <span className="text-xs font-black text-emerald-600">{new Date(h.claimedAt).toLocaleDateString()}</span>
+                                  <span className="text-xs font-black text-emerald-600">{formatDisplayDate(h.claimedAt)}</span>
                                   <button
-                                    onClick={() => { if (confirm('確定要撤銷此獎勵的領取狀態嗎？')) updateData(prev => ({ ...prev, rewardHistory: prev.rewardHistory.map(item => item.id === h.id ? { ...item, claimed: false, claimedAt: null } : item) })); }}
+                                    onClick={() => { if (confirm('要把這個獎勵改回「待領取」嗎？')) updateData(prev => ({ ...prev, rewardHistory: prev.rewardHistory.map(item => item.id === h.id ? { ...item, claimed: false, claimedAt: null } : item) })); }}
                                     className="p-1 text-sky-300 hover:text-sky-500 hover:bg-sky-50 rounded-lg transition-all"
-                                    title="撤銷領取"
+                                    title="改回待領取"
+                                    aria-label="改回待領取"
                                   >
                                     <RotateCw className="w-3 h-3" />
                                   </button>
@@ -771,9 +785,10 @@ const RewardsView = ({
                                 <div className="flex items-center gap-2">
                                   <span className="px-2 py-0.5 bg-emerald-50 text-emerald-500 rounded-full text-[8px] font-black border border-emerald-100/50">已領取</span>
                                   <button
-                                    onClick={() => { if (confirm('確定要撤銷此獎勵的領取狀態嗎？')) updateData(prev => ({ ...prev, rewardHistory: prev.rewardHistory.map(item => item.id === h.id ? { ...item, claimed: false, claimedAt: null } : item) })); }}
+                                    onClick={() => { if (confirm('要把這個獎勵改回「待領取」嗎？')) updateData(prev => ({ ...prev, rewardHistory: prev.rewardHistory.map(item => item.id === h.id ? { ...item, claimed: false, claimedAt: null } : item) })); }}
                                     className="p-1 text-sky-300 hover:text-sky-500 hover:bg-sky-50 rounded-lg transition-all"
-                                    title="撤銷領取"
+                                    title="改回待領取"
+                                    aria-label="改回待領取"
                                   >
                                     <RotateCw className="w-3 h-3" />
                                   </button>
@@ -781,17 +796,17 @@ const RewardsView = ({
                               )}
                             </div>
                             {h.claimedAt && (
-                              <span className="text-[10px] font-bold text-emerald-400">{new Date(h.claimedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                              <span className="text-[10px] font-bold text-emerald-400">{formatDisplayTime(h.claimedAt)}</span>
                             )}
                           </div>
                         ) : (
-                          <span className="text-[10px] font-bold text-gray-300 italic">尚未領取</span>
+                          <span className="text-[10px] font-bold text-gray-300 italic">待領取</span>
                         )}
                       </td>
                       <td className={`px-4 py-4 bg-white/50 backdrop-blur-sm rounded-r-3xl border-y border-r transition-all duration-300 group-hover/row:bg-white group-hover/row:shadow-md ${selectedHistoryIds.includes(h.id) ? 'border-sky-200 bg-sky-50/50' : 'border-white'}`}>
                         <div className="flex items-center justify-end gap-1 opacity-0 group-hover/row:opacity-100 transition-all duration-300 translate-x-2 group-hover/row:translate-x-0">
-                          <button onClick={() => setEditingHistory(h)} className="p-2 text-sky-300 hover:text-sky-500 hover:bg-sky-50 rounded-xl transition-all"><Edit3 className="w-4 h-4" /></button>
-                          <button onClick={() => { if (confirm('確定要刪除此筆紀錄嗎？')) updateData(prev => ({ ...prev, rewardHistory: prev.rewardHistory.filter(item => item.id !== h.id) })); }} className="p-2 text-sky-200 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 className="w-4 h-4" /></button>
+                          <button onClick={() => setEditingHistory(h)} title="編輯" aria-label="編輯" className="p-2 text-sky-300 hover:text-sky-500 hover:bg-sky-50 rounded-xl transition-all"><Edit3 className="w-4 h-4" /></button>
+                          <button onClick={() => { if (confirm(deleteRewardRecordsMessage([h]))) updateData(prev => ({ ...prev, rewardHistory: prev.rewardHistory.filter(item => item.id !== h.id) })); }} title="刪除" aria-label="刪除" className="p-2 text-sky-200 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 className="w-4 h-4" /></button>
                         </div>
                       </td>
                     </tr>
@@ -804,13 +819,15 @@ const RewardsView = ({
                 <div className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
                   <span className="text-[10px] font-black text-sky-400 uppercase tracking-widest">
-                    顯示 {(rewardHistoryPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(rewardHistoryPage * ITEMS_PER_PAGE, data.rewardHistory.length)} 筆 / 共 {data.rewardHistory.length} 筆
+                    {formatPageRange(rewardHistoryPage, data.rewardHistory.length, ITEMS_PER_PAGE)}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => setRewardHistoryPage(Math.max(1, rewardHistoryPage - 1))}
                     disabled={rewardHistoryPage === 1}
+                    title="上一頁"
+                    aria-label="上一頁"
                     className="p-2.5 rounded-2xl bg-white/60 hover:bg-white disabled:opacity-30 text-sky-600 shadow-sm border border-white transition-all hover:-translate-x-1 active:scale-90"
                   >
                     <ChevronLeft className="w-4 h-4" />
@@ -823,6 +840,8 @@ const RewardsView = ({
                   <button
                     onClick={() => setRewardHistoryPage(Math.min(rewardHistoryTotalPages, rewardHistoryPage + 1))}
                     disabled={rewardHistoryPage >= rewardHistoryTotalPages}
+                    title="下一頁"
+                    aria-label="下一頁"
                     className="p-2.5 rounded-2xl bg-white/60 hover:bg-white disabled:opacity-30 text-sky-600 shadow-sm border border-white transition-all hover:translate-x-1 active:scale-90"
                   >
                     <ChevronRight className="w-4 h-4" />

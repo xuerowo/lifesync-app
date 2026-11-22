@@ -197,6 +197,8 @@ const App = () => {
 
   const skipLottery = () => {
     if (!rewardToShow) return;
+    // 抽卡券已經扣掉、不會退回；只是把卡包裡的獎勵刪掉，所以先確認
+    if (!confirm('卡包裡的獎勵會被刪除，抽卡券不會退回。確定嗎？')) return;
     updateData(prev => ({ ...prev, rewardHistory: prev.rewardHistory.filter(h => h.id !== rewardToShow.id) }));
     setRewardToShow(null);
   };
@@ -235,7 +237,7 @@ const App = () => {
     <div className="app-scroll h-full bg-gradient-to-b from-sky-300 via-sky-100 to-white flex [align-items:safe_center] justify-center">
       <div className="text-center">
         <Sun className="w-16 h-16 text-amber-400 animate-spin mx-auto mb-4" />
-        <p className="text-sky-600 font-black text-xl">載入中...</p>
+        <p className="text-sky-600 font-black text-xl">載入中……</p>
       </div>
     </div>
   );
@@ -246,7 +248,7 @@ const App = () => {
       {/* 存檔失敗的紅色提示（存好後自動消失） */}
       <SaveErrorBanner saveError={saveError} isRetrying={isRetryingSave} onRetry={retrySaveNow} />
 
-      {/* 全局同步進度面板 */}
+      {/* 全局進度面板（雲端上傳下載、本機匯出都會用到） */}
       <AnimatePresence>
         {isSyncing && syncProgress && (
             <motion.div 
@@ -262,7 +264,7 @@ const App = () => {
                                 <RefreshCw className="w-4 h-4 text-sky-500 animate-spin" />
                             </div>
                             <div className="flex flex-col">
-                                <span className="text-[10px] font-black text-sky-400 uppercase tracking-widest">系統同步中</span>
+                                <span className="text-[10px] font-black text-sky-400 uppercase tracking-widest">處理中</span>
                                 <span className="text-sm font-black text-sky-900 line-clamp-1">{syncProgress.message}</span>
                             </div>
                         </div>
@@ -275,7 +277,8 @@ const App = () => {
                             <button 
                                 onClick={handleCancelSync}
                                 className="w-8 h-8 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-colors"
-                                title="中斷同步"
+                                title="中斷"
+                                aria-label="中斷"
                             >
                                 <X className="w-4 h-4" />
                             </button>
@@ -345,11 +348,10 @@ const App = () => {
         )}
         <header className="flex flex-col lg:flex-row justify-between items-center mb-10 md:mb-16 gap-8">
           <div className="text-center lg:text-left group cursor-default">
-            <div className="flex items-center justify-center lg:justify-start gap-3 mb-1">
+            <div className="flex items-center justify-center lg:justify-start gap-3">
               <Sun className="w-8 h-8 md:w-10 md:h-10 text-amber-400 animate-[spin_10s_linear_infinite]" />
               <h1 className="text-4xl md:text-5xl font-black text-sky-900 tracking-tighter">LifeSync</h1>
             </div>
-            <p className="text-sky-400 font-black tracking-[0.4em] uppercase text-[8px] md:text-[10px] ml-1">Blue Sky Thinking</p>
           </div>
           <nav className="relative flex items-center gap-1 p-1 md:p-1.5 bg-white/40 backdrop-blur-xl rounded-full md:rounded-[32px] border border-white/60 shadow-lg overflow-hidden w-full max-w-md lg:min-w-[400px]">
             <div
@@ -414,15 +416,15 @@ const App = () => {
                     <LayoutDashboard className="w-6 h-6 md:w-8 md:h-8" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h2 className="text-2xl md:text-4xl font-black text-sky-900 tracking-tight">行動藍圖</h2>
+                    <h2 className="text-2xl md:text-4xl font-black text-sky-900 tracking-tight">規劃</h2>
                     <nav className="relative flex gap-4 md:gap-6 mt-2 px-1 overflow-x-auto no-scrollbar pb-1">
                       {[
                         { id: 'list', name: '計畫清單' },
                         { id: 'pomodoro', name: '專注計時' },
                         { id: 'history', name: '任務歷史' },
-                        { id: 'calendar', name: '日程視圖' },
+                        { id: 'calendar', name: '週曆' },
                         { id: 'note', name: '生活筆記' },
-                        { id: 'rules', name: '行為準則' }
+                        { id: 'rules', name: '行動準則' }
                       ].map(tab => (
                         <button
                           key={tab.id}
@@ -509,7 +511,7 @@ const App = () => {
 
       {lightboxImage && (
         <div className="fixed inset-0 z-[500] bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4 animate-in fade-in duration-300 cursor-zoom-out" onClick={() => setLightboxImage(null)}>
-          <button className="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors z-[510]" onClick={(e) => { e.stopPropagation(); setLightboxImage(null); }}><X className="w-8 h-8" /></button>
+          <button title="關閉" aria-label="關閉" className="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors z-[510]" onClick={(e) => { e.stopPropagation(); setLightboxImage(null); }}><X className="w-8 h-8" /></button>
           <IpcImage
             src={lightboxImage}
             className="max-w-full max-h-full object-contain shadow-2xl animate-in zoom-in-95 duration-300"
@@ -536,11 +538,8 @@ const App = () => {
                   <Tag className={`w-7 h-7 text-white fill-current ${ticketNotification.type === 'loss' ? 'animate-pulse' : 'animate-bounce'}`} />
                 </div>
                 <div className="text-white">
-                  <p className="text-[10px] font-black uppercase tracking-widest opacity-80 leading-none mb-1">
-                    {ticketNotification.type === 'loss' ? 'Reward Reverted' : 'Reward Earned'}
-                  </p>
                   <p className="text-xl font-black leading-none whitespace-nowrap">
-                    {ticketNotification.type === 'loss' ? '收回' : '獲得'} {ticketNotification.count} 張抽卡券
+                    {ticketNotification.type === 'loss' ? '扣回' : '獲得'} {ticketNotification.count} 張抽卡券
                   </p>
                 </div>
               </div>
@@ -596,7 +595,7 @@ const App = () => {
                 </div>
               </div>
               {rewardStage === 'pack' && (
-                <button onClick={(e) => { e.stopPropagation(); skipLottery(); }} className="absolute -bottom-20 left-1/2 -translate-x-1/2 px-8 py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400/80 hover:text-rose-400 text-xs font-black rounded-full border border-rose-500/20 transition-all whitespace-nowrap">放棄抽卡</button>
+                <button onClick={(e) => { e.stopPropagation(); skipLottery(); }} className="absolute -bottom-20 left-1/2 -translate-x-1/2 px-8 py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400/80 hover:text-rose-400 text-xs font-black rounded-full border border-rose-500/20 transition-all whitespace-nowrap">放棄這次獎勵</button>
               )}
             </div>
           )}
@@ -638,7 +637,7 @@ const App = () => {
                       onChange={(e) => setClaimQuantity(parseInt(e.target.value))}
                       className="flex-grow h-1 md:h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-sky-400"
                     />
-                    <span className="text-white text-xs md:text-sm font-black min-w-[2.5rem] md:min-w-[3rem] text-right">{claimQuantity}/{rewardToShow.totalInStack}</span>
+                    <span className="text-white text-xs md:text-sm font-black min-w-[3rem] md:min-w-[3.5rem] text-right">{claimQuantity} / {rewardToShow.totalInStack}</span>
                   </div>
                 )}
                 <div className="flex flex-col sm:flex-row gap-3 md:gap-4 w-full justify-center px-4">
@@ -661,7 +660,7 @@ const App = () => {
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:animate-shine pointer-events-none" />
                     <span className="relative flex items-center justify-center gap-2 md:gap-3">
                       <CheckCircle2 className="w-5 h-5 md:w-7 md:h-7 text-emerald-400 animate-pulse" />
-                      {claimQuantity > 1 ? `領取 ${claimQuantity} 份獎勵` : '收下獎勵'}
+                      {claimQuantity > 1 ? `領取 ${claimQuantity} 份獎勵` : '領取獎勵'}
                     </span>
                   </button>
                   <button onClick={() => setRewardToShow(null)} className="flex-1 sm:flex-none px-6 md:px-8 py-4 md:py-5 bg-white/5 backdrop-blur-md text-white/50 hover:text-white/80 text-base md:text-lg font-bold rounded-full border border-white/10 hover:bg-white/10 transition-all">稍後領取</button>

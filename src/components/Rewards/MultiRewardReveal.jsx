@@ -29,7 +29,7 @@ const MultiRewardReveal = ({ results, onClaimAll, onCancel, setLightboxImage }) 
             className="inline-flex items-center gap-3 px-6 py-2 bg-white/10 rounded-full border border-white/20"
           >
             <Sparkles className="w-5 h-5 text-amber-400" />
-            <span className="text-white font-black tracking-widest uppercase text-xs sm:text-sm">十連召喚結果</span>
+            <span className="text-white font-black tracking-widest uppercase text-xs sm:text-sm">十連抽結果</span>
           </motion.div>
         </div>
 
@@ -63,7 +63,7 @@ const MultiRewardReveal = ({ results, onClaimAll, onCancel, setLightboxImage }) 
                     <div className="w-10 h-10 md:w-16 md:h-16 rounded-full border-2 border-white/10 flex items-center justify-center bg-white/5 backdrop-blur-sm relative z-10">
                       <Sparkles className="w-5 h-5 md:w-8 md:h-8 text-white/40 animate-pulse" />
                     </div>
-                    <div className="text-[8px] md:text-[10px] font-black text-white/20 tracking-[0.2em] md:tracking-[0.3em] uppercase relative z-10">Lifesync</div>
+                    <div className="text-[8px] md:text-[10px] font-black text-white/20 tracking-[0.2em] md:tracking-[0.3em] uppercase relative z-10">LifeSync</div>
                   </div>
 
                   {/* Front (Reveal) */}
@@ -131,7 +131,7 @@ const MultiRewardReveal = ({ results, onClaimAll, onCancel, setLightboxImage }) 
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:animate-shine pointer-events-none" />
                 <span className="relative flex items-center justify-center gap-2 md:gap-3">
-                  <CheckCircle2 className="w-6 h-6 md:w-7 md:h-7" /> 全部收下
+                  <CheckCircle2 className="w-6 h-6 md:w-7 md:h-7" /> 全部領取
                 </span>
               </button>
               <button
