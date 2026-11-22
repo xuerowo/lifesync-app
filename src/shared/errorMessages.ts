@@ -1,6 +1,6 @@
 // 雲端（WebDAV）與檔案錯誤的白話說明（docs/wording-review.md「雲端、檔案錯誤直接顯示英文」）。
 //
-// 主程序（electron/cloudManager.js、electron/main.js）、瀏覽器模式的 server.js 和畫面都用這一份：
+// 主程序（electron/cloudManager.ts、electron/main.ts）、瀏覽器模式的 server.ts 和畫面都用這一份：
 // 這裡不 import 任何 Node 或瀏覽器專用的東西，只處理文字，所以可以直接測試。
 //
 // 認得的錯誤：白話說明＋下一步在前，英文原文接在後面當「技術細節」，方便查問題；

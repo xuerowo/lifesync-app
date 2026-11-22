@@ -1,9 +1,9 @@
 import { cloudErrorReason, httpStatusOf, rawErrorText } from '../shared/errorMessages.ts';
-import type { GalleryDownloadResults, GalleryUploadResults } from '../types/electronApi.ts';
+import type { CloudUploadResult, GalleryDownloadResults, GalleryUploadResults } from '../types/electronApi.ts';
 
 /**
- * 雲端上最多保留幾份舊版。必須和 electron/cloudVersions.js 的 MAX_CLOUD_VERSIONS 相同
- * （畫面不能 import 主程序的檔案；tests/cloudVersions.test.js 有對照）。
+ * 雲端上最多保留幾份舊版。必須和 electron/cloudVersions.ts 的 MAX_CLOUD_VERSIONS 相同
+ * （畫面不能 import 主程序的檔案；tests/cloudVersions.test.ts 有對照）。
  */
 export const CLOUD_VERSIONS_KEPT = 5;
 
@@ -19,7 +19,7 @@ export const CONFIRM_CLOUD_UPLOAD =
  * @param result 主程序 cloud-upload 的回傳值
  */
 export function cloudUploadSuccessMessage(
-  result: { versionedAs?: string | null; keep?: number; warning?: string | null } | null | undefined,
+  result: Partial<Extract<CloudUploadResult, { success: true }>> | null | undefined,
 ): string {
   const lines = ['已加密並上傳到雲端！'];
   if (result?.versionedAs) {

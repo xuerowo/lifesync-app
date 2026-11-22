@@ -2,7 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, X, ArrowUp, ArrowDown } from 'lucide-react';
-import { useAppData } from '../../contexts/AppDataContext';
+import { useAppData } from '../../contexts/useAppData.ts';
 
 const PriorityManager = ({ isOpen, onClose }) => {
   const { data, updateData } = useAppData();

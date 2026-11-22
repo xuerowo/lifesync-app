@@ -8,15 +8,15 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "server": "node server.js",
+    "server": "node server.ts",
     "dev:all": "concurrently \"npm run server\" \"npm run dev\"",
-    "build": "node scripts/clean-build.js && tsc -b && vite build && electron-builder",
+    "build": "node scripts/clean-build.ts && tsc -b && vite build && electron-builder",
     "lint": "eslint .",
     "typecheck": "tsc -b",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "sandbox": "node scripts/dev-sandbox.js"
+    "sandbox": "node scripts/dev-sandbox.ts"
   },
   "devDependencies": {
     "@dnd-kit/core": "^6.3.1",

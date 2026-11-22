@@ -2,7 +2,7 @@
 //
 // 原因：Electron 在 Windows 上，畫面原生的 alert／confirm 關掉之後，頁面常會失去鍵盤焦點，
 // 點輸入框不會出現游標、打不了字，要切到別的視窗再切回來才恢復。
-// 主程序那邊（electron/main.js 的 dialog-alert-sync／dialog-confirm-sync）會指定父視窗顯示，
+// 主程序那邊（electron/main.ts 的 dialog-alert-sync／dialog-confirm-sync）會指定父視窗顯示，
 // 關掉後再把焦點還給頁面。呼叫端照舊寫 alert(...)／confirm(...)，不用改。
 // 瀏覽器模式（沒有 electronAPI）維持瀏覽器原本的對話框。
 
@@ -28,11 +28,14 @@ export function createNativeDialogs(api: DialogApi): { alert(message?: unknown):
   };
 }
 
-/** 換掉 alert／confirm 用得到的部分（window 符合） */
+/**
+ * 換掉 alert／confirm 用得到的部分（window 符合）。
+ * alert、confirm 寫成方法的形式：window 的版本參數是 string，方法的參數檢查比較寬鬆，window 才傳得進來
+ */
 export interface NativeDialogTarget {
   electronAPI?: Partial<DialogApi>;
-  alert: (message?: unknown) => void;
-  confirm: (message?: unknown) => boolean;
+  alert(message?: unknown): void;
+  confirm(message?: unknown): boolean;
 }
 
 /** 有 Electron 的 api 時換掉 target（通常是 window）的 alert／confirm；回傳有沒有換 */

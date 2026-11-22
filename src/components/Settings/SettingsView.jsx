@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Settings2, Download, Upload, Cloud, ShieldCheck, RefreshCw, Image as ImageIcon, FolderOpen, HelpCircle, ChevronUp, ExternalLink, Lock, User, Link2, Info, AlertTriangle, Zap, Server, Shield, Eye, EyeOff } from 'lucide-react';
-import { useAppData } from '../../contexts/AppDataContext';
+import { useAppData } from '../../contexts/useAppData.ts';
 import { encryptData, decryptData } from '../../utils/crypto.ts';
 import { mergeIncomingData, stripCloudSecrets, isImportableData } from '../../shared/cloudSecrets.ts';
 import {

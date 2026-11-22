@@ -1,6 +1,6 @@
 import React from 'react';
 import { BookOpen, Plus, Edit3, Trash2, Clock, RotateCw, Cloud } from 'lucide-react';
-import { useAppData } from '../../contexts/AppDataContext';
+import { useAppData } from '../../contexts/useAppData.ts';
 import { formatDisplayDateTime } from '../../utils/displayFormat.ts';
 
 const NoteView = ({ setEditingNote }) => {

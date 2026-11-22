@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { History, Trash2, CheckCircle2, ChevronLeft, ChevronRight, Clock, Layers, Plus, Edit3 } from 'lucide-react';
-import { useAppData } from '../../contexts/AppDataContext';
+import { useAppData } from '../../contexts/useAppData.ts';
 import { ITEMS_PER_PAGE, INDICATORS } from '../../constants/index.tsx';
 import { clampPage, formatPageRange, getTotalPages } from '../../domain/pagination.ts';
 import { deleteHistoryRecords } from '../../domain/taskHistory.ts';

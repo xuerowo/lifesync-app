@@ -1,6 +1,6 @@
 import React from 'react';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Cloud } from 'lucide-react';
-import { useAppData } from '../../contexts/AppDataContext';
+import { useAppData } from '../../contexts/useAppData.ts';
 import { getDateStr, getTodayStr, formatTaskTime } from '../../utils/index.ts';
 import { WEEK_DAYS } from '../../constants/index.tsx';
 import { getCalendarTasksForDay, isDoneOnDate } from '../../domain/calendar.ts';

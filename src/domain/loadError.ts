@@ -6,7 +6,7 @@
 import { formatDisplayDateTime } from '../utils/displayFormat.ts';
 import type { RestoreInfo, SecretField } from '../types/electronApi.ts';
 
-/** 讀檔失敗、還原失敗的資訊（主程序或 server.js 回傳的 code 與 error） */
+/** 讀檔失敗、還原失敗的資訊（主程序或 server.ts 回傳的 code 與 error） */
 export interface LoadErrorInfo {
   code?: string;
   error?: string;

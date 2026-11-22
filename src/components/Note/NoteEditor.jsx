@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { BookOpen, X, CheckCircle2 } from 'lucide-react';
-import { useAppData } from '../../contexts/AppDataContext';
+import { useAppData } from '../../contexts/useAppData.ts';
 import { DISCARD_NOTE_MESSAGE, hasUnsavedNoteChanges } from '../../domain/confirmations.ts';
 
 const NoteEditor = ({ editingNote, setEditingNote }) => {

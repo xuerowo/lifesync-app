@@ -1,0 +1,180 @@
+import { describe, it, expect } from 'vitest';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import {
+  describeLoadError, describeRestoreFailure, describeRestoreSuccess, describeSecretsUnavailable,
+  formatLocalDateTime, baseName, LOAD_ERROR_SAFETY_NOTE, restoreConfirmMessage, withoutReenteredSecret,
+} from '../src/domain/loadError.ts';
+import LoadErrorScreen from '../src/components/Shared/LoadErrorScreen.tsx';
+import type { ComponentProps } from 'react';
+
+describe('describeLoadError', () => {
+  it('檔案壞掉（PARSE_ERROR）：說明原因，不建議先重試', () => {
+    const d = describeLoadError({ code: 'PARSE_ERROR', error: 'Unexpected end of JSON input' });
+    expect(d.reason).toContain('壞掉');
+    expect(d.suggestRetryFirst).toBe(false);
+  });
+
+  it('資料檔不見但有備份', () => {
+    const d = describeLoadError({ code: 'MISSING_WITH_BACKUPS' });
+    expect(d.reason).toContain('找不到資料檔');
+    expect(d.suggestRetryFirst).toBe(false);
+  });
+
+  it.each(['EBUSY', 'EPERM', 'EACCES'])('檔案被鎖住（%s）：建議先重試', (code) => {
+    const d = describeLoadError({ code });
+    expect(d.reason).toContain('鎖住');
+    expect(d.suggestRetryFirst).toBe(true);
+  });
+
+  it('格式不對、瀏覽器模式的伺服器錯誤、不認識的錯誤都有說明', () => {
+    expect(describeLoadError({ code: 'INVALID_FORMAT' }).reason).toContain('格式');
+    expect(describeLoadError({ code: 'HTTP_500' }).reason).toContain('server.js');
+    expect(describeLoadError({ code: 'WHATEVER' }).reason).toContain('預料之外');
+    expect(describeLoadError(null).reason).toContain('預料之外');
+  });
+});
+
+describe('restoreConfirmMessage：檔案被鎖住時，從備份載入要再確認', () => {
+  it.each(['EBUSY', 'EPERM', 'EACCES'])('%s：要確認，並說明檔案多半沒壞、會改用比較舊的資料', (code) => {
+    const text = restoreConfirmMessage({ code });
+    expect(text).toContain('很可能是好的');
+    expect(text).toContain('比較舊');
+    expect(text).toContain('重試');
+  });
+
+  it.each(['PARSE_ERROR', 'INVALID_FORMAT', 'MISSING_WITH_BACKUPS', 'HTTP_500', undefined])('%s：不必多確認', (code) => {
+    expect(restoreConfirmMessage({ code })).toBeNull();
+  });
+});
+
+describe('describeRestoreFailure', () => {
+  it('沒有備份時直說，並保證原檔沒動', () => {
+    const text = describeRestoreFailure({ code: 'NO_BACKUP', error: '找不到可用的備份' });
+    expect(text).toContain('沒有可以用的自動備份');
+    expect(text).toContain('沒有被動過');
+  });
+
+  it('其他失敗附上原因', () => {
+    expect(describeRestoreFailure({ code: 'EBUSY', error: 'resource busy' })).toContain('resource busy');
+  });
+});
+
+describe('describeRestoreSuccess', () => {
+  it('寫出備份的時間、檔名，以及壞檔保留的位置', () => {
+    const lines = describeRestoreSuccess({
+      restoredFrom: 'C:\\x\\backups\\lifesync-data-2026-11-19.json',
+      restoredFromTime: new Date(2026, 10, 19, 8, 5).toISOString(),
+      preservedAs: 'C:\\x\\lifesync-data.corrupt-20261120-093000.json',
+    });
+    expect(lines[0]).toContain('2026/11/19 08:05');
+    expect(lines[0]).toContain('lifesync-data-2026-11-19.json');
+    expect(lines[0]).toContain('之後做的修改不在裡面');
+    expect(lines[1]).toContain('C:\\x\\lifesync-data.corrupt-20261120-093000.json');
+  });
+
+  it('沒有壞檔（資料檔本來就不見）時不提保留位置', () => {
+    const lines = describeRestoreSuccess({ restoredFrom: '/x/backups/snapshot-1.json', restoredFromTime: null, preservedAs: null });
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('snapshot-1.json');
+  });
+});
+
+describe('describeSecretsUnavailable', () => {
+  it('沒有解不開的欄位時不顯示', () => {
+    expect(describeSecretsUnavailable([])).toBeNull();
+    expect(describeSecretsUnavailable(undefined)).toBeNull();
+  });
+
+  it('列出要重新輸入的欄位', () => {
+    const text = describeSecretsUnavailable(['password', 'masterPassword']);
+    // 中文和英文之間空一格
+    expect(text).toContain('存起來的 WebDAV 應用程式密碼和資料加密主密碼');
+    expect(text).toContain('重新輸入');
+    expect(describeSecretsUnavailable(['masterPassword', 'password'])).toContain('資料加密主密碼和 WebDAV 應用程式密碼');
+  });
+});
+
+describe('withoutReenteredSecret：重新輸入密碼後，提示不再列那個欄位', () => {
+  it('只拿掉重新輸入的那一個', () => {
+    expect(withoutReenteredSecret(['password', 'masterPassword'], 'password')).toEqual(['masterPassword']);
+    expect(withoutReenteredSecret(['masterPassword'], 'masterPassword')).toEqual([]);
+    expect(describeSecretsUnavailable(withoutReenteredSecret(['password'], 'password'))).toBeNull();
+  });
+
+  it('沒有這個欄位時回傳原本的陣列（畫面不必重繪）', () => {
+    const fields = ['masterPassword'];
+    expect(withoutReenteredSecret(fields, 'password')).toBe(fields);
+    // @ts-expect-error 故意傳 undefined：舊資料或呼叫端出錯時也不能當掉
+    expect(withoutReenteredSecret(undefined, 'password')).toBeUndefined();
+  });
+});
+
+describe('小工具', () => {
+  it('formatLocalDateTime 用本地時間；看不懂就回傳 null', () => {
+    expect(formatLocalDateTime(new Date(2026, 0, 2, 3, 4).toISOString())).toBe('2026/01/02 03:04');
+    expect(formatLocalDateTime('not a date')).toBeNull();
+    expect(formatLocalDateTime(null)).toBeNull();
+  });
+
+  it('baseName 同時處理 \\ 與 /', () => {
+    expect(baseName('C:\\a\\b.json')).toBe('b.json');
+    expect(baseName('/a/b.json')).toBe('b.json');
+    expect(baseName('')).toBe('');
+  });
+});
+
+describe('LoadErrorScreen', () => {
+  const render = (props: Partial<ComponentProps<typeof LoadErrorScreen>> = {}) =>
+    renderToStaticMarkup(
+      <LoadErrorScreen
+        loadError={{ code: 'PARSE_ERROR', error: 'Unexpected end of JSON input', dataFile: 'C:\\d\\lifesync-data.json' }}
+        busy={null}
+        canRestore
+        restoreFailure={null}
+        onRetry={() => {}}
+        onRestore={() => {}}
+        {...props}
+      />,
+    );
+
+  it('顯示白話原因、保證資料沒事、兩個按鈕、錯誤代碼與資料檔位置', () => {
+    const html = render();
+    expect(html).toContain('資料讀不出來');
+    expect(html).toContain('壞掉');
+    expect(html).toContain(LOAD_ERROR_SAFETY_NOTE);
+    expect(html).toContain('重試');
+    expect(html).toContain('載入最近一次自動備份');
+    expect(html).toContain('PARSE_ERROR');
+    expect(html).toContain('C:\\d\\lifesync-data.json');
+  });
+
+  it('瀏覽器模式只有重試，並說明不能從這裡載入備份', () => {
+    const html = render({ canRestore: false });
+    expect(html).toContain('重試');
+    expect(html).not.toContain('載入最近一次自動備份');
+    expect(html).toContain('瀏覽器模式不能從這裡載入備份');
+  });
+
+  it('沒有備份時顯示原因', () => {
+    expect(render({ restoreFailure: { code: 'NO_BACKUP' } })).toContain('沒有可以用的自動備份');
+  });
+
+  it('檔案被鎖住時：重試在前面，從備份載入收進「重試一直不行？」裡', () => {
+    const html = render({ loadError: { code: 'EBUSY', error: 'resource busy or locked' } });
+    expect(html).toContain('<details');
+    expect(html).toContain('重試一直不行？');
+    expect(html.indexOf('重試</button>')).toBeLessThan(html.indexOf('<details'));
+    expect(html.indexOf('載入最近一次自動備份</button>')).toBeGreaterThan(html.indexOf('<details'));
+  });
+
+  it('檔案壞掉時：兩個按鈕並排，沒有收起來', () => {
+    expect(render()).not.toContain('<details');
+  });
+
+  it('進行中時按鈕停用並顯示進度文字', () => {
+    const html = render({ busy: 'restore' });
+    expect(html).toContain('載入備份中……');
+    expect((html.match(/disabled=""/g) || []).length).toBe(2);
+  });
+});

@@ -1,0 +1,257 @@
+import path from 'path';
+import fs from 'fs/promises';
+import { createReadStream, constants as fsConstants } from 'fs';
+import type { Stats } from 'fs';
+import crypto from 'crypto';
+import type { GalleryError } from '../src/types/electronApi.ts';
+import { nodeError } from './nodeError.ts';
+
+/** 雲端加密檔的副檔名 */
+export const ENCRYPTED_EXT = '.e2ee';
+
+/** 下載中的暫存檔副檔名；寫完才改成正式檔名，避免中斷時留下半截檔 */
+export const DOWNLOAD_TMP_EXT = '.download.tmp';
+
+/** 回傳給畫面的錯誤明細最多幾筆 */
+export const MAX_ERROR_DETAILS = 20;
+
+// Windows 不允許出現在檔名中的字元，以及控制字元（0x00-0x1F、0x7F）
+// eslint-disable-next-line no-control-regex
+const FORBIDDEN_CHARS = /[<>:"|?*\u0000-\u001f\u007f]/;
+
+// Windows 保留的裝置名稱（CON、NUL、COM1…），不論有沒有副檔名都不能當檔名
+const RESERVED_DEVICE_NAMES = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?$/i;
+
+/**
+ * 把雲端上的檔名（例如 `photo.png.e2ee`）轉成可以安全寫進圖庫的本地檔名。
+ *
+ * - 只去掉「結尾」的 `.e2ee`：`a.e2ee.e2ee` → `a.e2ee`
+ * - 名稱不安全時回傳 null：空字串、`.`、`..`、含 `/` 或 `\`、
+ *   含 Windows 不允許的字元 `<>:"|?*`、含控制字元、Windows 保留裝置名稱、
+ *   或是下載暫存檔的名稱
+ *
+ * @param remoteBasename 雲端檔名（已由 webdav 套件解碼）
+ */
+export function toSafeLocalName(remoteBasename: unknown): string | null {
+  if (typeof remoteBasename !== 'string') return null;
+
+  const name = remoteBasename.endsWith(ENCRYPTED_EXT)
+    ? remoteBasename.slice(0, -ENCRYPTED_EXT.length)
+    : remoteBasename;
+
+  if (name === '' || name === '.' || name === '..') return null;
+  if (name.includes('/') || name.includes('\\')) return null;
+  if (FORBIDDEN_CHARS.test(name)) return null;
+  if (RESERVED_DEVICE_NAMES.test(name)) return null;
+  if (name.endsWith(DOWNLOAD_TMP_EXT)) return null;
+
+  return name;
+}
+
+/**
+ * 把檔名接在資料夾後面，並確認結果就在該資料夾「正下方」。
+ * 不是的話回傳 null（多一層防護，避免檔案寫到資料夾以外）。
+ *
+ */
+export function resolveInsideDir(dir: string, name: string): string | null {
+  const root = path.resolve(dir);
+  const target = path.resolve(root, name);
+  if (path.dirname(target) !== root) return null;
+  if (target === root) return null;
+  return target;
+}
+
+/** 允許讀取的圖片副檔名（與掃描卡池資料夾時篩選的格式相同） */
+export const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+
+/** 檔名（或路徑）的副檔名是不是允許的圖片格式，不分大小寫 */
+export function hasImageExtension(filePath: unknown): boolean {
+  if (typeof filePath !== 'string') return false;
+  return IMAGE_EXTENSIONS.includes(path.extname(filePath).toLowerCase());
+}
+
+/**
+ * 決定「讀圖片」功能實際要讀哪個檔案；不允許讀的就回傳 null。
+ *
+ * - 一律只讀圖片副檔名的檔案（不論相對或絕對路徑）。
+ * - 相對路徑（例如圖庫的 `gallery\a.png`）以資料資料夾為基準，
+ *   解析後必須仍在資料資料夾裡面，不能用 `..` 跳出去。
+ * - 絕對路徑（舊卡池直接指向原始資料夾的圖片）照常允許。
+ *
+ * @param dataDir 資料資料夾
+ * @param filePath 畫面傳來的路徑
+ * @returns 要讀取的絕對路徑
+ */
+export function resolveImageReadPath(dataDir: string, filePath: unknown): string | null {
+  if (typeof filePath !== 'string' || filePath === '' || filePath.includes('\0')) return null;
+  if (!hasImageExtension(filePath)) return null;
+
+  if (path.isAbsolute(filePath)) return path.resolve(filePath);
+
+  const root = path.resolve(dataDir);
+  const target = path.resolve(root, filePath);
+  const rel = path.relative(root, target);
+  if (rel === '' || rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) return null;
+  return target;
+}
+
+/** 還沒確認格式的資料：欄位都是 unknown，用之前要先檢查 */
+type LooseRecord = Record<string, unknown>;
+
+/** target 是不是在 root 資料夾裡面（不含 root 本身）；Windows 上不分大小寫 */
+function isInsideDir(root: string, target: string): boolean {
+  const rel = path.relative(path.resolve(root), path.resolve(target));
+  return rel !== '' && rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
+}
+
+const samePath = (a: string, b: string) =>
+  process.platform === 'win32'
+    ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase()
+    : path.resolve(a) === path.resolve(b);
+
+const absoluteString = (v: unknown): v is string => typeof v === 'string' && v !== '' && !v.includes('\0') && path.isAbsolute(v);
+
+/**
+ * 目前的資料裡，有哪些「資料資料夾以外」的圖片位置是程式自己在用的。
+ * - 資料夾：圖庫同步區填的 rewardFolderPath，以及每個圖庫卡池（image-pool）的 folderPath
+ * - 單一檔案：卡池裡的圖片路徑，和抽獎紀錄（rewardHistory）裡的圖片路徑
+ *   （卡池刪掉後，舊的抽獎紀錄仍指向原本的圖片）
+ * 只收絕對路徑；相對路徑一律以資料資料夾為基準，另外處理。
+ *
+ * @param data 目前的資料。可能是畫面剛存進來、還沒經過 normalizeData 的內容，所以每一層都先檢查
+ */
+export function collectReferencedImageLocations(data: unknown): { dirs: string[]; files: string[] } {
+  const dirs: string[] = [];
+  const files: string[] = [];
+  if (!data || typeof data !== 'object') return { dirs, files };
+  const loose = data as LooseRecord; // 已確認是物件；下面每個欄位都先檢查型別才用
+
+  if (absoluteString(loose.rewardFolderPath)) dirs.push(loose.rewardFolderPath);
+
+  const prizes = loose.lotteryPrizes && typeof loose.lotteryPrizes === 'object' ? loose.lotteryPrizes : {};
+  for (const list of Object.values(prizes)) {
+    if (!Array.isArray(list)) continue;
+    for (const prize of list as Array<LooseRecord | null | undefined>) { // 陣列內容不確定，每筆都用 ?. 讀
+      if (prize?.type !== 'image-pool') continue;
+      if (absoluteString(prize.folderPath)) dirs.push(prize.folderPath);
+      if (Array.isArray(prize.content)) {
+        for (const p of prize.content) if (absoluteString(p)) files.push(p);
+      }
+    }
+  }
+
+  if (Array.isArray(loose.rewardHistory)) {
+    for (const record of loose.rewardHistory as Array<{ prize?: LooseRecord | null } | null | undefined>) { // 同上，每筆都用 ?. 讀
+      if (record?.prize?.type === 'image' && absoluteString(record.prize.content)) files.push(record.prize.content);
+    }
+  }
+  return { dirs, files };
+}
+
+/**
+ * 開發伺服器（瀏覽器模式的 server.ts）讀圖片時，實際要讀哪個檔案；不允許的回傳 null。
+ *
+ * 比 resolveImageReadPath 嚴格：除了只讀圖片檔，絕對路徑還必須在
+ * 資料資料夾（含圖庫）裡，或是目前資料裡卡池用到的資料夾／圖片（見 collectReferencedImageLocations）。
+ * 這樣瀏覽器模式的獎品圖片照常顯示，但不能拿它讀電腦上任意位置的圖片。
+ *
+ * Electron 的讀圖功能（read-image-base64）不用這個：安裝版的抽獎紀錄裡有指向原始資料夾的絕對路徑，必須照常能讀。
+ *
+ * @param dataDir 資料資料夾
+ * @param filePath 畫面傳來的路徑
+ * @param data 伺服器目前的資料（還沒讀成功時傳 null，只允許資料資料夾）
+ */
+export function resolveDevServerImagePath(dataDir: string, filePath: unknown, data: unknown): string | null {
+  const target = resolveImageReadPath(dataDir, filePath);
+  if (!target) return null;
+  if (isInsideDir(dataDir, target)) return target;
+
+  const { dirs, files } = collectReferencedImageLocations(data);
+  if (dirs.some((dir) => isInsideDir(dir, target))) return target;
+  if (files.some((file) => samePath(file, target))) return target;
+  return null;
+}
+
+/** 計算檔案內容的 sha256（十六進位字串），用串流讀取以免大檔吃光記憶體 */
+export function sha256File(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = createReadStream(filePath);
+    stream.on('error', reject);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+  });
+}
+
+/** 同名檔案的內容不同、改用的檔名最多試幾次 */
+const MAX_NAME_ATTEMPTS = 100;
+
+/**
+ * 把一張圖片複製進圖庫，且不蓋掉圖庫裡原有的同名圖片。
+ *
+ * 1. 圖庫裡沒有同名檔案：直接複製。
+ * 2. 有同名檔案而且內容相同（先比大小，再比 sha256）：直接沿用，不再複製。
+ * 3. 有同名檔案但內容不同：改用 `<原檔名>-<內容 sha256 前 8 碼><副檔名>`；
+ *    該名稱也存在時，內容相同就沿用，不同就再加上 `-2`、`-3`…（幾乎不會發生）。
+ *
+ * 複製時使用「目標已存在就失敗」的模式，所以絕不會覆寫圖庫裡的檔案。
+ * 副檔名不是圖片（IMAGE_EXTENSIONS）的檔案一律拒絕，丟出 code 為 NOT_IMAGE 的錯誤。
+ *
+ * @param sourcePath 原始圖片的路徑
+ * @param galleryDir 圖庫資料夾（需已存在）
+ * @returns name 是圖庫裡實際使用的檔名；reused 表示沿用了內容相同的既有檔案
+ */
+export async function copyImageIntoGallery(
+  sourcePath: string,
+  galleryDir: string,
+): Promise<{ name: string; targetPath: string; reused: boolean }> {
+  // 只複製圖片檔（和讀圖片、掃描卡池資料夾用同一份副檔名清單）：
+  // 畫面傳來的路徑不一定是掃描結果，不能讓任意檔案（例如 .exe、.json）被複製進圖庫
+  if (!hasImageExtension(sourcePath) || sourcePath.includes('\0')) {
+    throw Object.assign(new Error(`不是允許的圖片格式，不加入圖庫：${sourcePath}`), { code: 'NOT_IMAGE' });
+  }
+  const baseName = path.basename(sourcePath);
+  const ext = path.extname(baseName);
+  const stem = baseName.slice(0, baseName.length - ext.length);
+
+  let sourceStat: Stats | null = null;
+  let sourceHash: string | null = null;
+  const getSourceHash = async (): Promise<string> => (sourceHash ??= await sha256File(sourcePath));
+
+  const hasSameContent = async (targetPath: string) => {
+    sourceStat ??= await fs.stat(sourcePath);
+    const targetStat = await fs.stat(targetPath);
+    if (!targetStat.isFile() || targetStat.size !== sourceStat.size) return false;
+    return (await sha256File(targetPath)) === (await getSourceHash());
+  };
+
+  for (let attempt = 0; attempt < MAX_NAME_ATTEMPTS; attempt++) {
+    let name = baseName;
+    if (attempt > 0) {
+      const shortHash = (await getSourceHash()).slice(0, 8);
+      name = attempt === 1 ? `${stem}-${shortHash}${ext}` : `${stem}-${shortHash}-${attempt}${ext}`;
+    }
+    const targetPath = path.join(galleryDir, name);
+
+    try {
+      await fs.copyFile(sourcePath, targetPath, fsConstants.COPYFILE_EXCL);
+      return { name, targetPath, reused: false };
+    } catch (error) {
+      if (nodeError(error).code !== 'EEXIST') throw error;
+    }
+
+    if (await hasSameContent(targetPath)) {
+      return { name, targetPath, reused: true };
+    }
+  }
+  throw new Error(`圖庫裡同名的檔案太多，無法加入 ${baseName}`);
+}
+
+/**
+ * 記錄一筆失敗明細（最多 MAX_ERROR_DETAILS 筆）
+ */
+export function pushError(errors: GalleryError[], name: string, reason: string): void {
+  if (errors.length < MAX_ERROR_DETAILS) {
+    errors.push({ name, reason });
+  }
+}

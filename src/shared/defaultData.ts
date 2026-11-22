@@ -1,7 +1,7 @@
 // 預設資料的唯一來源。
-// 主程序（electron/main.js、electron/storage.js）、開發伺服器（server.js）與畫面端都從這裡取得預設值。
+// 主程序（electron/main.ts、electron/storage.ts）、開發伺服器（server.ts）與畫面端都從這裡取得預設值。
 // 這個檔案不可有 JSX、不可 import 瀏覽器或 Electron 專用模組，型別只能用 import type：
-// server.js 是用 Node 直接執行的（Node 會把型別刪掉再跑），不經過打包工具。
+// server.ts 是用 Node 直接執行的（Node 會把型別刪掉再跑），不經過打包工具。
 
 import { fillPlanSortOrders, fillTaskSortOrders } from './taskOrder.ts';
 import type { CloudConfig, IndicatorId, LifeSyncData, LotteryPrize, MajorTask, Rarity, SubTask } from '../types/data.ts';

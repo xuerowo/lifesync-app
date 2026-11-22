@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { History, Trash2, Eye, Calendar, Clock, Timer, CheckCircle2, Zap, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
-import { useAppData } from '../../contexts/AppDataContext';
+import { useAppData } from '../../contexts/useAppData.ts';
 import { ITEMS_PER_PAGE } from '../../constants/index.tsx';
 import { clampPage, formatPageRange, getTotalPages } from '../../domain/pagination.ts';
 import { formatFlowTime, pomodoroWorkSeconds } from '../../utils/index.ts';

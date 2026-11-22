@@ -1,8 +1,8 @@
 // 主程序透過 electron/preload 提供給畫面的功能（window.electronAPI）。
-// 每個方法對應 electron/main.js、electron/cloudManager.js、electron/focusDiagnostics.js 裡的一個 IPC 處理程序，
+// 每個方法對應 electron/main.ts、electron/cloudManager.ts、electron/focusDiagnostics.ts 裡的一個 IPC 處理程序，
 // 參數和回傳值的格式照那邊實際的寫法。
 //
-// 瀏覽器模式（server.js）沒有 window.electronAPI，所以它是可以沒有的（?）；
+// 瀏覽器模式（server.ts）沒有 window.electronAPI，所以它是可以沒有的（?）；
 // 用之前一律先判斷，例如 `if (window.electronAPI)`、`typeof api?.snapshotData === 'function'`。
 //
 // 經過 IPC 的值會被複製一份（structured clone）：Node 的 Buffer 到畫面會變成 Uint8Array，函式和 class 不會過來。
@@ -160,7 +160,7 @@ export interface CloudGalleryPayload {
   masterPassword: string;
 }
 
-/** 失敗的圖片（最多記前幾筆，見 electron/galleryFiles.js 的 pushError） */
+/** 失敗的圖片（最多記前幾筆，見 electron/galleryFiles.ts 的 pushError） */
 export interface GalleryError {
   name: string;
   reason: string;
@@ -277,7 +277,7 @@ export interface ElectronAPI {
 
 declare global {
   interface Window {
-    /** 只有在 Electron 裡才有；瀏覽器模式（server.js）沒有 */
+    /** 只有在 Electron 裡才有；瀏覽器模式（server.ts）沒有 */
     electronAPI?: ElectronAPI;
   }
 }

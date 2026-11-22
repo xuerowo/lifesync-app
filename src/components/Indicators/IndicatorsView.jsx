@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Archive, Trophy, RotateCcw, Trash2, Plus, CheckCircle2, ArrowUp, ArrowDown } from 'lucide-react';
-import { useAppData } from '../../contexts/AppDataContext';
+import { useAppData } from '../../contexts/useAppData.ts';
 import { INDICATORS } from '../../constants/index.tsx';
 import { deleteGoalMessage } from '../../domain/confirmations.ts';
 import { focusCardTextField } from '../../utils/cardFocus.ts';
@@ -10,7 +10,6 @@ import { formatDisplayDate } from '../../utils/displayFormat.ts';
 // 每個維度最多幾個目標（新增與恢復目標都受這個限制）
 const MAX_GOALS_PER_INDICATOR = 3;
 
-// App 仍會傳 setEditingTask 進來，但這個頁面用不到
 const IndicatorsView = () => {
   const { data, updateData, getIndicatorStats } = useAppData();
   const [addingGoalTo, setAddingGoalTo] = useState(null);

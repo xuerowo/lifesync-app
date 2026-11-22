@@ -1,6 +1,6 @@
 // 雲端密碼不跟著資料流出、也不被外來資料蓋掉的規則。
-// 主程序（electron/main.js 匯出完整備份）與畫面端（設定頁的匯入、還原、雲端上傳下載）共用。
-// 這個檔案不可 import 瀏覽器或 Electron 專用模組，型別只能用 import type（server.js 用 Node 直接執行）。
+// 主程序（electron/main.ts 匯出完整備份）與畫面端（設定頁的匯入、還原、雲端上傳下載）共用。
+// 這個檔案不可 import 瀏覽器或 Electron 專用模組，型別只能用 import type（server.ts 用 Node 直接執行）。
 import { createDefaultData, normalizeData } from './defaultData.ts';
 import type { CloudConfig, LifeSyncData } from '../types/data.ts';
 

@@ -208,11 +208,11 @@ npm run build
 
 ### 清理資料裡的舊欄位（小心使用）
 
-`scripts/clean-data.js` 會刪掉程式已經不用的舊欄位：成就的 `rewardRarity`、`rewardCount`，以及專注紀錄裡任務的 `isPriority`、`priorityOrder`、`learningOrder`。
+`scripts/clean-data.ts` 會刪掉程式已經不用的舊欄位：成就的 `rewardRarity`、`rewardCount`，以及專注紀錄裡任務的 `isPriority`、`priorityOrder`、`learningOrder`。
 
 ```bash
-node scripts/clean-data.js --file <資料檔路徑>           # 只預覽，不寫入
-node scripts/clean-data.js --file <資料檔路徑> --apply   # 真的寫入
+node scripts/clean-data.ts --file <資料檔路徑>           # 只預覽，不寫入
+node scripts/clean-data.ts --file <資料檔路徑> --apply   # 真的寫入
 ```
 
 - 加上 `--apply` 時，會先在原檔旁邊複製一份 `<檔名>.before-clean-<時間>.json` 再寫入。刪掉的欄位不會自己回來，要還原只能用這份備份。
@@ -233,8 +233,8 @@ node scripts/clean-data.js --file <資料檔路徑> --apply   # 真的寫入
 | `src/domain/` | 遊戲規則與計算，例如抽卡券、專注計時的計時、完成計畫、停止任務；大多有自動測試 |
 | `src/shared/` | 畫面和主程序共用的程式，例如預設資料、舊資料轉換 |
 | `src/contexts/`、`src/hooks/`、`src/utils/` | 資料狀態與其他共用程式 |
-| `electron/` | 桌面程式的主程序；`storage.js` 負責安全存檔與自動備份 |
-| `server.js` | 瀏覽器模式用的本機資料伺服器 |
+| `electron/` | 桌面程式的主程序；`storage.ts` 負責安全存檔與自動備份 |
+| `server.ts` | 瀏覽器模式用的本機資料伺服器 |
 | `scripts/` | 沙盒、資料清理、打包前清理等小工具 |
 | `tests/` | 自動測試 |
 | `docs/` | 手動檢查清單（[manual-checks.md](docs/manual-checks.md)）、重要決策紀錄（[decisions.md](docs/decisions.md)）、打包注意事項（[build-and-packaging.md](docs/build-and-packaging.md)）、手機版計畫（[mobile-plan.md](docs/mobile-plan.md)、[mobile-sync-design.md](docs/mobile-sync-design.md)）、用詞檢視（[wording-review.md](docs/wording-review.md)） |

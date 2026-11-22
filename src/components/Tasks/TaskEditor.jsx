@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { Settings2, X, Zap, CheckCircle2, TrendingUp, Tag } from 'lucide-react';
-import { useAppData } from '../../contexts/AppDataContext';
+import { useAppData } from '../../contexts/useAppData.ts';
 import { INDICATORS, WEEK_DAYS } from '../../constants/index.tsx';
 import { firstGoalId, toggleWeekDay, toNonNegativeInt, validateSubTaskTimes } from '../../domain/inputs.ts';
 import { topSortOrder } from '../../shared/taskOrder.ts';

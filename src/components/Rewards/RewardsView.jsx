@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import IpcImage from '../Shared/IpcImage';
+import IpcImage from '../Shared/IpcImage.tsx';
 import { Gift, Percent, CheckCircle2, Zap, ImageIcon, Search, ChevronDown, Plus, BarChart3, Edit3, Trash2, ChevronLeft, ChevronRight, Sprout, Heart, Smile, Trophy, RotateCw, Star, ArrowUp, ArrowDown, Sparkles, History, Tag, Layers } from 'lucide-react';
-import { useAppData } from '../../contexts/AppDataContext';
-import { useLottery } from '../../hooks/useLottery';
+import { useAppData } from '../../contexts/useAppData.ts';
+import { useLottery } from '../../hooks/useLottery.ts';
 import { RARITY_STYLES, RARITY_NAMES, ITEMS_PER_PAGE } from '../../constants/index.tsx';
-import RarityBadge from '../Shared/RarityBadge';
+import RarityBadge from '../Shared/RarityBadge.tsx';
 import { deleteAchievementMessage } from '../../domain/confirmations.ts';
 import { getPrizeSortName } from '../../domain/lottery.ts';
 import { clampPage, formatPageRange, getTotalPages } from '../../domain/pagination.ts';

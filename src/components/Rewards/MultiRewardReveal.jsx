@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, CheckCircle2, Star, Search, RotateCw } from 'lucide-react';
 import { RARITY_STYLES } from '../../constants/index.tsx';
-import RarityBadge from '../Shared/RarityBadge';
-import IpcImage from '../Shared/IpcImage';
+import RarityBadge from '../Shared/RarityBadge.tsx';
+import IpcImage from '../Shared/IpcImage.tsx';
 
 const MultiRewardReveal = ({ results, onClaimAll, onCancel, setLightboxImage }) => {
   const [revealedIndices, setRevealedIndices] = useState([]);

@@ -1,0 +1,10 @@
+import { defineConfig } from 'vitest/config'
+
+// 測試設定與 vite.config.ts 分開，避免測試時啟動 Electron 外掛
+export default defineConfig({
+  test: {
+    environment: 'node',
+    include: ['tests/**/*.test.{js,jsx,ts,tsx}'],
+    exclude: ['**/node_modules/**', '.claude/**'],
+  },
+})

@@ -3,7 +3,7 @@ import { AnimatePresence } from 'framer-motion';
 import {
   Timer, Settings2, Target, CheckCircle2, ChevronUp, ChevronDown, Play, Square, Pause, FastForward, Trophy, Gift, Infinity as InfinityIcon, Plus, X, RotateCcw, BellOff, BellRing, Coffee
 } from 'lucide-react';
-import { useAppData } from '../../contexts/AppDataContext';
+import { useAppData } from '../../contexts/useAppData.ts';
 import { formatTime, formatFlowTime, calculatePomodoroStats, pomodoroWorkSeconds } from '../../utils/index.ts';
 import { isPausedByAppClose, pomodoroClock } from '../../domain/pomodoroClock.ts';
 import PomodoroSummary from './PomodoroSummary';

@@ -6,7 +6,7 @@ import {
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, useSortable, rectSortingStrategy, verticalListSortingStrategy, sortableKeyboardCoordinates, defaultAnimateLayoutChanges } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useAppData } from '../../contexts/AppDataContext';
+import { useAppData } from '../../contexts/useAppData.ts';
 import { INDICATORS } from '../../constants/index.tsx';
 import { getTodayStr, formatTaskTime, formatDateOnly } from '../../utils/index.ts';
 import { RANGE_SEP } from '../../utils/displayFormat.ts';
