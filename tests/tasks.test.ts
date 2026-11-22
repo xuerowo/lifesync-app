@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
   canStopTask,
+  comparePriorityOrder,
   computeActivePriorityTasks,
   completionRewardTickets,
   createRecentGuard,
   isCompletedOnDate,
   isOneTimeTask,
+  isScheduledWeekday,
   isStoppedTask,
   keepsPriorityAfterCompletion,
   priorityAfterCompletion,
@@ -332,5 +334,52 @@ describe('停止重複任務與恢復', () => {
     const planBack = { ...planDone, ...restorePlan(planDone, 'p') };
     expect(planBack.subTasks.some(t => t.id === 'inf')).toBe(false);
     expect(restoreStoppedSubTask(planBack, 'inf')!.subTasks.some(t => t.id === 'inf')).toBe(true);
+  });
+});
+
+describe('isScheduledWeekday：每週任務今天要不要做', () => {
+  it('每週任務：只有 days 裡的星期要做', () => {
+    expect(isScheduledWeekday({ type: 'weekly', days: [1, 3] }, 1)).toBe(true);
+    expect(isScheduledWeekday({ type: 'weekly', days: [1, 3] }, 2)).toBe(false);
+  });
+
+  it('每週任務沒有 days（舊資料或手動改壞）時不會出錯，當成哪天都不用做，和週曆一樣', () => {
+    expect(isScheduledWeekday({ type: 'weekly' }, 1)).toBe(false);
+    // 從檔案讀進來的壞資料可能不是陣列
+    expect(isScheduledWeekday({ type: 'weekly', days: 'mon' as unknown as number[] }, 1)).toBe(false);
+  });
+
+  it('不是每週任務的一律當成要做（不會因為星期被鎖住）', () => {
+    expect(isScheduledWeekday({ type: 'daily' }, 1)).toBe(true);
+    expect(isScheduledWeekday({ type: 'precise' }, 1)).toBe(true);
+  });
+});
+
+describe('comparePriorityOrder：優先順序視窗的排序', () => {
+  const sortIds = (list: Pick<SubTask, 'id' | 'priorityOrder'>[]) => ids([...list].sort(comparePriorityOrder));
+
+  it('有編號的照編號由小到大，和原本一樣', () => {
+    expect(sortIds([
+      { id: 'c', priorityOrder: 3 },
+      { id: 'a', priorityOrder: 1 },
+      { id: 'b', priorityOrder: 2 },
+    ])).toEqual(['a', 'b', 'c']);
+  });
+
+  it('沒有編號（或不是數字）的排在有編號的後面，彼此維持原本的先後', () => {
+    expect(sortIds([
+      { id: 'x' },
+      { id: 'b', priorityOrder: 2 },
+      { id: 'y', priorityOrder: NaN },
+      { id: 'a', priorityOrder: 1 },
+      { id: 'z', priorityOrder: '1' as unknown as number },
+    ])).toEqual(['a', 'b', 'x', 'y', 'z']);
+  });
+
+  it('編號相同時維持原本的先後', () => {
+    expect(sortIds([
+      { id: 'q', priorityOrder: 1 },
+      { id: 'p', priorityOrder: 1 },
+    ])).toEqual(['q', 'p']);
   });
 });

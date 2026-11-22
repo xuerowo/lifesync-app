@@ -2,6 +2,7 @@ import React from 'react';
 import { BookOpen, Plus, Edit3, Trash2, Clock, RotateCw, Cloud } from 'lucide-react';
 import { useAppData } from '../../contexts/useAppData.ts';
 import { formatDisplayDateTime } from '../../utils/displayFormat.ts';
+import { compareNotesByRecent } from '../../domain/notes.ts';
 import type { Dispatch, SetStateAction } from 'react';
 import type { EditingNote } from '../../types/ui.ts';
 
@@ -11,8 +12,7 @@ interface NoteViewProps {
 
 const NoteView = ({ setEditingNote }: NoteViewProps) => {
   const { data, updateData } = useAppData();
-  // 沒有 updatedAt 的舊筆記照原本把 undefined 傳給 Date（得到無效日期，相減是 NaN）；as string 只是讓型別檢查接受，值不變
-  const sortedNotes = [...data.notes].sort((a, b) => new Date(b.updatedAt as string).getTime() - new Date(a.updatedAt as string).getTime());
+  const sortedNotes = [...data.notes].sort(compareNotesByRecent);
 
   const addNote = () => {
     const newNote: EditingNote = {

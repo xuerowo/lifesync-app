@@ -6,6 +6,7 @@ import { useAppData } from '../../contexts/useAppData.ts';
 import { INDICATORS, WEEK_DAYS } from '../../constants/index.tsx';
 import { firstGoalId, toggleWeekDay, toNonNegativeInt, validateSubTaskTimes } from '../../domain/inputs.ts';
 import { topSortOrder } from '../../shared/taskOrder.ts';
+import { isScheduledWeekday } from '../../domain/tasks.ts';
 import type { Dispatch, SetStateAction } from 'react';
 import type { IndicatorId, MajorTask, SubTask, TaskType } from '../../types/data.ts';
 import type { EditingTask } from '../../types/ui.ts';
@@ -184,7 +185,7 @@ const TaskEditor = ({ editingTask, setEditingTask }: TaskEditorProps) => {
               {subItem.type === 'infinite' && (
                 <p className="-mt-4 ml-2 text-[10px] font-bold text-sky-500">不限時間、可以重複完成無限次，不受優先任務限制。</p>
               )}
-              {subItem.type === 'weekly' && (<div className="flex justify-between bg-white/30 p-2 rounded-[24px] border border-white/40">{[0, 1, 2, 3, 4, 5, 6].map(d => <button key={d} onClick={() => setLocalItem({ ...subItem, days: toggleWeekDay(subItem.days, d) })} className={`w-11 h-11 rounded-full text-[10px] font-black transition-all border-2 ${subItem.days!.includes(d) /* 每週任務一定有 days（新任務預設週一到週五）；萬一沒有，和原本一樣丟錯 */ ? 'bg-sky-500 text-white border-sky-400 shadow-md scale-110' : 'text-sky-300 border-transparent hover:bg-white/40'}`}>{WEEK_DAYS[d]}</button>)}</div>)}
+              {subItem.type === 'weekly' && (<div className="flex justify-between bg-white/30 p-2 rounded-[24px] border border-white/40">{[0, 1, 2, 3, 4, 5, 6].map(d => <button key={d} onClick={() => setLocalItem({ ...subItem, days: toggleWeekDay(subItem.days, d) })} className={`w-11 h-11 rounded-full text-[10px] font-black transition-all border-2 ${isScheduledWeekday(subItem, d) /* 沒有 days 時一天都不亮；點下去由 toggleWeekDay 從空的開始加 */ ? 'bg-sky-500 text-white border-sky-400 shadow-md scale-110' : 'text-sky-300 border-transparent hover:bg-white/40'}`}>{WEEK_DAYS[d]}</button>)}</div>)}
               
               {subItem.type !== 'infinite' && (
                 <div className="flex items-center gap-4 p-5 bg-white/30 backdrop-blur-md rounded-[28px] border border-white/60 shadow-sm">

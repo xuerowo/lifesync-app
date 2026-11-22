@@ -14,7 +14,7 @@ import {
   completeMajorTaskMessage, deleteMajorTaskMessage, deleteSubTaskMessage, revertCompletionMessage
 } from '../../domain/confirmations.ts';
 import { applySortOrders, reorderSortOrders, sortBySortOrder } from '../../shared/taskOrder.ts';
-import { canStopTask, completionRewardTickets, isStoppedTask } from '../../domain/tasks.ts';
+import { canStopTask, completionRewardTickets, isScheduledWeekday, isStoppedTask } from '../../domain/tasks.ts';
 import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from 'react';
 import type {
   Active, Announcements, DragEndEvent, DraggableAttributes, Over, ScreenReaderInstructions, UniqueIdentifier
@@ -343,8 +343,8 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
               {subs.map(sub => {
                 const today = new Date();
                 const currentDay = today.getDay();
-                // 每週任務建立時一定有 days；萬一沒有，和原本一樣在這裡丟錯
-                const isWrongDay = sub.type === 'weekly' && !sub.days!.includes(currentDay);
+                // 每週任務沒有 days（舊資料或手動改壞）時當成哪天都不用做，和週曆一樣
+                const isWrongDay = !isScheduledWeekday(sub, currentDay);
                 
                 // 隨時挑戰不受優先任務限制，也不會被日期鎖住
                 const blockingPriority = sub.type !== 'infinite' && activePriorityTasks.length > 0 && activePriorityTasks[0].id !== sub.id
@@ -356,9 +356,8 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                   : '這個任務今天不用做';
                 
                 // 隨時挑戰不顯示為「今日已完成」，才能一直重複完成
-                const isTodayCompleted = sub.type !== 'infinite' && (sub.type === 'daily' || sub.type === 'weekly') &&
-                                         sub.lastCompletedAt &&
-                                         sub.lastCompletedAt.startsWith(getTodayStr());
+                const isTodayCompleted = (sub.type === 'daily' || sub.type === 'weekly') &&
+                                         !!sub.lastCompletedAt?.startsWith(getTodayStr());
 
                 return (
                 <SortableItem key={sub.id} id={sub.id}>
@@ -385,8 +384,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                       <>
                         <input
                           type="checkbox"
-                          // 每日／每週任務還沒完成過時，isTodayCompleted 是 undefined 或 null（不是 false），原本就是這樣；as 只讓型別檢查接受，值不變
-                          checked={isTodayCompleted as boolean}
+                          checked={isTodayCompleted}
                           onChange={() => {
                             if (isTodayCompleted) {
                               confirmRevert(sub.id, task.id);

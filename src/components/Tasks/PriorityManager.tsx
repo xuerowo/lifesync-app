@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, X, ArrowUp, ArrowDown } from 'lucide-react';
 import { useAppData } from '../../contexts/useAppData.ts';
+import { comparePriorityOrder } from '../../domain/tasks.ts';
 
 interface PriorityManagerProps {
   isOpen: boolean;
@@ -14,7 +15,7 @@ const PriorityManager = ({ isOpen, onClose }: PriorityManagerProps) => {
   
   if (!isOpen) return null;
   
-  const priorityTasks = data.subTasks.filter(t => t.isPriority).sort((a, b) => a.priorityOrder! - b.priorityOrder!); // 優先任務存檔時一定編了順位；萬一沒有，和原本一樣相減得到 NaN
+  const priorityTasks = data.subTasks.filter(t => t.isPriority).sort(comparePriorityOrder);
 
   const handleMove = (taskId: string, direction: number) => {
       const currentIndex = priorityTasks.findIndex(t => t.id === taskId);

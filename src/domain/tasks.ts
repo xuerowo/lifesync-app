@@ -25,6 +25,22 @@ export function isScheduledWeekday(task: Pick<SubTask, 'type' | 'days'> | null |
 }
 
 /**
+ * 優先順序視窗的排序比較函式：依 priorityOrder 由小到大。
+ * 沒有 priorityOrder（或不是數字）的排在有編號的後面；兩個都沒有、或編號相同時回傳 0，
+ * 搭配 Array.prototype.sort（穩定排序）會維持原本在陣列中的先後。
+ */
+export function comparePriorityOrder(a: Pick<SubTask, 'priorityOrder'>, b: Pick<SubTask, 'priorityOrder'>): number {
+  const orderA = a.priorityOrder;
+  const orderB = b.priorityOrder;
+  const hasA = typeof orderA === 'number' && Number.isFinite(orderA);
+  const hasB = typeof orderB === 'number' && Number.isFinite(orderB);
+  if (hasA && hasB) return orderA - orderB;
+  if (hasA) return -1;
+  if (hasB) return 1;
+  return 0;
+}
+
+/**
  * 重排優先順序：把優先任務依原本的 priorityOrder 排好，重新編成 1..n。
  * - 非優先任務原樣保留。
  * - removedTaskId 指定的任務不計入編號，本身也原樣保留（由呼叫端決定要不要移除它）。
@@ -33,8 +49,8 @@ export function isScheduledWeekday(task: Pick<SubTask, 'type' | 'days'> | null |
 export function renumberPriorityTasks<T extends PriorityFields>(subTasks: T[], removedTaskId: string | null = null): T[] {
   const ranked = subTasks
     .filter(t => t.isPriority && t.id !== removedTaskId)
-    // 優先任務照理都有 priorityOrder；萬一沒有，算出 NaN，和原本的 JS 一樣
-    .sort((a, b) => (a.priorityOrder as number) - (b.priorityOrder as number));
+    // 優先任務照理都有 priorityOrder；萬一沒有，排在有編號的後面（見 comparePriorityOrder）
+    .sort(comparePriorityOrder);
   const rankById = new Map(ranked.map((t, i) => [t.id, i + 1]));
 
   return subTasks.map(t => {
@@ -64,8 +80,8 @@ export function computeActivePriorityTasks<T extends ScheduleFields>(subTasks: r
       }
       return !t.completed;
     })
-    // 同上：沒有 priorityOrder 時算出 NaN，和原本的 JS 一樣
-    .sort((a, b) => (a.priorityOrder as number) - (b.priorityOrder as number));
+    // 同上：沒有 priorityOrder 的排在後面
+    .sort(comparePriorityOrder);
 }
 
 /**
