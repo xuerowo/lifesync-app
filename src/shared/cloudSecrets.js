@@ -1,7 +1,7 @@
 // 雲端密碼不跟著資料流出、也不被外來資料蓋掉的規則。
 // 主程序（electron/main.js 匯出完整備份）與畫面端（設定頁的匯入、還原、雲端上傳下載）共用。
 // 這個檔案必須維持純 JS，不可 import 瀏覽器或 Electron 專用模組。
-import { normalizeData } from './defaultData.js';
+import { createDefaultData, normalizeData } from './defaultData.js';
 
 /** cloudConfig 裡屬於機密、不可寫進備份檔的欄位（WebDAV 密碼與加密用的主密碼） */
 export const CLOUD_SECRET_FIELDS = ['password', 'masterPassword'];
@@ -22,9 +22,17 @@ export function stripCloudSecrets(data) {
   return { ...data, cloudConfig };
 }
 
-/** 匯入、還原、雲端下載拿到的內容是否像一份資料（必須是物件，不能是陣列、數字等） */
+// 認得出是 LifeSync 資料的欄位：現在的欄位，加上舊版才有的 diaries、rewards（normalizeData 會轉換）
+const KNOWN_DATA_FIELDS = new Set([...Object.keys(createDefaultData()), 'diaries', 'rewards']);
+
+/**
+ * 匯入、還原、雲端下載拿到的內容是不是 LifeSync 的資料：
+ * 必須是物件（不能是陣列、數字等），而且至少有一個 LifeSync 的欄位。
+ * 擋掉選錯檔案的情況，例如別的程式的 JSON、空物件 {}。
+ */
 export function isImportableData(incoming) {
-  return isPlainObject(incoming);
+  if (!isPlainObject(incoming)) return false;
+  return Object.keys(incoming).some((key) => KNOWN_DATA_FIELDS.has(key));
 }
 
 /**

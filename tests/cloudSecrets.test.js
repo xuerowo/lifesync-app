@@ -86,8 +86,14 @@ describe('mergeIncomingData：匯入、還原、下載時保留本機的雲端�
     expect(() => mergeIncomingData(current, null)).toThrow();
   });
 
-  it('isImportableData 只接受物件', () => {
-    expect(isImportableData({})).toBe(true);
+  it('isImportableData 只接受至少有一個 LifeSync 欄位的物件', () => {
+    expect(isImportableData({ subTasks: [] })).toBe(true);
+    expect(isImportableData({ lotteryTickets: 0, somethingElse: 1 })).toBe(true);
+    // 舊版才有的欄位也認得
+    expect(isImportableData({ diaries: [] })).toBe(true);
+    // 選錯檔案：空物件、別的程式的 JSON
+    expect(isImportableData({})).toBe(false);
+    expect(isImportableData({ name: 'my-app', version: '1.0.0' })).toBe(false);
     expect(isImportableData([])).toBe(false);
     expect(isImportableData(3)).toBe(false);
     expect(isImportableData(null)).toBe(false);

@@ -120,6 +120,9 @@ const SettingsView = () => {
         if (result.success) {
             if (result.aborted) {
                 alert('還原已中斷。目前的資料沒有變動，但已經複製過來的圖庫圖片會留著（同名的圖片已被蓋掉）。');
+            } else if (!isImportableData(result.data)) {
+                // 主程序已經擋過；這裡再擋一次，避免把不是 LifeSync 的內容蓋進資料
+                alert('還原失敗：這個資料夾裡的資料檔不是 LifeSync 的資料。\n\n目前的資料沒有變動。');
             } else {
                 // 雲端設定保留這台電腦目前的，不用備份裡的
                 setData(prev => mergeIncomingData(prev, result.data));

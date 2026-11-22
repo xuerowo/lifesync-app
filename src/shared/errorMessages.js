@@ -109,6 +109,10 @@ export function describeCloudError(error, options) {
   return withDetail(cloudErrorReason(error, options), error);
 }
 
+/** 還原完整備份時，資料檔打得開，但內容不是 LifeSync 的資料（選錯資料夾，或檔案被換掉） */
+export const NOT_LIFESYNC_BACKUP_MESSAGE =
+  '這個資料夾裡的 lifesync-data.json 不是 LifeSync 的資料，可能選錯了資料夾。請選擇匯出時建立的「LifeSync_Backup_日期_時間」資料夾。';
+
 /**
  * 檔案、資料夾錯誤的白話說明（含下一步）；認不出來時回傳 null。
  * @param {unknown} error

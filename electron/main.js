@@ -6,12 +6,12 @@ import { existsSync } from 'fs';
 import { setupCloudHandlers, setAbortFlag } from './cloudManager.js';
 import { createStorage } from './storage.js';
 import { resolveImageReadPath, copyImageIntoGallery } from './galleryFiles.js';
-import { stripCloudSecrets } from '../src/shared/cloudSecrets.js';
+import { isImportableData, stripCloudSecrets } from '../src/shared/cloudSecrets.js';
 import { decideWindowOpen } from './windowOpen.js';
 import { setupSingleInstance } from './singleInstance.js';
 import { buildMessageBoxOptions, confirmResultFromResponse } from './nativeDialogs.js';
 import { createFocusDiagnostics } from './focusDiagnostics.js';
-import { describeFileError } from '../src/shared/errorMessages.js';
+import { describeFileError, NOT_LIFESYNC_BACKUP_MESSAGE } from '../src/shared/errorMessages.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -637,8 +637,11 @@ ipcMain.handle('import-full-backup', async (event, backupDir) => {
     const jsonPath = path.join(backupDir, 'lifesync-data.json');
     const gallerySrcDir = path.join(backupDir, 'gallery');
     
-    // 1. 讀取 JSON
+    // 1. 讀取 JSON，並確認真的是 LifeSync 的資料；不是就整個取消，圖庫也不動
     const jsonData = JSON.parse(await fs.readFile(jsonPath, 'utf-8'));
+    if (!isImportableData(jsonData)) {
+      return { success: false, error: NOT_LIFESYNC_BACKUP_MESSAGE };
+    }
     
     // 2. 恢復圖庫
     await ensureGalleryDir();
