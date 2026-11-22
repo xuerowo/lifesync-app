@@ -14,12 +14,6 @@ import {
   evaluateMasterPassword, masterPasswordBlockMessage, isInsecureWebdavUrl, INSECURE_URL_WARNING,
   MASTER_PASSWORD_SAVED_MESSAGE
 } from '../../domain/masterPassword.ts';
-import type { CloudProgress } from '../../types/electronApi.ts';
-
-// 進度面板只顯示文字、不顯示「第幾張／共幾張」時用。
-// App 的進度面板用 syncProgress.total > 0 判斷要不要顯示張數，沒有 total 時就不顯示，所以只帶 message 是原本就有的用法；
-// 但 CloudProgress 型別要求 current、total，這裡照原樣只傳 message（不補 0，以免改變行為）。
-const messageOnlyProgress = (message: string): CloudProgress => ({ message }) as CloudProgress;
 
 // catch 到的錯誤（TypeScript 裡是 unknown）讀 message：只改型別、不改值，和原本直接寫 err.message 一樣
 const errMessage = (err: unknown): string | undefined => (err as { message?: string }).message;
@@ -88,7 +82,7 @@ const SettingsView = () => {
     if (!targetDir) return;
 
     setIsSyncing(true);
-    setSyncProgress(messageOnlyProgress('準備匯出……'));
+    setSyncProgress({ message: '準備匯出……' });
     try {
         const result = await window.electronAPI.exportFullBackup({ targetDir, data });
         if (result.success) {
@@ -116,7 +110,7 @@ const SettingsView = () => {
     if (!confirm(CONFIRM_BACKUP_RESTORE)) return;
 
     setIsSyncing(true);
-    setSyncProgress(messageOnlyProgress('正在備份目前的資料……'));
+    setSyncProgress({ message: '正在備份目前的資料……' });
     try {
         // 覆蓋前先拍快照；失敗就整個取消，連圖庫也不動
         const snapshot = await snapshotBeforeOverwrite(window.electronAPI, { reason: SNAPSHOT_REASONS.backupRestore, data });
@@ -124,7 +118,7 @@ const SettingsView = () => {
             alert(snapshotFailedMessage(snapshot));
             return;
         }
-        setSyncProgress(messageOnlyProgress('準備還原……'));
+        setSyncProgress({ message: '準備還原……' });
         const result = await window.electronAPI.importFullBackup(backupDir);
         if (result.success) {
             if (result.aborted) {
@@ -215,7 +209,7 @@ const SettingsView = () => {
     // 上傳會整份取代雲端上的備份（原本那份另存為舊版），先確認
     if (!confirm(CONFIRM_CLOUD_UPLOAD)) return;
     setIsSyncing(true);
-    setSyncProgress(messageOnlyProgress('正在加密並上傳……'));
+    setSyncProgress({ message: '正在加密並上傳……' });
     try {
       // 上傳的內容不放密碼：下載時一律保留本機的雲端設定，用不到；也少一份可能外流的密碼
       const encrypted = await encryptData(JSON.stringify(stripCloudSecrets(data)), data.cloudConfig.masterPassword);
@@ -246,7 +240,7 @@ const SettingsView = () => {
     if (!window.electronAPI) return;
     if (!confirm(CONFIRM_CLOUD_RESTORE)) return;
     setIsSyncing(true);
-    setSyncProgress(messageOnlyProgress('正在從雲端下載資料……'));
+    setSyncProgress({ message: '正在從雲端下載資料……' });
     try {
       const result = await window.electronAPI.cloudDownload({
         config: data.cloudConfig,
@@ -257,7 +251,7 @@ const SettingsView = () => {
         const imported: unknown = JSON.parse(decryptedJson);
         if (!isImportableData(imported)) throw new Error('雲端上的檔案不是 LifeSync 的資料格式');
         // 下載、解密都成功了，覆蓋前先拍快照；失敗就不覆蓋
-        setSyncProgress(messageOnlyProgress('正在備份目前的資料……'));
+        setSyncProgress({ message: '正在備份目前的資料……' });
         const snapshot = await snapshotBeforeOverwrite(window.electronAPI, { reason: SNAPSHOT_REASONS.cloudRestore, data });
         if (!snapshot.ok) {
           alert(snapshotFailedMessage(snapshot));

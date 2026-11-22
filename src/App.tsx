@@ -276,7 +276,7 @@ const App = () => {
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
-                            {syncProgress.total > 0 && (
+                            {(syncProgress.total ?? 0) > 0 && (
                                 <span className="text-xs font-black text-sky-500 bg-sky-50 px-2 py-1 rounded-lg">
                                     {syncProgress.current} / {syncProgress.total}
                                 </span>
@@ -291,12 +291,12 @@ const App = () => {
                             </button>
                         </div>
                     </div>
-                    {syncProgress.total > 0 && (
+                    {(syncProgress.total ?? 0) > 0 && (
                         <div className="w-full h-2.5 bg-sky-100 rounded-full overflow-hidden shadow-inner border border-sky-50">
                             <motion.div 
                                 className="h-full bg-gradient-to-r from-sky-400 to-sky-600"
                                 initial={{ width: 0 }}
-                                animate={{ width: `${(syncProgress.current / syncProgress.total) * 100}%` }}
+                                animate={{ width: `${(Number(syncProgress.current) / Number(syncProgress.total)) * 100}%` }}
                                 transition={{ duration: 0.3 }}
                             />
                         </div>

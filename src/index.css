@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 @layer base {
-  /* 整個畫面不讓最外層（html）捲動，改由主畫面那一層自己捲動（見 App.jsx 的 app-scroll）。
+  /* 整個畫面不讓最外層（html）捲動，改由主畫面那一層自己捲動（見 App.tsx 的 app-scroll）。
      原因：Electron 不會把最外層的背景畫進捲軸預留的空間，會留下白條；
      改由主畫面自己捲動，預留的空間就會畫上主畫面的漸層背景。 */
   html, body, #root {

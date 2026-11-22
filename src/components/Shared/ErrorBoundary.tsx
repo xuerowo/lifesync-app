@@ -1,5 +1,4 @@
-// 測試環境（Vitest）用的是傳統 JSX 轉換，需要 React 在作用域內
-import React, { Component } from 'react';
+import { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RotateCcw } from 'lucide-react';
 

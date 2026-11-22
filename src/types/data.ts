@@ -160,7 +160,10 @@ export interface TaskHistoryRecord {
   /** 完成當下的計畫名稱；沒有計畫時是「獨立任務」 */
   majorTaskTitle?: string;
   indicatorId?: IndicatorId;
-  completedAt: UtcIsoString;
+  /** 完成的時間；很舊的紀錄可能沒有，畫面改看 createdAt */
+  completedAt?: UtcIsoString;
+  /** 很舊的版本記的時間欄位（只在沒有 completedAt 時拿來顯示） */
+  createdAt?: UtcIsoString;
   type?: TaskType;
   /**
    * 這次完成實際給了幾張券（撤銷或刪除時扣回這麼多）。
@@ -178,7 +181,8 @@ export type Rarity = 'N' | 'R' | 'SR' | 'SSR' | 'UR';
 
 /** 文字獎品 */
 export interface TextPrize {
-  id: string;
+  /** 卡池裡的都有；抽卡紀錄裡補登的、或把圖片改成文字的沒有 */
+  id?: string;
   type: 'text';
   content: string;
 }

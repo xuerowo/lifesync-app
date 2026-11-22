@@ -1,5 +1,3 @@
-// 測試環境（Vitest）用的是傳統 JSX 轉換，需要 React 在作用域內
-import React from 'react';
 import { AlertTriangle, RotateCcw, History, RefreshCw } from 'lucide-react';
 import { describeLoadError, describeRestoreFailure, restoreConfirmMessage, LOAD_ERROR_SAFETY_NOTE } from '../../domain/loadError.ts';
 import { formatDisplayTime } from '../../utils/displayFormat.ts';

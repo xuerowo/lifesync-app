@@ -9,7 +9,7 @@ const noElectron = process.env.LIFESYNC_NO_ELECTRON === '1'
 
 // 內容安全政策（CSP）：規定頁面只能載入程式自己的東西，不能連到外部網站。
 // 只在打包（vite build）時加入；開發模式的 Vite 熱更新需要內嵌腳本，加了會壞。
-// - style-src 要允許 'unsafe-inline'：App.jsx、MultiRewardReveal.jsx 有 <style> 標籤，framer-motion 也會動態插入 <style>
+// - style-src 要允許 'unsafe-inline'：App.tsx、MultiRewardReveal.tsx 有 <style> 標籤，framer-motion 也會動態插入 <style>
 // - img-src 要允許 data: 與 blob:：圖片是由主程序讀成 data: 網址再顯示
 // - 沒有使用外部字型，字型只允許自己與 data:
 // 瀏覽器模式（LIFESYNC_NO_ELECTRON=1）的建置也套用同一份：它只呼叫同一個網站的 /api，政策同樣適用。

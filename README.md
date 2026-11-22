@@ -140,7 +140,7 @@ LifeSync 是一款幫你戒掉拖延的 Windows 桌面程式。做法只有三�
 
 ### 準備
 
-1. 安裝 [Node.js](https://nodejs.org/)，這是執行這個專案需要的工具。
+1. 安裝 [Node.js](https://nodejs.org/) 22.18 以上的版本，這是執行這個專案需要的工具（專案用 TypeScript 寫，開發時會直接用 Node 執行 `.ts` 檔，舊版 Node 不支援）。
 2. 在專案資料夾執行 `npm install`，下載需要的套件。npm 12 以後的安全設定比較嚴格，專案已經設定好，直接執行即可；原因見 [docs/build-and-packaging.md](docs/build-and-packaging.md)。
 
 ### 啟動

@@ -15,9 +15,6 @@ interface TasksHistoryProps {
   setEditingTaskHistory: Dispatch<SetStateAction<EditingTaskHistory | null>>;
 }
 
-// 完成紀錄沒有 createdAt 欄位（見 types/data.ts）；畫面沿用原本的「completedAt 沒有值才看 createdAt」寫法，這裡只讓型別檢查讀得到它
-const legacyCreatedAt = (record: TaskHistoryRecord): string | undefined => (record as { createdAt?: string }).createdAt;
-
 const TasksHistory = ({ setEditingTaskHistory }: TasksHistoryProps) => {
   const { data, updateData } = useAppData();
   const [currentPageState, setCurrentPage] = useState(1);
@@ -25,7 +22,7 @@ const TasksHistory = ({ setEditingTaskHistory }: TasksHistoryProps) => {
 
   // 取得所有任務完成紀錄並按時間排序
   const historyTasks = [...data.taskHistory].sort((a, b) =>
-    new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
+    new Date(b.completedAt ?? NaN).getTime() - new Date(a.completedAt ?? NaN).getTime()
   );
 
   // 刪除紀錄使目前頁碼超過總頁數時，自動顯示最後一頁（在 render 時計算，不在 effect 裡改 state）
@@ -151,8 +148,8 @@ const TasksHistory = ({ setEditingTaskHistory }: TasksHistoryProps) => {
                       </td>
                       <td className={`px-4 py-4 bg-white/50 backdrop-blur-sm border-y transition-all duration-300 group-hover/row:bg-white group-hover/row:shadow-md ${isSelected ? 'border-sky-200 bg-sky-50/50' : 'border-white'}`}>
                         <div className="flex flex-col">
-                          <span className="text-xs font-black text-sky-800">{formatDisplayDate(task.completedAt || legacyCreatedAt(task))}</span>
-                          <span className="text-[10px] font-bold text-sky-500">{formatDisplayTime(task.completedAt || legacyCreatedAt(task))}</span>
+                          <span className="text-xs font-black text-sky-800">{formatDisplayDate(task.completedAt || task.createdAt)}</span>
+                          <span className="text-[10px] font-bold text-sky-500">{formatDisplayTime(task.completedAt || task.createdAt)}</span>
                         </div>
                       </td>
                       <td className={`px-4 py-4 bg-white/50 backdrop-blur-sm border-y transition-all duration-300 group-hover/row:bg-white group-hover/row:shadow-md ${isSelected ? 'border-sky-200 bg-sky-50/50' : 'border-white'}`}>

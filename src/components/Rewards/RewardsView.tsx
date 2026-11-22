@@ -14,7 +14,7 @@ import { toNonNegativeInt, toNonNegativeNumber } from '../../domain/inputs.ts';
 import AchievementConditionInput from './AchievementConditionInput.tsx';
 import { focusCardTextField } from '../../utils/cardFocus.ts';
 import { formatDisplayDate, formatDisplayTime } from '../../utils/displayFormat.ts';
-import type { Achievement, AchievementCategory, ImagePoolPrize, Rarity, RewardHistoryRecord, TextPrize } from '../../types/data.ts';
+import type { Achievement, AchievementCategory, ImagePoolPrize, Rarity, RewardHistoryRecord } from '../../types/data.ts';
 import type { ScanFolderResult } from '../../types/electronApi.ts';
 import type { EditingRewardHistory, RewardStage, RewardToShow } from '../../types/ui.ts';
 
@@ -743,7 +743,7 @@ const RewardsView = ({
                 </div>
                 <h3 className="text-xl font-black text-sky-900">抽卡紀錄</h3>
               </div>
-              <button onClick={() => setEditingHistory({ rarity: 'R', prize: { type: 'text', content: '' } as TextPrize /* 補登的文字獎品沒有 id；data.ts 的 TextPrize 把 id 寫成必填，實際上可以沒有 */, timestamp: new Date().toISOString(), claimed: true })} className="group relative px-6 py-3 bg-sky-500/5 backdrop-blur-md text-sky-600 text-[11px] font-black rounded-2xl transition-all shadow-sm hover:bg-sky-500/10 hover:!translate-y-[-6px] hover:scale-105 active:scale-95 flex items-center gap-2 border border-sky-500/20 overflow-hidden"><div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:animate-shine pointer-events-none" /><span className="relative flex items-center gap-2"><Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" /> 補登抽卡紀錄</span></button>
+              <button onClick={() => setEditingHistory({ rarity: 'R', prize: { type: 'text', content: '' }, timestamp: new Date().toISOString(), claimed: true })} className="group relative px-6 py-3 bg-sky-500/5 backdrop-blur-md text-sky-600 text-[11px] font-black rounded-2xl transition-all shadow-sm hover:bg-sky-500/10 hover:!translate-y-[-6px] hover:scale-105 active:scale-95 flex items-center gap-2 border border-sky-500/20 overflow-hidden"><div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:animate-shine pointer-events-none" /><span className="relative flex items-center gap-2"><Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" /> 補登抽卡紀錄</span></button>
             </div>
             {selectedHistoryIds.length > 0 && (
               <div className="bg-rose-50/80 p-4 flex justify-between items-center border-b border-rose-100 animate-in slide-down">

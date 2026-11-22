@@ -6,6 +6,9 @@
   "author": "xuerowo",
   "type": "module",
   "main": "dist-electron/main.js",
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "dev": "vite",
     "server": "node server.ts",

@@ -194,8 +194,9 @@ export type CloudRestoreGalleryResult =
 
 /** 雲端同步、完整備份進行中的進度（cloud-progress 事件） */
 export interface CloudProgress {
-  current: number;
-  total: number;
+  /** 第幾個、共幾個；畫面端自己顯示的進度（例如「準備匯出……」）只有文字，沒有這兩個 */
+  current?: number;
+  total?: number;
   message: string;
 }
 

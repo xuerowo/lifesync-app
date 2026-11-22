@@ -1,5 +1,3 @@
-// 測試環境（Vitest）用的是傳統 JSX 轉換，需要 React 在作用域內
-import React from 'react';
 import { AlertOctagon, RefreshCw } from 'lucide-react';
 import { describeSaveError } from '../../domain/saveRetry.ts';
 import type { SaveFailure } from '../../domain/saveRetry.ts';
