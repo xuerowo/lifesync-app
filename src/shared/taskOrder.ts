@@ -75,26 +75,26 @@ export interface LegacyTaskFields {
 /**
  * 升級前「進行中的計畫」的自動排序（只用來幫舊資料補 sortOrder）。
  * 規則照搬 2026-11-22 以前 TasksView.jsx 的排序。
+ * 壞資料：不是物件的計畫不放進結果；不是物件的任務略過；沒有 id 的計畫不算擁有任何任務。
  */
 export function legacyPlanSort<T extends LegacyPlanFields | null | undefined>(
   majorTasks: readonly T[] | null | undefined,
   subTasks: readonly (LegacyTaskFields | null | undefined)[] | null | undefined,
   now: Date = new Date(),
-): T[] {
-  const subs = Array.isArray(subTasks) ? subTasks : [];
+): NonNullable<T>[] {
+  const subs = (Array.isArray(subTasks) ? subTasks : []).filter((s): s is LegacyTaskFields => isObject(s));
   const todayStr = localDateStr(now);
   const currentDay = now.getDay();
 
-  // 下面的 `as LegacyTaskFields`：s 只有在「計畫沒有 id、任務是 null」這種壞資料時才會是 null，
-  // 這時和原本的 JS 一樣會在讀欄位時丟錯（不在轉 TypeScript 時改行為）
+  // 沒有 id 的計畫：不拿「majorTaskId 也是空的任務」來算（它們不屬於這個計畫）
+  const tasksOf = (planId: SortableId | undefined) =>
+    planId === undefined || planId === null ? [] : subs.filter((s) => s.majorTaskId === planId);
   const highestPriority = (planId: SortableId | undefined) => {
-    const p = subs.filter((s) => s?.majorTaskId === planId && (s as LegacyTaskFields).isPriority);
+    const p = tasksOf(planId).filter((s) => s.isPriority);
     if (p.length === 0) return Infinity;
-    return Math.min(...p.map((s) => (s as LegacyTaskFields).priorityOrder || Infinity));
+    return Math.min(...p.map((s) => s.priorityOrder || Infinity));
   };
-  const activeUnfinished = (planId: SortableId | undefined) => subs.filter((item) => {
-    if (item?.majorTaskId !== planId) return false;
-    const s = item as LegacyTaskFields;
+  const activeUnfinished = (planId: SortableId | undefined) => tasksOf(planId).filter((s) => {
     if (s.type === 'daily' || s.type === 'weekly') {
       const doneToday = typeof s.lastCompletedAt === 'string' && s.lastCompletedAt.startsWith(todayStr);
       const wrongDay = s.type === 'weekly' && !(Array.isArray(s.days) && s.days.includes(currentDay));
@@ -104,10 +104,11 @@ export function legacyPlanSort<T extends LegacyPlanFields | null | undefined>(
   }).length;
 
   return (Array.isArray(majorTasks) ? majorTasks : [])
-    .map((item: T, index: number) => ({ item, index }))
+    .filter((item): item is NonNullable<T> => isObject(item))
+    .map((item, index) => ({ item, index }))
     .sort((x, y) => {
-      const a: LegacyPlanFields = x.item || {};
-      const b: LegacyPlanFields = y.item || {};
+      const a: LegacyPlanFields = x.item;
+      const b: LegacyPlanFields = y.item;
       const pa = highestPriority(a.id);
       const pb = highestPriority(b.id);
       if (pa !== pb) return pa - pb;
@@ -229,20 +230,19 @@ function reorderedList(
 /**
  * 番茄鐘清單等「跨計畫」的任務列表：照計畫的順序、再照計畫裡任務的順序排，和計畫清單看到的一致。
  * 找不到所屬計畫的任務排在最後，彼此維持原本先後。
+ * 壞資料：不是物件的任務不放進結果（呼叫端會讀每一筆的欄位）；不是物件或沒有 id 的計畫略過。
  */
 export function sortTasksLikePlanList<T extends (Sortable & { majorTaskId?: SortableId }) | null | undefined>(
   subTasks: readonly T[] | null | undefined,
   majorTasks: readonly (Sortable | null | undefined)[] | null | undefined,
-): T[] {
-  const planRank = new Map(sortBySortOrder(majorTasks).map((p, i) => [p?.id, i]));
-  const taskRank = new Map(sortBySortOrder(subTasks).map((t, i) => [t, i]));
-  const rankOf = (t: T): number => {
-    if (!planRank.has(t?.majorTaskId)) return Infinity;
-    // has() 為 true，get() 一定拿得到。t 是 null 時（只有在有計畫沒有 id 時才會走到）和原本一樣在這裡丟錯
-    return planRank.get((t as NonNullable<T>).majorTaskId) as number;
-  };
-  return (Array.isArray(subTasks) ? subTasks : [])
-    .map((t: T, index: number) => ({ t, index }))
+): NonNullable<T>[] {
+  const plans = sortBySortOrder(majorTasks).filter((p): p is Sortable => isObject(p) && p.id !== undefined && p.id !== null);
+  const planRank = new Map<SortableId | undefined, number>(plans.map((p, i) => [p.id, i]));
+  const tasks = (Array.isArray(subTasks) ? subTasks : []).filter((t): t is NonNullable<T> => isObject(t));
+  const taskRank = new Map(sortBySortOrder(tasks).map((t, i) => [t, i]));
+  const rankOf = (t: NonNullable<T>): number => planRank.get(t.majorTaskId) ?? Infinity;
+  return tasks
+    .map((t, index) => ({ t, index }))
     .sort((a, b) => {
       const pa = rankOf(a.t);
       const pb = rankOf(b.t);

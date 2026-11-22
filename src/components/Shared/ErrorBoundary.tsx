@@ -5,9 +5,21 @@ import { AlertTriangle, RotateCcw } from 'lucide-react';
 /** 錯誤訊息摘要最多顯示幾個字 */
 const MAX_MESSAGE_LENGTH = 300;
 
+/** 把任何值轉成文字；沒有 toString 的物件（例如 Object.create(null)）轉換時會出錯，這時當成沒有文字 */
+const toText = (value: unknown): string => {
+  try {
+    return String(value).trim();
+  } catch {
+    return '';
+  }
+};
+
 const summarize = (error: unknown): string => {
   // 丟出來的可以是任何值；不是物件時讀 message 得到 undefined（和原本的 error?.message 一樣），所以這個 as 是安全的
-  const text = String((error as { message?: unknown } | null | undefined)?.message || error || '未知的錯誤').trim();
+  const described = toText((error as { message?: unknown } | null | undefined)?.message || error || '');
+  // 丟出 null、0、false 這類值時沒有訊息可看：顯示「未知的錯誤」，能寫出來的值附在後面方便查
+  const thrown = toText(error);
+  const text = described || (thrown ? `未知的錯誤（丟出的值是 ${thrown}）` : '未知的錯誤');
   return text.length > MAX_MESSAGE_LENGTH ? `${text.slice(0, MAX_MESSAGE_LENGTH)}……` : text;
 };
 
@@ -21,6 +33,8 @@ interface ErrorBoundaryProps {
 }
 
 interface ErrorBoundaryState {
+  /** 有沒有出錯。另外記，因為丟出來的值本身可能是 null、0 這類「假值」，不能拿它判斷 */
+  hasError: boolean;
   /** 畫面丟出來的錯誤（可以是任何值）；沒有錯誤時是 null */
   error: unknown;
 }
@@ -28,11 +42,11 @@ interface ErrorBoundaryState {
 export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = { error: null };
+    this.state = { hasError: false, error: null };
   }
 
   static getDerivedStateFromError(error: unknown): ErrorBoundaryState {
-    return { error };
+    return { hasError: true, error };
   }
 
   componentDidCatch(error: unknown, info: ErrorInfo) {
@@ -40,7 +54,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
   }
 
   render() {
-    if (!this.state.error) return this.props.children;
+    if (!this.state.hasError) return this.props.children;
 
     return (
       <div className="app-scroll h-full bg-gradient-to-b from-sky-300 via-sky-100 to-white flex [align-items:safe_center] justify-center p-6 text-sky-950">

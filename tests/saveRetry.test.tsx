@@ -58,6 +58,22 @@ describe('toSaveFailure', () => {
     expect(f.code).toBe('SAVE_FAILED');
     expect(f.error).toBe('boom');
   });
+
+  it('錯誤代碼不是文字時當成未知的錯誤，不會出錯', () => {
+    for (const code of [500, { nested: true }, true, '']) {
+      const f = toSaveFailure({ code, message: 'x' }, 1, now);
+      expect(f.code).toBe('SAVE_FAILED');
+      expect(f.blocked).toBe(false);
+      expect(describeSaveError(f)!.lines[0]).toBe('存檔時發生錯誤。');
+    }
+  });
+
+  it('錯誤訊息不是文字時轉成文字；沒有 toString 的物件也不會出錯', () => {
+    expect(toSaveFailure({ code: 'EBUSY', message: 42 }, 1, now).error).toBe('42');
+    const bare = Object.assign(Object.create(null), { code: 'EBUSY' });
+    expect(toSaveFailure(bare, 1, now)).toMatchObject({ code: 'EBUSY', error: '存檔失敗' });
+    expect(toSaveFailure(null, 1, now)).toMatchObject({ code: 'SAVE_FAILED', error: '存檔失敗' });
+  });
 });
 
 describe('describeSaveError', () => {

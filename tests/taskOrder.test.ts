@@ -78,6 +78,20 @@ describe('舊資料補上 sortOrder：升級後畫面順序不變', () => {
     expect(legacyPlanSort(majorTasks, subTasks, NOW).map((t) => t.id)).toEqual(['b', 'a'])
   })
 
+  it('壞資料：任務是 null、計畫沒有 id 時不會出錯，不是物件的計畫不放進結果', () => {
+    const majorTasks: (Plan | null)[] = [{ startDate: '2026-02-01' }, null, { id: 'a', startDate: '2026-01-01' }]
+    const subTasks: (Task | null)[] = [
+      null,
+      // 沒有 majorTaskId 的任務不算是「沒有 id 的計畫」的任務（不然它會被當成優先、排到最前面）
+      { id: 'orphan', type: 'precise', isPriority: true, priorityOrder: 1 },
+      { id: 'x', majorTaskId: 'a', type: 'precise', completed: false },
+    ]
+    expect(legacyPlanSort(majorTasks, subTasks, NOW).map((t) => t.id)).toEqual(['a', undefined])
+    const filled = fillPlanSortOrders(majorTasks, subTasks, NOW)
+    expect(filled[1]).toBeNull()
+    expect(sortBySortOrder(filled.filter((t) => t !== null)).map((t) => t.id)).toEqual(['a', undefined])
+  })
+
   it('任務照陣列裡的先後，每個計畫各自一組', () => {
     const subTasks: Task[] = [
       { id: 'a1', majorTaskId: 'A' },
@@ -192,6 +206,18 @@ describe('sortTasksLikePlanList：番茄鐘的任務順序和計畫清單一致'
     expect(sortTasksLikePlanList(subTasks, majorTasks).map((t) => t.id)).toEqual(['p2a', 'p1a', 'p1b', 'lost'])
     expect(subTasks[0].id).toBe('lost')
     expect(sortTasksLikePlanList(null, null)).toEqual([])
+  })
+
+  it('壞資料：任務是 null、計畫是 null 或沒有 id 時不會出錯，null 任務不放進結果', () => {
+    const majorTasks = [{ sortOrder: -1 }, null, { id: 'P1', sortOrder: 0 }]
+    const subTasks = [
+      null,
+      { id: 'noPlan', sortOrder: 0 },
+      { id: 'p1', majorTaskId: 'P1', sortOrder: 0 },
+      undefined,
+    ]
+    // 沒有 majorTaskId 的任務不會被當成「沒有 id 的計畫」的任務，排在最後
+    expect(sortTasksLikePlanList(subTasks, majorTasks).map((t) => t.id)).toEqual(['p1', 'noPlan'])
   })
 })
 

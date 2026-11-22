@@ -67,12 +67,11 @@ const App = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [rewardStage, setRewardStage] = useState<RewardStage>('pack');
   const [blurImages, setBlurImages] = useState(true);
-  const [claimQuantity, setClaimQuantity] = useState(1);
-
-  useEffect(() => {
-    // 預設領取數量設為 1
-    setClaimQuantity(1);
-  }, [rewardToShow]);
+  // 領取數量：每次打開獎勵畫面（RewardsView 每次都傳一個新物件）都從 1 開始，同一次畫面裡保留使用者拉的數量。
+  // 記下「這個數量是為哪一個 rewardToShow 選的」，換成別的就當成 1，不用 effect 重設（也就不會先閃一下舊數量）。
+  const [claimChoice, setClaimChoice] = useState<{ forReward: RewardToShow | null; quantity: number }>({ forReward: null, quantity: 1 });
+  const claimQuantity = claimChoice.forReward === rewardToShow ? claimChoice.quantity : 1;
+  const setClaimQuantity = (quantity: number) => setClaimChoice({ forReward: rewardToShow, quantity });
 
   // --- Pomodoro State ---
   // 讀取上次存的狀態；程式關閉期間的時間在這裡就處理成「暫停」（見 domain/pomodoroClock.ts 的 loadPomodoroState）
@@ -316,7 +315,7 @@ const App = () => {
             className="fixed top-2 md:top-4 left-1/2 z-[100] px-4 md:px-6 py-1.5 md:py-2 bg-white/80 backdrop-blur-xl rounded-full border border-white shadow-2xl flex items-center gap-3 md:gap-4 cursor-pointer hover:bg-white transition-colors"
             onClick={() => { setActiveTab('tasks'); setTaskSubTab('pomodoro'); }}
           >
-            <div className={`w-2 h-2 md:w-3 md:h-3 rounded-full ${pomodoroAwaiting ? 'bg-amber-400' : pomodoroIsPaused ? 'bg-slate-300' : (pomodoroStatus === 'break' ? 'bg-emerald-400' : 'bg-sky-400')} ${!pomodoroIsPaused && 'animate-pulse'}`} />
+            <div className={`w-2 h-2 md:w-3 md:h-3 rounded-full ${pomodoroAwaiting ? 'bg-amber-400' : pomodoroIsPaused ? 'bg-slate-300' : (pomodoroStatus === 'break' ? 'bg-emerald-400' : 'bg-sky-400')} ${pomodoroIsPaused ? '' : 'animate-pulse'}`} />
             <div className="flex flex-col">
               <span className="text-[6px] md:text-[8px] font-black text-slate-400 uppercase leading-none">{pomodoroAwaiting ? (pomodoroStatus === 'break' ? '休息結束' : '專注結束') : (pomodoroStatus === 'break' ? '休息中' : '專注中')}</span>
               <span className="text-xs md:text-sm font-black text-sky-900 font-mono leading-none mt-0.5">

@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Trophy, Clock, CheckCircle2, Zap, Timer, X, Calendar, ArrowRight, Sparkles, Pause, Play, Coffee, Flag, Target, BellRing } from 'lucide-react';
 import { formatFlowTime, calculatePomodoroStats, pomodoroWorkSeconds } from '../../utils/index.ts';
 import { formatDisplayTime } from '../../utils/displayFormat.ts';
+import { segmentWidthPercent, taskMarkerPercent, timelinePercent } from '../../domain/pomodoroChart.ts';
 import type { PomodoroEvent, PomodoroEventType, PomodoroRecord } from '../../types/data.ts';
 
 interface PomodoroSummaryProps {
@@ -24,8 +25,8 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }: PomodoroSummaryProps) =>
   const totalDuration = stats?.totalDuration;
   const timeline = stats?.timeline;
 
-  // 下面兩個 useMemo 的回呼只有在有 stats 時才會處理到資料：沒有 stats 時 timeline 是 undefined，
-  // calculatePomodoroStats 回傳空的 segments、taskMarkers 也是空陣列，所以回呼裡的 totalDuration、startTime 一定有值（用 !）
+  // 沒有 stats 時 timeline 是 undefined，calculatePomodoroStats 回傳空的 segments、taskMarkers 也是空陣列。
+  // 百分比交給 domain/pomodoroChart.ts 算：全程時間是 0 或時間讀不出來時不會算出無限大或 NaN
   const { segments: statsSegments } = useMemo(() => {
     return calculatePomodoroStats(timeline);
   }, [timeline]);
@@ -43,7 +44,7 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }: PomodoroSummaryProps) =>
         else if (seg.mode === 'await') color = 'bg-amber-300';
       }
       return {
-        width: (seg.duration / totalDuration!) * 100,
+        width: segmentWidthPercent(seg.duration, totalDuration),
         color,
         isPaused: seg.isPaused
       };
@@ -53,10 +54,11 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }: PomodoroSummaryProps) =>
   const taskMarkers = useMemo(() => {
     return (timeline || [])
       .filter(e => e.type === 'task_complete')
-      .map(e => ({
-        ...e,
-        left: ((new Date(e.time).getTime() - new Date(startTime!).getTime()) / (totalDuration! * 1000)) * 100
-      }));
+      .flatMap(e => {
+        // 算不出位置（全程時間是 0、時間讀不出來）的標記不畫
+        const left = taskMarkerPercent(e.time, startTime, totalDuration);
+        return left === null ? [] : [{ ...e, left }];
+      });
   }, [timeline, startTime, totalDuration]);
 
   if (!stats) return null;
@@ -166,9 +168,10 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }: PomodoroSummaryProps) =>
                 ] satisfies TimeLabel[]).map((e, i) => {
                   const left = e.type === 'edge' && i === 0 ? 0 :
                                e.type === 'edge' ? 100 :
-                               ((new Date(e.time).getTime() - new Date(stats.startTime).getTime()) / (stats.totalDuration * 1000)) * 100;
+                               timelinePercent(e.time, stats.startTime, stats.totalDuration);
                   
-                  if (left < 0 || left > 100) return null;
+                  // 算不出位置、或落在圖外面的標籤不畫
+                  if (left === null || left < 0 || left > 100) return null;
 
                   const isPause = e.type === 'pause_start';
                   const isResume = e.type === 'pause_end';

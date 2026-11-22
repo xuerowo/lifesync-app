@@ -53,16 +53,26 @@ export function saveResultError(
   return Object.assign(new Error(failed.error || '存檔失敗'), { code: failed.code || 'SAVE_FAILED' });
 }
 
+/** 把任何值轉成文字；沒有 toString 的物件（例如 Object.create(null)）轉換時會出錯，這時用「存檔失敗」 */
+const textOf = (value: unknown): string => {
+  try {
+    return String(value);
+  } catch {
+    return '存檔失敗';
+  }
+};
+
 /**
  * 把一次存檔失敗整理成要記下的狀態。
  * @param error 丟出來的錯誤
  * @param failureCount 包含這一次，連續失敗了幾次
  */
 export function toSaveFailure(error: unknown, failureCount: number, now: Date = new Date()): SaveFailure {
-  // 錯誤物件的 code、message 照理是字串；萬一不是，和原本的 JS 一樣原樣記下（下面的 as string 只是型別上的說法）
-  const fields = error as { code?: unknown; message?: unknown };
-  const code = ((error && typeof error === 'object' && fields.code) || 'SAVE_FAILED') as string;
-  const message = ((error && typeof error === 'object' && fields.message) || String(error || '存檔失敗')) as string;
+  // 錯誤物件的 code、message 照理是字串。code 不是字串（或是空的）就當成未知的 SAVE_FAILED；
+  // message 不是字串時轉成文字，沒有 message 就用整個錯誤轉成的文字
+  const fields: { code?: unknown; message?: unknown } = error && typeof error === 'object' ? error : {};
+  const code = typeof fields.code === 'string' && fields.code ? fields.code : 'SAVE_FAILED';
+  const message = textOf(fields.message || error || '存檔失敗');
   const blocked = code === SAVE_BLOCKED;
   return {
     code,
