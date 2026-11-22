@@ -309,7 +309,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className={`flex items-start gap-1.5 md:gap-2 p-3 md:p-3.5 pl-1 md:pl-1.5 backdrop-blur-md rounded-2xl md:rounded-[24px] border transition-[background-color,border-color,box-shadow,opacity] group/sub ${
+                  className={`relative flex items-start gap-1.5 md:gap-2 p-3 md:p-3.5 pl-1 md:pl-1.5 backdrop-blur-md rounded-2xl md:rounded-[24px] border transition-[background-color,border-color,box-shadow,opacity] group/sub ${
                     subDragging ? 'shadow-lg ring-2 ring-sky-300 bg-white' : 'shadow-sm'
                   } ${
                     isLocked ? 'bg-slate-100/50 border-slate-200 opacity-70 grayscale-[0.5]' :
@@ -317,7 +317,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                     'bg-white/60 border-white hover:border-sky-200 hover:bg-white'
                   }`}
                 >
-                  {/* 把手、勾選框對齊標題第一行；標題獨佔整行寬度，次數和操作按鈕放到下面那一行 */}
+                  {/* 把手、勾選框對齊標題第一行；標題獨佔整行寬度，券數、次數放到下面那一行 */}
                   <DragHandle handleProps={subHandleProps} label="拖曳調整任務順序" className="p-2 -my-1.5 shrink-0" />
                   <div className="relative flex items-center justify-center shrink-0 w-5 h-5 md:w-6 md:h-6 mr-0.5">
                     {isLocked ? (
@@ -362,7 +362,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                       )}
                       {sub.title}
                     </p>
-                    <div className="relative flex items-center mt-1 min-h-[24px]">
+                    <div className="flex items-center mt-1.5">
                       <div className="flex items-center gap-1.5 flex-wrap min-w-0">
                         <span className="text-[10px] md:text-[11px] font-semibold text-sky-600/90">{formatTaskTime(sub)}</span>
                         {(() => {
@@ -394,13 +394,14 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                           </>
                         )}
                       </div>
-                      {/* 操作按鈕：滑鼠移到任務上才浮出來（蓋在這一行右邊，不佔寬度），用鍵盤移過來時也會出現；沒出現時不能被誤點 */}
-                      <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-1 flex items-center rounded-xl bg-white/95 shadow-sm border border-sky-100 opacity-0 pointer-events-none group-hover/sub:opacity-100 group-hover/sub:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto transition-opacity">
+                    </div>
+                  </div>
+                  {/* 操作按鈕：滑鼠移到任務上才浮出來，掛在任務框右上角的邊線上（不佔寬度，也不會蓋到框裡的文字和「撤銷」按鈕）；
+                      用鍵盤移過來時也會出現；沒出現時不能被誤點 */}
+                  <div className="absolute -top-3.5 right-3 z-20 flex items-center rounded-xl bg-white shadow-md border border-sky-100 opacity-0 pointer-events-none group-hover/sub:opacity-100 group-hover/sub:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto transition-opacity">
                         <button onClick={() => { lastInteractedMajorId.current = task.id; setEditingTask({ type: 'sub', item: sub }); }} className="p-1.5 text-sky-500 hover:text-sky-800 hover:bg-sky-50 rounded-lg transition-all" title="編輯項目"><Edit3 className="w-3.5 h-3.5" /></button>
                         {(sub.type === 'daily' || sub.type === 'weekly' || sub.type === 'infinite') && (<button onClick={() => { if(confirm('確定要終止此任務並將其歸檔嗎？')) { lastInteractedMajorId.current = task.id; terminateSubTask(sub.id); } }} className="p-1.5 text-sky-500 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-all" title="終止並歸檔"><Archive className="w-3.5 h-3.5" /></button>)}
                         <button onClick={() => confirmDeleteSubTask(sub.id, task.id)} className="p-1.5 text-sky-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="刪除項目"><Trash2 className="w-3.5 h-3.5" /></button>
-                      </div>
-                    </div>
                   </div>
                 </motion.div>
                 )}
