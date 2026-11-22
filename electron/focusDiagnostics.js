@@ -1,4 +1,4 @@
-// 焦點診斷（主程序這一半）。畫面那一半與完整說明見 src/utils/focusDiagnostics.js。
+// 焦點診斷（主程序這一半）。畫面那一半與完整說明見 src/utils/focusDiagnostics.ts。
 // - Ctrl+Shift+F11：開始／停止記錄（設定存在 Electron 設定資料夾的 focus-diagnostics.json，重開程式後維持）
 // - Ctrl+Shift+F12：把現在的狀態寫到資料資料夾的 diagnostics\focus-時間.json
 // 平常不開；LIFESYNC_DEBUG=1 啟動時一律開啟。

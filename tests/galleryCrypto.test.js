@@ -8,8 +8,8 @@ import {
   IV_LENGTH,
   TAG_LENGTH,
 } from '../electron/galleryCrypto.js';
-import { encryptData, decryptData, DECRYPT_FAILED } from '../src/utils/crypto.js';
-import { cloudRestoreFailureMessage } from '../src/domain/cloudUpload.js';
+import { encryptData, decryptData, DECRYPT_FAILED } from '../src/utils/crypto.ts';
+import { cloudRestoreFailureMessage } from '../src/domain/cloudUpload.ts';
 
 const PASSWORD = 'correct horse battery staple';
 
@@ -84,7 +84,7 @@ describe('galleryCrypto（主程序圖庫加解密）', () => {
   });
 });
 
-describe('與畫面端 src/utils/crypto.js 格式相容', () => {
+describe('與畫面端 src/utils/crypto.ts 格式相容', () => {
   it('畫面端加密 → 主程序解密', async () => {
     const text = '雲端備份 JSON {"a":1}';
     const arrayBuffer = await encryptData(text, PASSWORD);

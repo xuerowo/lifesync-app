@@ -4,15 +4,15 @@ import IpcImage from '../Shared/IpcImage';
 import { Gift, Percent, CheckCircle2, Zap, ImageIcon, Search, ChevronDown, Plus, BarChart3, Edit3, Trash2, ChevronLeft, ChevronRight, Sprout, Heart, Smile, Trophy, RotateCw, Star, ArrowUp, ArrowDown, Sparkles, History, Tag, Layers } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
 import { useLottery } from '../../hooks/useLottery';
-import { RARITY_STYLES, RARITY_NAMES, ITEMS_PER_PAGE } from '../../constants/index.jsx';
+import { RARITY_STYLES, RARITY_NAMES, ITEMS_PER_PAGE } from '../../constants/index.tsx';
 import RarityBadge from '../Shared/RarityBadge';
-import { deleteAchievementMessage } from '../../domain/confirmations.js';
-import { getPrizeSortName } from '../../domain/lottery';
-import { clampPage, formatPageRange, getTotalPages } from '../../domain/pagination';
-import { toNonNegativeInt, toNonNegativeNumber } from '../../domain/inputs';
+import { deleteAchievementMessage } from '../../domain/confirmations.ts';
+import { getPrizeSortName } from '../../domain/lottery.ts';
+import { clampPage, formatPageRange, getTotalPages } from '../../domain/pagination.ts';
+import { toNonNegativeInt, toNonNegativeNumber } from '../../domain/inputs.ts';
 import AchievementConditionInput from './AchievementConditionInput';
-import { focusCardTextField } from '../../utils/cardFocus.js';
-import { formatDisplayDate, formatDisplayTime } from '../../utils/displayFormat.js';
+import { focusCardTextField } from '../../utils/cardFocus.ts';
+import { formatDisplayDate, formatDisplayTime } from '../../utils/displayFormat.ts';
 
 // 刪除抽卡紀錄的確認文字：抽卡券不會退回；還沒領取的會從「待領取」一起消失
 const deleteRewardRecordsMessage = (records) => {
@@ -369,7 +369,7 @@ const RewardsView = ({
                     {prizes.length === 0 ? (<div className={`py-12 text-center border-2 border-dashed ${style.border} rounded-3xl bg-white/30`}><p className={`${style.color} font-bold text-sm opacity-60`}>還沒有獎品</p></div>) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {prizes.map((prize, pIdx) => (
-                          <div key={prize.id} onMouseDown={prize.type === 'text' ? focusCardTextField : undefined} className={`group bg-white hover:bg-sky-50 p-4 rounded-3xl border border-sky-100 shadow-sm hover:shadow-md transition-all duration-200 relative hover:z-20 flex flex-col h-auto ${prize.type === 'text' ? 'cursor-text' : ''}`}>{/* 文字獎品：點卡片上的空白也能直接打字，見 utils/cardFocus.js */}
+                          <div key={prize.id} onMouseDown={prize.type === 'text' ? focusCardTextField : undefined} className={`group bg-white hover:bg-sky-50 p-4 rounded-3xl border border-sky-100 shadow-sm hover:shadow-md transition-all duration-200 relative hover:z-20 flex flex-col h-auto ${prize.type === 'text' ? 'cursor-text' : ''}`}>{/* 文字獎品：點卡片上的空白也能直接打字，見 utils/cardFocus.ts */}
                             <div className="flex items-start gap-4"><span className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-2xl text-xs font-black ${style.lightBg} ${style.color}`}>{pIdx + 1}</span><div className="flex-grow min-w-0 pt-1">
                               {prize.type === 'text' ? (
                                 <EditableContent

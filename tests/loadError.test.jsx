@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import {
   describeLoadError, describeRestoreFailure, describeRestoreSuccess, describeSecretsUnavailable,
   formatLocalDateTime, baseName, LOAD_ERROR_SAFETY_NOTE, restoreConfirmMessage, withoutReenteredSecret,
-} from '../src/domain/loadError.js';
+} from '../src/domain/loadError.ts';
 import LoadErrorScreen from '../src/components/Shared/LoadErrorScreen.jsx';
 
 describe('describeLoadError', () => {

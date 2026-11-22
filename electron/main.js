@@ -6,12 +6,12 @@ import { existsSync } from 'fs';
 import { setupCloudHandlers, setAbortFlag } from './cloudManager.js';
 import { createStorage } from './storage.js';
 import { resolveImageReadPath, copyImageIntoGallery } from './galleryFiles.js';
-import { isImportableData, stripCloudSecrets } from '../src/shared/cloudSecrets.js';
+import { isImportableData, stripCloudSecrets } from '../src/shared/cloudSecrets.ts';
 import { decideWindowOpen } from './windowOpen.js';
 import { setupSingleInstance } from './singleInstance.js';
 import { buildMessageBoxOptions, confirmResultFromResponse } from './nativeDialogs.js';
 import { createFocusDiagnostics } from './focusDiagnostics.js';
-import { describeFileError, NOT_LIFESYNC_BACKUP_MESSAGE } from '../src/shared/errorMessages.js';
+import { describeFileError, NOT_LIFESYNC_BACKUP_MESSAGE } from '../src/shared/errorMessages.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,7 +35,7 @@ const DATA_DIR = SANDBOX_DATA_DIR
 const GALLERY_DIR = path.join(DATA_DIR, 'gallery');
 
 // 焦點診斷（「點輸入框沒有游標、打不了字」時用）：平常不記錄，Ctrl+Shift+F11 開關、Ctrl+Shift+F12 記下狀態。
-// LIFESYNC_DEBUG=1 啟動時一律記錄。說明見 src/utils/focusDiagnostics.js、docs/manual-checks.md「F2」。
+// LIFESYNC_DEBUG=1 啟動時一律記錄。說明見 src/utils/focusDiagnostics.ts、docs/manual-checks.md「F2」。
 const focusDiagnostics = createFocusDiagnostics({
   app,
   BrowserWindow,
@@ -335,7 +335,7 @@ ipcMain.on('pomodoro-attention', (event, on) => {
   }
 });
 
-// 畫面的 alert()／confirm() 改由這裡顯示 Windows 標準訊息框（畫面端在 src/utils/nativeDialogs.js 換掉）。
+// 畫面的 alert()／confirm() 改由這裡顯示 Windows 標準訊息框（畫面端在 src/utils/nativeDialogs.ts 換掉）。
 // 原因：畫面原生的 alert／confirm 關掉後，頁面常會失去鍵盤焦點，點輸入框不出現游標、打不了字。
 // 這裡指定父視窗顯示，關掉後把焦點還給視窗與頁面。
 // 用非同步的 showMessageBox：畫面端照樣等使用者按完才繼續（sendSync 會等到 returnValue 設好），
@@ -372,7 +372,7 @@ function handleDialogRequest(kind, event, message) {
 ipcMain.on('dialog-alert-sync', (event, message) => handleDialogRequest('alert', event, message));
 ipcMain.on('dialog-confirm-sync', (event, message) => handleDialogRequest('confirm', event, message));
 
-// 畫面被點了、頁面卻沒有鍵盤焦點（src/utils/focusGuard.js）：讓視窗真的「失去焦點再拿回來」一次。
+// 畫面被點了、頁面卻沒有鍵盤焦點（src/utils/focusGuard.ts）：讓視窗真的「失去焦點再拿回來」一次。
 // 實測（打包版、真的滑鼠點擊）：原生 confirm 關掉後，Windows 的前景視窗是這個視窗，
 // Electron 也認為視窗和頁面都有焦點（isFocused() 都是 true），但頁面裡 document.hasFocus() 是 false，
 // 點輸入框不出現游標、打字進不去。這時 win.focus()、webContents.focus()、blurWebView() 都沒有用

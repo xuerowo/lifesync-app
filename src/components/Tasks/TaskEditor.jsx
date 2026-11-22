@@ -3,9 +3,9 @@ import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { Settings2, X, Zap, CheckCircle2, TrendingUp, Tag } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
-import { INDICATORS, WEEK_DAYS } from '../../constants/index.jsx';
-import { firstGoalId, toggleWeekDay, toNonNegativeInt, validateSubTaskTimes } from '../../domain/inputs';
-import { topSortOrder } from '../../shared/taskOrder';
+import { INDICATORS, WEEK_DAYS } from '../../constants/index.tsx';
+import { firstGoalId, toggleWeekDay, toNonNegativeInt, validateSubTaskTimes } from '../../domain/inputs.ts';
+import { topSortOrder } from '../../shared/taskOrder.ts';
 
 const TaskEditor = ({ editingTask, setEditingTask }) => {
   const { data, updateData, reorderPriorityTasks } = useAppData();
@@ -13,7 +13,7 @@ const TaskEditor = ({ editingTask, setEditingTask }) => {
   const [localItem, setLocalItem] = useState(item);
   const isMajor = type === 'major';
   // 從日曆打開的已結束任務（已完成或已停止）：不能改類型、不能設優先。
-  // 改類型會讓「已停止」和「已完成」對調（判斷方式見 domain/tasks.js 的 isStoppedTask），優先標記存檔時本來就不會改
+  // 改類型會讓「已停止」和「已完成」對調（判斷方式見 domain/tasks.ts 的 isStoppedTask），優先標記存檔時本來就不會改
   const isArchivedTask = !isMajor && !data.subTasks.some(t => t.id === item.id) && data.archivedSubTasks.some(t => t.id === item.id);
   // 原本就是優先任務才有順位；剛勾選的會排在最後（存檔時才編號）
   const existingPriorityOrder = item.isPriority ? item.priorityOrder : 0;

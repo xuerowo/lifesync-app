@@ -1,5 +1,5 @@
 import React from 'react';
-import { RARITY_NAMES } from '../../constants/index.jsx';
+import { RARITY_NAMES } from '../../constants/index.tsx';
 
 const RarityBadge = ({ rarity, size = 'sm' }) => {
   const isLarge = size === 'lg';

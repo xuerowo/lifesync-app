@@ -1,10 +1,10 @@
 import React from 'react';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Cloud } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
-import { getDateStr, getTodayStr, formatTaskTime } from '../../utils';
-import { WEEK_DAYS } from '../../constants/index.jsx';
-import { getCalendarTasksForDay, isDoneOnDate } from '../../domain/calendar';
-import { formatDisplayMonth } from '../../utils/displayFormat.js';
+import { getDateStr, getTodayStr, formatTaskTime } from '../../utils/index.ts';
+import { WEEK_DAYS } from '../../constants/index.tsx';
+import { getCalendarTasksForDay, isDoneOnDate } from '../../domain/calendar.ts';
+import { formatDisplayMonth } from '../../utils/displayFormat.ts';
 
 const CalendarView = ({ calendarDate, setCalendarDate, setEditingTask }) => {
   const { data } = useAppData();

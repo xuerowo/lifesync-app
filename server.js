@@ -4,7 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createStorage } from './electron/storage.js';
 import { resolveDevServerImagePath } from './electron/galleryFiles.js';
-import { describeFileError } from './src/shared/errorMessages.js';
+import { describeFileError } from './src/shared/errorMessages.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

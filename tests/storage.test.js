@@ -4,7 +4,7 @@ import fsp from 'fs/promises'
 import os from 'os'
 import path from 'path'
 import { createStorage, DATA_FILE_NAME, compareBackupNames, isBackupFileName } from '../electron/storage.js'
-import { createDefaultData } from '../src/shared/defaultData.js'
+import { createDefaultData } from '../src/shared/defaultData.ts'
 
 // 假的加密：加上前綴；解密時沒有前綴就當成解不開
 const fakeEncrypt = (s) => `enc:${s}`

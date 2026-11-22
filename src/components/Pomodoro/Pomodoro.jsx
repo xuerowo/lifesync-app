@@ -4,14 +4,14 @@ import {
   Timer, Settings2, Target, CheckCircle2, ChevronUp, ChevronDown, Play, Square, Pause, FastForward, Trophy, Gift, Infinity as InfinityIcon, Plus, X, RotateCcw, BellOff, BellRing, Coffee
 } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
-import { formatTime, formatFlowTime, calculatePomodoroStats, pomodoroWorkSeconds } from '../../utils';
-import { isPausedByAppClose, pomodoroClock } from '../../domain/pomodoroClock';
+import { formatTime, formatFlowTime, calculatePomodoroStats, pomodoroWorkSeconds } from '../../utils/index.ts';
+import { isPausedByAppClose, pomodoroClock } from '../../domain/pomodoroClock.ts';
 import PomodoroSummary from './PomodoroSummary';
 import PomodoroHistory from './PomodoroHistory';
-import { completionRewardTickets } from '../../domain/tasks';
-import { addableSessionTasks, nextBreakInfo, normalizePomodoroSettings, POMODORO_RANGES, pomodoroCandidateTasks, pomodoroSettlementTickets, settlePomodoroTickets } from '../../domain/pomodoro';
+import { completionRewardTickets } from '../../domain/tasks.ts';
+import { addableSessionTasks, nextBreakInfo, normalizePomodoroSettings, POMODORO_RANGES, pomodoroCandidateTasks, pomodoroSettlementTickets, settlePomodoroTickets } from '../../domain/pomodoro.ts';
 import AddSessionTaskPicker from './AddSessionTaskPicker';
-import { sortTasksLikePlanList } from '../../shared/taskOrder';
+import { sortTasksLikePlanList } from '../../shared/taskOrder.ts';
 
 const Pomodoro = ({
   subTasks,
@@ -53,7 +53,7 @@ const Pomodoro = ({
   const updateSettings = (patch) => setSettings(prev => normalizePomodoroSettings({ ...prev, ...patch }));
   const longBreakSettings = normalizePomodoroSettings(settings);
 
-  // 可選的「這次要做的任務」（成長維度、未完成；規則見 domain/pomodoro.js，「＋」加入任務也用同一份）
+  // 可選的「這次要做的任務」（成長維度、未完成；規則見 domain/pomodoro.ts，「＋」加入任務也用同一份）
   // 任務的先後和計畫清單一樣（使用者自己排的順序）
   const orderedSubTasks = useMemo(() => sortTasksLikePlanList(subTasks, data.majorTasks), [subTasks, data.majorTasks]);
   const candidateTasks = pomodoroCandidateTasks(orderedSubTasks);

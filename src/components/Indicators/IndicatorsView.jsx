@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Archive, Trophy, RotateCcw, Trash2, Plus, CheckCircle2, ArrowUp, ArrowDown } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
-import { INDICATORS } from '../../constants/index.jsx';
-import { deleteGoalMessage } from '../../domain/confirmations.js';
-import { focusCardTextField } from '../../utils/cardFocus.js';
-import { formatDisplayDate } from '../../utils/displayFormat.js';
+import { INDICATORS } from '../../constants/index.tsx';
+import { deleteGoalMessage } from '../../domain/confirmations.ts';
+import { focusCardTextField } from '../../utils/cardFocus.ts';
+import { formatDisplayDate } from '../../utils/displayFormat.ts';
 
 // 每個維度最多幾個目標（新增與恢復目標都受這個限制）
 const MAX_GOALS_PER_INDICATOR = 3;
@@ -102,7 +102,7 @@ const IndicatorsView = () => {
                     opacity: { duration: 0.2 }
                   }}
                   className="group relative flex items-start bg-white/60 pl-3 md:pl-4 pr-1 py-3 md:py-4 rounded-2xl md:rounded-3xl border border-white/80 shadow-sm hover:bg-white overflow-hidden min-h-[56px] md:min-h-[64px] cursor-text"
-                  // 點卡片上的空白（文字欄位只有一行高、工具列旁的空隙）也能直接打字，見 utils/cardFocus.js
+                  // 點卡片上的空白（文字欄位只有一行高、工具列旁的空隙）也能直接打字，見 utils/cardFocus.ts
                   onMouseDown={focusCardTextField}
                 >
                   <span className={`flex-shrink-0 w-6 h-6 md:w-7 md:h-7 rounded-lg md:rounded-xl bg-gradient-to-br ${ind.color} flex items-center justify-center text-[10px] md:text-[11px] font-black text-white mr-2 md:mr-3 shadow-lg shadow-sky-200/50 transform -rotate-3 group-hover:rotate-0 transition-transform duration-300 mt-0.5`}>

@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ListChecks, Plus, ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
-import { deleteRuleMessage } from '../../domain/confirmations.js';
+import { deleteRuleMessage } from '../../domain/confirmations.ts';
 
 const RulesView = () => {
   const { data, updateData } = useAppData();

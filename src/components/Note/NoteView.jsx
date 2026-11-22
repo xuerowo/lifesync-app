@@ -1,7 +1,7 @@
 import React from 'react';
 import { BookOpen, Plus, Edit3, Trash2, Clock, RotateCw, Cloud } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
-import { formatDisplayDateTime } from '../../utils/displayFormat.js';
+import { formatDisplayDateTime } from '../../utils/displayFormat.ts';
 
 const NoteView = ({ setEditingNote }) => {
   const { data, updateData } = useAppData();

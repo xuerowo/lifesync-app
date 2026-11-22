@@ -3,7 +3,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
   saveRetryDelay, saveResultError, toSaveFailure, describeSaveError, SAVE_RETRY_DELAYS_MS,
-} from '../src/domain/saveRetry.js';
+} from '../src/domain/saveRetry.ts';
 import SaveErrorBanner from '../src/components/Shared/SaveErrorBanner.jsx';
 
 describe('saveRetryDelay', () => {

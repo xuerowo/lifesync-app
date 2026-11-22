@@ -9,7 +9,7 @@ import { useAppData } from './contexts/AppDataContext';
 import { usePomodoroAutoAdvance } from './hooks/usePomodoroAutoAdvance';
 
 // Utils & Constants
-import { generateTeethPath } from './utils';
+import { generateTeethPath } from './utils/index.ts';
 
 // Components
 import IpcImage from './components/Shared/IpcImage';
@@ -33,9 +33,9 @@ import PriorityManager from './components/Tasks/PriorityManager';
 import LoadErrorScreen from './components/Shared/LoadErrorScreen';
 import NoticeBar from './components/Shared/NoticeBar';
 import SaveErrorBanner from './components/Shared/SaveErrorBanner';
-import { describeRestoreSuccess, describeSecretsUnavailable } from './domain/loadError';
-import { completionRewardTickets } from './domain/tasks';
-import { LEGACY_POMODORO_KEYS, awaitingOf, lastEventMs, loadPomodoroState, pomodoroClock } from './domain/pomodoroClock';
+import { describeRestoreSuccess, describeSecretsUnavailable } from './domain/loadError.ts';
+import { completionRewardTickets } from './domain/tasks.ts';
+import { LEGACY_POMODORO_KEYS, awaitingOf, lastEventMs, loadPomodoroState, pomodoroClock } from './domain/pomodoroClock.ts';
 
 
 const App = () => {
@@ -73,7 +73,7 @@ const App = () => {
   }, [rewardToShow]);
 
   // --- Pomodoro State ---
-  // 讀取上次存的狀態；程式關閉期間的時間在這裡就處理成「暫停」（見 domain/pomodoroClock.js 的 loadPomodoroState）
+  // 讀取上次存的狀態；程式關閉期間的時間在這裡就處理成「暫停」（見 domain/pomodoroClock.ts 的 loadPomodoroState）
   const [initialPomodoro] = useState(() => loadPomodoroState(window.localStorage, Date.now()));
   const [pomodoroStatus, setPomodoroStatus] = useState(initialPomodoro.status);
   const [pomodoroSettings, setPomodoroSettings] = useState(initialPomodoro.settings);

@@ -33,14 +33,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 番茄鐘時間到、等你按按鈕時：true 讓工作列圖示閃爍（視窗已在前面就不閃），false 停止閃爍
   setAttention: (on) => ipcRenderer.send('pomodoro-attention', on === true),
   // 取代畫面的 alert()／confirm()：由主程序顯示 Windows 標準訊息框，等使用者按完才回傳
-  // （畫面原生的訊息框關掉後頁面常會失去鍵盤焦點，詳見 src/utils/nativeDialogs.js）
+  // （畫面原生的訊息框關掉後頁面常會失去鍵盤焦點，詳見 src/utils/nativeDialogs.ts）
   alertSync: (message) => {
     ipcRenderer.sendSync('dialog-alert-sync', String(message ?? ''));
   },
   confirmSync: (message) => ipcRenderer.sendSync('dialog-confirm-sync', String(message ?? '')) === true,
-  // 點了畫面、頁面卻沒有鍵盤焦點時呼叫：請主程序把鍵盤焦點交回頁面（見 src/utils/focusGuard.js）
+  // 點了畫面、頁面卻沒有鍵盤焦點時呼叫：請主程序把鍵盤焦點交回頁面（見 src/utils/focusGuard.ts）
   refocusPage: () => ipcRenderer.send('page-refocus'),
-  // 焦點診斷（見 src/utils/focusDiagnostics.js）：記錄有沒有開、開關切換、主程序要狀態時回傳
+  // 焦點診斷（見 src/utils/focusDiagnostics.ts）：記錄有沒有開、開關切換、主程序要狀態時回傳
   isFocusDiagnosticsEnabled: () => ipcRenderer.invoke('focus-diagnostics-enabled'),
   onFocusDiagnosticsToggle: (callback) => {
     const handler = (event, enabled) => callback(enabled === true);

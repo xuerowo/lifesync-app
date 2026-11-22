@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, CheckCircle2, Star, Search, RotateCw } from 'lucide-react';
-import { RARITY_STYLES } from '../../constants';
+import { RARITY_STYLES } from '../../constants/index.tsx';
 import RarityBadge from '../Shared/RarityBadge';
 import IpcImage from '../Shared/IpcImage';
 

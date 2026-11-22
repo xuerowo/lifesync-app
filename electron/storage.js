@@ -4,7 +4,7 @@
 import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
-import { createDefaultData, normalizeData } from '../src/shared/defaultData.js';
+import { createDefaultData, normalizeData } from '../src/shared/defaultData.ts';
 
 export const DATA_FILE_NAME = 'lifesync-data.json';
 export const BACKUP_DIR_NAME = 'backups';

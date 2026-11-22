@@ -1,8 +1,8 @@
 // 測試環境（Vitest）用的是傳統 JSX 轉換，需要 React 在作用域內
 import React from 'react';
 import { AlertTriangle, RotateCcw, History, RefreshCw } from 'lucide-react';
-import { describeLoadError, describeRestoreFailure, restoreConfirmMessage, LOAD_ERROR_SAFETY_NOTE } from '../../domain/loadError';
-import { formatDisplayTime } from '../../utils/displayFormat';
+import { describeLoadError, describeRestoreFailure, restoreConfirmMessage, LOAD_ERROR_SAFETY_NOTE } from '../../domain/loadError.ts';
+import { formatDisplayTime } from '../../utils/displayFormat.ts';
 
 /** 「09:30」（全 App 統一的 24 小時制、不顯示秒）；看不懂就回傳 null */
 const formatLocalTime = (iso) => (iso ? formatDisplayTime(new Date(iso)) || null : null);

@@ -4,7 +4,7 @@ import path from 'path';
 import { encryptBuffer, decryptBuffer } from './galleryCrypto.js';
 import { toSafeLocalName, resolveInsideDir, pushError, ENCRYPTED_EXT, DOWNLOAD_TMP_EXT } from './galleryFiles.js';
 import { keepPreviousVersion, pruneOldVersions, MAX_CLOUD_VERSIONS } from './cloudVersions.js';
-import { describeCloudError } from '../src/shared/errorMessages.js';
+import { describeCloudError } from '../src/shared/errorMessages.ts';
 
 // 全局取消旗標
 let abortSync = false;

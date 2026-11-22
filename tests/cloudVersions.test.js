@@ -3,7 +3,7 @@ import {
   versionName, parseVersionName, selectVersionsToPrune, cloudPathParts, utcStamp,
   keepPreviousVersion, pruneOldVersions, MAX_CLOUD_VERSIONS,
 } from '../electron/cloudVersions.js';
-import { cloudUploadSuccessMessage, CLOUD_VERSIONS_KEPT, CONFIRM_CLOUD_UPLOAD } from '../src/domain/cloudUpload.js';
+import { cloudUploadSuccessMessage, CLOUD_VERSIONS_KEPT, CONFIRM_CLOUD_UPLOAD } from '../src/domain/cloudUpload.ts';
 
 // ---- 模擬的 WebDAV 雲端：只存在記憶體裡，不連任何真實伺服器 ----
 const cloud = {

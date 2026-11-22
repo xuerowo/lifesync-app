@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { getTodayStr, getLocalISOString } from '../utils';
-import { createDefaultData, normalizeData } from '../shared/defaultData';
-import { completionRewardTickets, computeActivePriorityTasks, createRecentGuard, isOneTimeTask, isStoppedTask, priorityAfterCompletion, renumberPriorityTasks, restoreStoppedSubTask as restoreStoppedSubTaskChanges, stopSubTask as stopSubTaskChanges } from '../domain/tasks';
-import { localStampedIsoFromUtcIso, parseLocalDate } from '../domain/dates';
-import { archivePlan, countIndicatorProgress, restorePlan } from '../domain/plans';
-import { saveResultError, toSaveFailure } from '../domain/saveRetry';
-import { revertStoppedTaskRecord } from '../domain/taskHistory';
-import { withoutReenteredSecret } from '../domain/loadError';
+import { getTodayStr, getLocalISOString } from '../utils/index.ts';
+import { createDefaultData, normalizeData } from '../shared/defaultData.ts';
+import { completionRewardTickets, computeActivePriorityTasks, createRecentGuard, isOneTimeTask, isStoppedTask, priorityAfterCompletion, renumberPriorityTasks, restoreStoppedSubTask as restoreStoppedSubTaskChanges, stopSubTask as stopSubTaskChanges } from '../domain/tasks.ts';
+import { localStampedIsoFromUtcIso, parseLocalDate } from '../domain/dates.ts';
+import { archivePlan, countIndicatorProgress, restorePlan } from '../domain/plans.ts';
+import { saveResultError, toSaveFailure } from '../domain/saveRetry.ts';
+import { revertStoppedTaskRecord } from '../domain/taskHistory.ts';
+import { withoutReenteredSecret } from '../domain/loadError.ts';
 
 const AppDataContext = createContext();
 
@@ -310,10 +310,10 @@ export const AppDataProvider = ({ children }) => {
     return { ...prev, ...newData };
   });
 
-  // 成就與維度的進度。跟著計畫一起收起來、沒做完的一次性任務不算（Q13，規則見 domain/plans.js）
+  // 成就與維度的進度。跟著計畫一起收起來、沒做完的一次性任務不算（Q13，規則見 domain/plans.ts）
   const getIndicatorStats = (indicatorId) => countIndicatorProgress(data, indicatorId);
 
-  // 重排優先順序（1..n），規則見 domain/tasks.js
+  // 重排優先順序（1..n），規則見 domain/tasks.ts
   const reorderPriorityTasks = renumberPriorityTasks;
 
   // 今天的本地日期。程式開著跨過午夜時，每分鐘檢查一次，日期變了就更新，讓優先任務清單重新計算
@@ -332,7 +332,7 @@ export const AppDataProvider = ({ children }) => {
   );
 
   // Business Logic Methods
-  // 完成整個計畫：還在進行中的任務跟著計畫一起收起來，並記下是跟著哪個計畫（Q13，規則見 domain/plans.js）
+  // 完成整個計畫：還在進行中的任務跟著計畫一起收起來，並記下是跟著哪個計畫（Q13，規則見 domain/plans.ts）
   const toggleMajorTask = (taskId) => {
     updateData(prev => {
       const changes = archivePlan(prev, taskId);
@@ -366,7 +366,7 @@ export const AppDataProvider = ({ children }) => {
     const targetArchivedTask = prev.archivedSubTasks.find(t => t.id === id);
     // 跟著計畫一起收起來的任務（計畫已完成）：撤銷不把它單獨拉回進行中，否則恢復計畫時會漏掉它；要改請先恢復計畫
     if (targetArchivedTask?.archivedWithPlanId) return prev;
-    // 停止的任務（domain/tasks.js 的 isStoppedTask）不是「完成」，沒有完成可以撤銷；要拿回來用 restoreStoppedSubTask。
+    // 停止的任務（domain/tasks.ts 的 isStoppedTask）不是「完成」，沒有完成可以撤銷；要拿回來用 restoreStoppedSubTask。
     // 只有番茄鐘指定了某一筆紀錄（recordId）時，刪掉那一筆、完成次數減 1，任務仍維持停止
     if (targetArchivedTask && isStoppedTask(targetArchivedTask) && !prev.subTasks.some(t => t.id === id)) {
       if (!recordId) return prev;
@@ -487,7 +487,7 @@ export const AppDataProvider = ({ children }) => {
     };
   });
 
-  // 停止重複任務：不再出現在清單，完成紀錄、完成次數、抽卡券都保留（規則見 domain/tasks.js）
+  // 停止重複任務：不再出現在清單，完成紀錄、完成次數、抽卡券都保留（規則見 domain/tasks.ts）
   const stopSubTask = (id) => updateData(prev => {
     const changes = stopSubTaskChanges(prev, id);
     return changes ? { ...prev, ...changes } : prev;
@@ -505,7 +505,7 @@ export const AppDataProvider = ({ children }) => {
    * @param {string} id
    * @param {{ rewardTickets?: number, recordId?: string }} [options]
    *   rewardTickets：完成紀錄要記下的實際發券數，不給就用任務設定的張數。番茄鐘傳 0：
-   *   券要到結算按「領取」才給，領取時才把紀錄改成任務的張數（見 domain/pomodoro.js）。
+   *   券要到結算按「領取」才給，領取時才把紀錄改成任務的張數（見 domain/pomodoro.ts）。
    *   recordId：完成紀錄要用的 id（番茄鐘先產生好，結算和撤銷時才找得到這一筆）。
    */
   const completeSubTaskData = (id, options = {}) => {
@@ -537,7 +537,7 @@ export const AppDataProvider = ({ children }) => {
                       data.archivedTasks.find(m => m.id === task.majorTaskId);
 
     updateData(prev => {
-      // 每日、每週任務完成後保留優先標記；一次性任務拿掉並重排（規則見 domain/tasks.js）
+      // 每日、每週任務完成後保留優先標記；一次性任務拿掉並重排（規則見 domain/tasks.ts）
       let newSubTasks = priorityAfterCompletion(prev.subTasks, id);
       let newArchivedSubTasks = [...prev.archivedSubTasks];
 

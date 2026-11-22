@@ -1,7 +1,7 @@
 // 測試環境（Vitest）用的是傳統 JSX 轉換，需要 React 在作用域內
 import React from 'react';
 import { AlertOctagon, RefreshCw } from 'lucide-react';
-import { describeSaveError } from '../../domain/saveRetry';
+import { describeSaveError } from '../../domain/saveRetry.ts';
 
 /**
  * 存檔失敗時固定在畫面最上方的紅色提示（不擋住操作）。存好之後由呼叫端拿掉。

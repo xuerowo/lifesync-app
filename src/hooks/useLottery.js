@@ -1,5 +1,5 @@
 import { useAppData } from '../contexts/AppDataContext';
-import { drawPrize, drawFromRarity } from '../domain/lottery';
+import { drawPrize, drawFromRarity } from '../domain/lottery.ts';
 
 export const useLottery = () => {
   const { data } = useAppData();

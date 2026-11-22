@@ -2,8 +2,8 @@ import React, { useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { Trophy, Clock, CheckCircle2, Zap, Timer, X, Calendar, ArrowRight, Sparkles, Pause, Play, Coffee, Flag, Target, BellRing } from 'lucide-react';
-import { formatFlowTime, calculatePomodoroStats, pomodoroWorkSeconds } from '../../utils';
-import { formatDisplayTime } from '../../utils/displayFormat';
+import { formatFlowTime, calculatePomodoroStats, pomodoroWorkSeconds } from '../../utils/index.ts';
+import { formatDisplayTime } from '../../utils/displayFormat.ts';
 
 const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
   // hooks 必須在任何條件 return 之前呼叫，所以先用 ?. 取值，沒有 stats 時等 hooks 跑完才 return

@@ -5,7 +5,7 @@ import {
   confirmResultFromResponse,
   MAX_DIALOG_MESSAGE_LENGTH,
 } from '../electron/nativeDialogs.js';
-import { toDialogText, createNativeDialogs, installNativeDialogs } from '../src/utils/nativeDialogs.js';
+import { toDialogText, createNativeDialogs, installNativeDialogs } from '../src/utils/nativeDialogs.ts';
 
 describe('主程序：組訊息框設定', () => {
   it('alert 只有「確定」', () => {

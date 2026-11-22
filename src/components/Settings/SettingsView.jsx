@@ -1,19 +1,19 @@
 import React, { useState } from 'react';
 import { Settings2, Download, Upload, Cloud, ShieldCheck, RefreshCw, Image as ImageIcon, FolderOpen, HelpCircle, ChevronUp, ExternalLink, Lock, User, Link2, Info, AlertTriangle, Zap, Server, Shield, Eye, EyeOff } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
-import { encryptData, decryptData } from '../../utils/crypto';
-import { mergeIncomingData, stripCloudSecrets, isImportableData } from '../../shared/cloudSecrets';
+import { encryptData, decryptData } from '../../utils/crypto.ts';
+import { mergeIncomingData, stripCloudSecrets, isImportableData } from '../../shared/cloudSecrets.ts';
 import {
   SNAPSHOT_REASONS, CONFIRM_BACKUP_RESTORE, CONFIRM_CLOUD_RESTORE, confirmJsonImportMessage,
   snapshotBeforeOverwrite, snapshotFailedMessage, snapshotSavedNote, canSnapshot
-} from '../../domain/overwriteGuard';
+} from '../../domain/overwriteGuard.ts';
 import {
   cloudUploadSuccessMessage, cloudRestoreFailureMessage, galleryResultMessage, CONFIRM_CLOUD_UPLOAD
-} from '../../domain/cloudUpload';
+} from '../../domain/cloudUpload.ts';
 import {
   evaluateMasterPassword, masterPasswordBlockMessage, isInsecureWebdavUrl, INSECURE_URL_WARNING,
   MASTER_PASSWORD_SAVED_MESSAGE
-} from '../../domain/masterPassword';
+} from '../../domain/masterPassword.ts';
 
 const SettingsView = () => {
   const { data, setData, updateData, isSyncing, setIsSyncing, setSyncProgress, markSecretReentered } = useAppData();

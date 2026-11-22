@@ -1,0 +1,296 @@
+/**
+ * 會刪除或改動資料的操作，在執行前要給使用者看的確認文字（純函式）。
+ *
+ * 這裡計算的「會刪幾筆紀錄、扣幾張券」必須和 AppDataContext 裡實際執行的
+ * deleteSubTask、deleteMajorTask、revertTaskCompletion、toggleMajorTask，
+ * 以及任務歷史的刪除（domain/taskHistory.ts）一致；
+ * 改了那邊的規則，這裡也要一起改（tests/confirmations.test.ts 有對照）。
+ */
+
+import { completionRewardTickets } from './tasks.ts';
+import { completionCountChanges } from './taskHistory.ts';
+import type {
+  Achievement,
+  ArchivedSubTask,
+  Goal,
+  LifeSyncData,
+  MajorTask,
+  Note,
+  Rule,
+  SubTask,
+  TaskHistoryRecord,
+  TaskType,
+} from '../types/data.ts';
+
+/** 確認文字需要的資料（沒有的清單當作空的） */
+export type ConfirmData = Partial<
+  Pick<LifeSyncData, 'majorTasks' | 'archivedTasks' | 'subTasks' | 'archivedSubTasks' | 'taskHistory' | 'lotteryTickets'>
+>;
+
+const REPEATING_TYPES: readonly (TaskType | undefined)[] = ['daily', 'weekly', 'infinite'];
+const isCounted = (task: Pick<SubTask, 'type'> | null | undefined) => REPEATING_TYPES.includes(task?.type);
+
+const nameOf = (item: { title?: unknown } | null | undefined, fallback: string) => {
+  const title = typeof item?.title === 'string' ? item.title.trim() : '';
+  return title ? `「${title}」` : fallback;
+};
+
+/** 紀錄裡記的發券數；舊紀錄沒有這個欄位時當作 1 張，負數或非數字當 0（與刪除、撤銷時的算法相同） */
+const ticketsOf = (record: Pick<TaskHistoryRecord, 'rewardTickets'> | null | undefined) => completionRewardTickets(record);
+
+/** 抽卡券最多扣到 0，所以實際扣掉的張數不會超過目前持有的張數 */
+export function actualTicketDeduction(ticketsToRecover: number, currentTickets: unknown): number {
+  const owned = Math.max(0, Number(currentTickets) || 0);
+  return Math.min(Math.max(0, ticketsToRecover), owned);
+}
+
+/** 「並扣回 N 張抽卡券」這一段；張數被目前持有量限制時，說明實際只會扣多少 */
+function ticketPhrase(ticketsToRecover: number, currentTickets: unknown): string {
+  if (ticketsToRecover <= 0) return '不會扣抽卡券';
+  const actual = actualTicketDeduction(ticketsToRecover, currentTickets);
+  if (actual < ticketsToRecover) {
+    return `並扣回抽卡券：應扣 ${ticketsToRecover} 張，你目前只有 ${actual} 張，會扣到 0 張`;
+  }
+  return `並扣回 ${ticketsToRecover} 張抽卡券`;
+}
+
+/** 刪除這些任務時，會一起刪掉的完成紀錄筆數與要扣回的抽卡券（扣到 0 之前的張數） */
+export function historyRemovalImpact(
+  taskHistory: readonly (TaskHistoryRecord | null | undefined)[] | null | undefined,
+  taskIds: readonly (string | undefined)[],
+): { records: number; tickets: number } {
+  const ids = new Set(taskIds);
+  const records = (Array.isArray(taskHistory) ? taskHistory : []).filter((h) => ids.has(h?.taskId));
+  return {
+    records: records.length,
+    tickets: records.reduce((sum, h) => sum + ticketsOf(h), 0),
+  };
+}
+
+const findSubTask = (data: ConfirmData | null | undefined, id: string): SubTask | ArchivedSubTask | undefined =>
+  (data?.subTasks || []).find((t) => t.id === id) || (data?.archivedSubTasks || []).find((t) => t.id === id);
+
+/** 刪除單一任務（進行中或已完成的都一樣）的確認文字 */
+export function deleteSubTaskMessage(data: ConfirmData | null | undefined, id: string): string {
+  const task = findSubTask(data, id);
+  const { records, tickets } = historyRemovalImpact(data?.taskHistory, [id]);
+  const lines = [`確定要刪除任務${nameOf(task, '（未命名任務）')}嗎？`, ''];
+  if (records > 0) {
+    lines.push(`會一起刪除它的 ${records} 筆完成紀錄，${ticketPhrase(tickets, data?.lotteryTickets)}。`);
+  } else {
+    lines.push('這個任務沒有完成紀錄，不會扣抽卡券。');
+  }
+  lines.push('刪除後無法復原。');
+  return lines.join('\n');
+}
+
+/** 刪除整個計畫（進行中或已完成的計畫都一樣）的確認文字 */
+export function deleteMajorTaskMessage(data: ConfirmData | null | undefined, id: string): string {
+  const major =
+    (data?.majorTasks || []).find((t) => t.id === id) || (data?.archivedTasks || []).find((t) => t.id === id);
+  const subIds = [
+    ...(data?.subTasks || []).filter((s) => s.majorTaskId === id),
+    ...(data?.archivedSubTasks || []).filter((s) => s.majorTaskId === id),
+  ].map((s) => s.id);
+  const { records, tickets } = historyRemovalImpact(data?.taskHistory, subIds);
+  const lines = [`確定要刪除計畫${nameOf(major, '（未命名計畫）')}嗎？`, ''];
+  if (subIds.length === 0) {
+    lines.push('這個計畫裡沒有任務。');
+  } else if (records > 0) {
+    lines.push(
+      `會一起刪除裡面的 ${subIds.length} 個任務和 ${records} 筆完成紀錄，${ticketPhrase(tickets, data?.lotteryTickets)}。`
+    );
+  } else {
+    lines.push(`會一起刪除裡面的 ${subIds.length} 個任務。這些任務沒有完成紀錄，不會扣抽卡券。`);
+  }
+  lines.push('刪除後無法復原。');
+  return lines.join('\n');
+}
+
+/** revertCompletionImpact 的結果 */
+export interface RevertCompletionImpact {
+  /** 要撤銷的任務（找不到時是 null） */
+  task: SubTask | ArchivedSubTask | null;
+  /** 會刪掉幾筆完成紀錄（0 或 1） */
+  records: number;
+  /** 要扣回幾張券（扣到 0 之前的張數） */
+  tickets: number;
+  /** 已歸檔的任務會搬回進行中 */
+  movesBackToActive: boolean;
+  /** 進行中任務的完成次數變化；不會變時是 null */
+  countChange: { from: number; to: number } | null;
+  /** 搬回去的任務所屬的計畫已經完成時，那個計畫 */
+  archivedPlan: MajorTask | null;
+  /** 舊資料裡同一個 id 同時在進行中和「已完成」區 */
+  duplicate: boolean;
+}
+
+/**
+ * 「撤銷最近一次完成」會造成的變化，算法與 AppDataContext.revertTaskCompletion 相同：
+ * - 已歸檔的每日／每週任務：不刪紀錄、不扣券
+ * - 其他情況：刪掉這個任務最新的一筆完成紀錄，扣回那筆紀錄記的券
+ * - 進行中有這個任務、而且是每日／每週／隨時挑戰：只把進行中那一份的完成次數減 1
+ *   （舊資料裡同一個 id 同時在進行中和「已完成」區時，「已完成」那一份不動）
+ * - 否則，已歸檔的任務會搬回進行中的任務清單；但它的計畫若已經完成（歸檔），
+ *   要等計畫恢復後才會出現在進行中的清單
+ */
+export function revertCompletionImpact(data: ConfirmData | null | undefined, id: string): RevertCompletionImpact {
+  const archived = (data?.archivedSubTasks || []).find((t) => t.id === id);
+  const active = (data?.subTasks || []).find((t) => t.id === id);
+  const isRestoringRepetitive = !!archived && (archived.type === 'daily' || archived.type === 'weekly');
+  const record = isRestoringRepetitive ? null : (data?.taskHistory || []).find((h) => h?.taskId === id) || null;
+  const changesActiveCount = !!active && isCounted(active);
+  const countChange = changesActiveCount && active
+    ? { from: active.completionCount || 0, to: Math.max(0, (active.completionCount || 0) - 1) }
+    : null;
+  const movesBackToActive = !changesActiveCount && !!archived;
+  const task = (changesActiveCount ? active : archived || active) || null;
+
+  // 搬回去的任務所屬的計畫已經完成（只在「已完成的計畫」裡）
+  let archivedPlan: MajorTask | null = null;
+  if (movesBackToActive && archived?.majorTaskId) {
+    const inActivePlans = (data?.majorTasks || []).some((m) => m.id === archived.majorTaskId);
+    if (!inActivePlans) archivedPlan = (data?.archivedTasks || []).find((m) => m.id === archived.majorTaskId) || null;
+  }
+
+  return {
+    task,
+    records: record ? 1 : 0,
+    tickets: record ? ticketsOf(record) : 0,
+    movesBackToActive,
+    countChange,
+    archivedPlan,
+    // 舊資料裡同一個 id 同時在進行中和「已完成」區
+    duplicate: !!archived && !!active,
+  };
+}
+
+/** 撤銷最近一次完成的確認文字 */
+export function revertCompletionMessage(data: ConfirmData | null | undefined, id: string): string {
+  const { task, records, tickets, movesBackToActive, countChange, archivedPlan, duplicate } = revertCompletionImpact(data, id);
+  const lines = [`確定要撤銷${nameOf(task, '這個任務')}最近一次完成嗎？`, ''];
+  if (records > 0) {
+    lines.push(`會刪除 1 筆完成紀錄，${ticketPhrase(tickets, data?.lotteryTickets)}。`);
+  } else {
+    lines.push('完成紀錄和抽卡券都不會變動。');
+  }
+  if (countChange && countChange.from !== countChange.to) {
+    lines.push(`完成次數會從 ${countChange.from} 次變成 ${countChange.to} 次。`);
+  }
+  if (movesBackToActive && archivedPlan) {
+    lines.push(
+      `這個任務會變回未完成，但它所屬的計畫${nameOf(archivedPlan, '')}已經完成：` +
+        '要先在「已完成的計畫」按「恢復計畫」，它才會出現在進行中的清單，才能重新完成。'
+    );
+  } else if (movesBackToActive) {
+    lines.push('這個任務會回到進行中。');
+  }
+  if (duplicate && movesBackToActive) {
+    lines.push('注意：進行中已經有一個同樣的任務（舊資料重複留下的），撤銷後進行中會有兩份。');
+  } else if (duplicate) {
+    lines.push('「已結束」區裡還有一份同樣的任務（舊資料重複留下的），它不會變動；這次只改進行中那一份。');
+  }
+  return lines.join('\n');
+}
+
+/**
+ * 在「任務歷史」刪除紀錄的確認文字（一筆或勾選的好幾筆）。
+ * 算法與 domain/taskHistory.ts 的 deleteHistoryRecords 相同：對應任務的完成次數跟著減少，不扣抽卡券。
+ */
+export function deleteHistoryRecordsMessage(data: ConfirmData | null | undefined, recordIds: readonly string[]): string {
+  const ids = new Set(recordIds);
+  const records = (data?.taskHistory || []).filter((h) => ids.has(h?.id));
+  const changes = completionCountChanges(data, records, -1).filter((c) => c.from !== c.to);
+  const lines = [
+    records.length === 1 ? '確定要刪除這筆任務紀錄嗎？' : `確定要刪除選取的 ${records.length} 筆任務紀錄嗎？`,
+    '',
+  ];
+  if (changes.length === 1) {
+    const [c] = changes;
+    lines.push(`任務${nameOf(c.task, '（未命名任務）')}的完成次數會從 ${c.from} 次變成 ${c.to} 次，成就和維度的進度也會跟著減少。`);
+  } else if (changes.length > 1) {
+    lines.push('這些任務的完成次數會跟著減少，成就和維度的進度也會跟著減少：');
+    for (const c of changes) lines.push(`・${nameOf(c.task, '（未命名任務）')}：${c.from} 次 → ${c.to} 次`);
+  }
+  lines.push('不會扣回當初發的抽卡券。刪除後無法復原。');
+  return lines.join('\n');
+}
+
+/**
+ * 「完成整個計畫」的確認文字（不刪紀錄、不扣券，但進行中的任務會一起歸檔）。
+ * 規則與 domain/plans.ts 的 archivePlan、restorePlan、countIndicatorProgress 相同。
+ */
+export function completeMajorTaskMessage(data: ConfirmData | null | undefined, id: string): string {
+  const major = (data?.majorTasks || []).find((t) => t.id === id);
+  const activeSubs = (data?.subTasks || []).filter((s) => s.majorTaskId === id);
+  const unfinishedOnce = activeSubs.filter((s) => !isCounted(s)).length;
+  const hasPriority = activeSubs.some((s) => s.isPriority);
+  const lines = [`確定要完成整個計畫${nameOf(major, '（未命名計畫）')}嗎？`, ''];
+  if (activeSubs.length > 0) {
+    lines.push(`計畫裡還在進行中的 ${activeSubs.length} 個任務會跟著計畫一起收起來，之後不能再勾選完成（每日、每週任務也會停止）。`);
+    if (unfinishedOnce > 0) {
+      lines.push(`其中 ${unfinishedOnce} 個一次性任務還沒完成，不會算進成就和維度的進度。`);
+    }
+  }
+  lines.push('不會刪除任何完成紀錄，也不會扣抽卡券。');
+  if (activeSubs.length > 0) {
+    lines.push(
+      `之後按「恢復計畫」，這 ${activeSubs.length} 個任務會一起回到進行中` +
+        (hasPriority ? '，原本的優先標記也會恢復' : '') +
+        '；之前就已經結束的任務會留在「已結束」區。'
+    );
+  } else {
+    lines.push('之後按「恢復計畫」會拿回計畫本身；已經結束的任務會留在「已結束」區。');
+  }
+  return lines.join('\n');
+}
+
+/**
+ * 刪除目標的確認文字。用到這個目標的計畫會保留，只是不再顯示目標名稱。
+ * 已達成（歸檔）的目標本來就不會顯示在計畫上，所以不提計畫。
+ */
+export function deleteGoalMessage(
+  data: ConfirmData | null | undefined,
+  goal: (Pick<Goal, 'id'> & { title?: unknown }) | null | undefined,
+  { archived = false }: { archived?: boolean } = {},
+): string {
+  const lines = [`確定要刪除${archived ? '已達成的' : ''}目標${nameOf(goal, '（未命名目標）')}嗎？`, ''];
+  const goalId = goal?.id;
+  const plans = goalId && !archived
+    ? [...(data?.majorTasks || []), ...(data?.archivedTasks || [])].filter((t) => t.goalId === goalId).length
+    : 0;
+  if (plans > 0) {
+    lines.push(`有 ${plans} 個計畫屬於這個目標。計畫和任務都會保留，只是不再顯示目標名稱。`);
+  }
+  lines.push('刪除後無法復原。');
+  return lines.join('\n');
+}
+
+/** 刪除成就的確認文字 */
+export function deleteAchievementMessage(achievement: Pick<Achievement, 'title' | 'claimed'> | null | undefined): string {
+  const lines = [`確定要刪除成就${nameOf(achievement, '（未命名成就）')}嗎？`, ''];
+  if (achievement?.claimed) {
+    lines.push('這個成就已經領取過，刪除後領取狀態也會一起消失。');
+  }
+  lines.push('完成紀錄和抽卡券不受影響。刪除後無法復原。');
+  return lines.join('\n');
+}
+
+/** 刪除行動準則的確認文字；內容是空的準則沒有東西會遺失，回傳 null 表示不必確認 */
+export function deleteRuleMessage(rule: Pick<Rule, 'content'> | null | undefined): string | null {
+  const content = typeof rule?.content === 'string' ? rule.content.trim() : '';
+  if (!content) return null;
+  const preview = content.length > 30 ? `${content.slice(0, 30)}……` : content;
+  return `確定要刪除這條準則嗎？\n\n「${preview}」\n\n刪除後無法復原。`;
+}
+
+/** 筆記編輯器裡的內容和打開時相比，是否有還沒存的修改 */
+export function hasUnsavedNoteChanges(
+  original: Pick<Note, 'title' | 'content'> | null | undefined,
+  current: Pick<Note, 'title' | 'content'> | null | undefined,
+): boolean {
+  const norm = (v: unknown) => (typeof v === 'string' ? v : '');
+  return norm(original?.title) !== norm(current?.title) || norm(original?.content) !== norm(current?.content);
+}
+
+export const DISCARD_NOTE_MESSAGE = '這篇筆記有還沒儲存的修改，確定要放棄這些修改並關閉嗎？';

@@ -7,14 +7,14 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { SortableContext, useSortable, rectSortingStrategy, verticalListSortingStrategy, sortableKeyboardCoordinates, defaultAnimateLayoutChanges } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useAppData } from '../../contexts/AppDataContext';
-import { INDICATORS } from '../../constants/index.jsx';
-import { getTodayStr, formatTaskTime, formatDateOnly } from '../../utils';
-import { RANGE_SEP } from '../../utils/displayFormat.js';
+import { INDICATORS } from '../../constants/index.tsx';
+import { getTodayStr, formatTaskTime, formatDateOnly } from '../../utils/index.ts';
+import { RANGE_SEP } from '../../utils/displayFormat.ts';
 import {
   completeMajorTaskMessage, deleteMajorTaskMessage, deleteSubTaskMessage, revertCompletionMessage
-} from '../../domain/confirmations.js';
-import { applySortOrders, reorderSortOrders, sortBySortOrder } from '../../shared/taskOrder';
-import { canStopTask, completionRewardTickets, isStoppedTask } from '../../domain/tasks';
+} from '../../domain/confirmations.ts';
+import { applySortOrders, reorderSortOrders, sortBySortOrder } from '../../shared/taskOrder.ts';
+import { canStopTask, completionRewardTickets, isStoppedTask } from '../../domain/tasks.ts';
 
 // 可以拖曳換位置的一格。拖曳只從「把手」開始（handleProps 給把手按鈕），點卡片其他地方照常操作。
 // 位移用 dnd-kit 的 transform，所以裡面的動畫不要用 framer-motion 的 layout（兩者都改 transform 會互相干擾）。
@@ -156,7 +156,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
     deleteSubTask(subId);
   };
 
-  // 停止重複任務：不刪紀錄、不扣券，只是不再出現在清單（規則見 domain/tasks.js）
+  // 停止重複任務：不刪紀錄、不扣券，只是不再出現在清單（規則見 domain/tasks.ts）
   const confirmStopSubTask = (sub, majorTaskId) => {
     const name = sub.title?.trim() ? `「${sub.title.trim()}」` : '這個任務';
     if (!confirm(`確定要停止${name}嗎？停止後不會再出現在清單，已完成的紀錄和抽卡券都會保留。`)) return;
@@ -194,7 +194,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
     addMajorTask(ind.id, data.goals[ind.id][0].id);
   };
 
-  // 使用者自己排的順序（見 shared/taskOrder.js）
+  // 使用者自己排的順序（見 shared/taskOrder.ts）
   const sensors = useSortSensors();
   const visiblePlans = sortBySortOrder(data.majorTasks)
     .filter(t => filterIndicator === 'all' || t.indicatorId === filterIndicator);

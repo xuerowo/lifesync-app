@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { BookOpen, X, CheckCircle2 } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
-import { DISCARD_NOTE_MESSAGE, hasUnsavedNoteChanges } from '../../domain/confirmations.js';
+import { DISCARD_NOTE_MESSAGE, hasUnsavedNoteChanges } from '../../domain/confirmations.ts';
 
 const NoteEditor = ({ editingNote, setEditingNote }) => {
   const { data, updateData } = useAppData();

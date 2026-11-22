@@ -3,10 +3,10 @@ import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { RotateCw, X, CheckCircle2 } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
-import { INDICATORS } from '../../constants/index.jsx';
-import { formatForDateTimeLocal } from '../../utils';
-import { addHistoryRecord, historyFieldsFromTask, linkableHistoryTasks } from '../../domain/taskHistory';
-import { isStoppedTask } from '../../domain/tasks';
+import { INDICATORS } from '../../constants/index.tsx';
+import { formatForDateTimeLocal } from '../../utils/index.ts';
+import { addHistoryRecord, historyFieldsFromTask, linkableHistoryTasks } from '../../domain/taskHistory.ts';
+import { isStoppedTask } from '../../domain/tasks.ts';
 
 const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
   const { data, updateData } = useAppData();

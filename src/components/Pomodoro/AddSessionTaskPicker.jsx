@@ -1,11 +1,11 @@
 import React, { useEffect, useEffectEvent, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Target, X } from 'lucide-react';
-import { formatTaskTime } from '../../utils';
+import { formatTaskTime } from '../../utils/index.ts';
 
 /**
  * 專注計時進行中，按「這次要做的任務」旁的「＋」打開的選單：從可選的成長任務中加入。
- * 可選的任務和開始前的選擇清單是同一份規則（domain/pomodoro.js 的 pomodoroCandidateTasks），
+ * 可選的任務和開始前的選擇清單是同一份規則（domain/pomodoro.ts 的 pomodoroCandidateTasks），
  * 已經在這次清單裡的不再列出。加入後選單不關，方便一次加好幾個；Esc、背景、X、「完成」都能關閉。
  * 這裡只改這次的任務清單，不碰計時。
  */

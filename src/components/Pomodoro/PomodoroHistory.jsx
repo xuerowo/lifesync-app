@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { History, Trash2, Eye, Calendar, Clock, Timer, CheckCircle2, Zap, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
-import { ITEMS_PER_PAGE } from '../../constants/index.jsx';
-import { clampPage, formatPageRange, getTotalPages } from '../../domain/pagination';
-import { formatFlowTime, pomodoroWorkSeconds } from '../../utils';
-import { formatDisplayDate, formatDisplayTime } from '../../utils/displayFormat';
+import { ITEMS_PER_PAGE } from '../../constants/index.tsx';
+import { clampPage, formatPageRange, getTotalPages } from '../../domain/pagination.ts';
+import { formatFlowTime, pomodoroWorkSeconds } from '../../utils/index.ts';
+import { formatDisplayDate, formatDisplayTime } from '../../utils/displayFormat.ts';
 import PomodoroSummary from './PomodoroSummary';
 
 const PomodoroHistory = () => {

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { createRing, describeElement, ancestorChain, countTextFields } from '../src/utils/focusDiagnostics.js';
+import { createRing, describeElement, ancestorChain, countTextFields } from '../src/utils/focusDiagnostics.ts';
 import { diagnosticFileStamp, readEnabledSetting, summarizeMetrics } from '../electron/focusDiagnostics.js';
 
 const el = (tagName, { id = '', className = '', placeholder = null, parent = null, inputs = 0, textareas = 0 } = {}) => ({

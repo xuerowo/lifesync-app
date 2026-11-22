@@ -1,7 +1,7 @@
 import { useEffect, useEffectEvent, useRef } from 'react';
 import { useAudio } from './useAudio';
-import { breakSecondsFor, phaseStartEvents, shouldHandleTimeout } from '../domain/pomodoro';
-import { awaitingOf, insertChronologically, planPhaseEnd, pomodoroClock } from '../domain/pomodoroClock';
+import { breakSecondsFor, phaseStartEvents, shouldHandleTimeout } from '../domain/pomodoro.ts';
+import { awaitingOf, insertChronologically, planPhaseEnd, pomodoroClock } from '../domain/pomodoroClock.ts';
 
 // 時間到、等使用者按按鈕時，鈴聲每隔幾毫秒再響一次（一次鈴聲本身約 3 秒）
 export const ALARM_REPEAT_MS = 4000;
@@ -12,7 +12,7 @@ export const ALARM_REPEAT_MS = 4000;
  * 放在 App 這一層呼叫，因為 App 不會被卸載：就算番茄鐘頁面沒有顯示，
  * 時間到時照樣會響鈴、停下來等你按「開始休息」或「開始專注」。手動操作（跳過、心流等）也用這裡回傳的同一份函式。
  *
- * 倒數是從時間軸算出來的（見 domain/pomodoroClock.js），這裡只負責寫時間軸事件和「這個階段要倒數幾秒」。
+ * 倒數是從時間軸算出來的（見 domain/pomodoroClock.ts），這裡只負責寫時間軸事件和「這個階段要倒數幾秒」。
  * 時間到時寫一筆 await_start；在使用者按下按鈕之前，鈴聲每 4 秒重複一次（按「先關掉鈴聲」可以先停掉），
  * Electron 版另外讓工作列的圖示閃爍。
  */

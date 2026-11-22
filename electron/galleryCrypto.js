@@ -4,7 +4,7 @@ import { promisify } from 'util';
 /**
  * 雲端圖庫加解密（主程序用）
  *
- * 檔案格式（不可更改，否則舊備份會解不開，也會和畫面端 src/utils/crypto.js 不相容）：
+ * 檔案格式（不可更改，否則舊備份會解不開，也會和畫面端 src/utils/crypto.ts 不相容）：
  *   [salt 16 bytes][iv 12 bytes][密文][GCM 驗證標籤 16 bytes]
  * 金鑰：PBKDF2-SHA256，100000 次，32 bytes；加密：AES-256-GCM。
  *

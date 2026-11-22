@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { commitCountDraft, sanitizeCountDraft } from '../../domain/inputs';
+import { commitCountDraft, sanitizeCountDraft } from '../../domain/inputs.ts';
 
 /**
  * 成就的「條件次數」欄位。
