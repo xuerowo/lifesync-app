@@ -42,15 +42,18 @@ const PriorityManager = ({ isOpen, onClose }) => {
       >
            <div className="p-6 border-b border-sky-100 flex justify-between items-center">
               <h3 className="font-black text-xl text-sky-900 flex items-center gap-2">
-                  <Zap className="w-5 h-5 text-amber-500" /> 優先級管理
+                  <Zap className="w-5 h-5 text-amber-500" /> 管理優先順序
               </h3>
-              <button onClick={onClose} className="p-2 hover:bg-sky-50 rounded-full text-sky-400 hover:text-sky-600 transition-colors">
+              <button onClick={onClose} title="關閉" aria-label="關閉" className="p-2 hover:bg-sky-50 rounded-full text-sky-400 hover:text-sky-600 transition-colors">
                   <X className="w-5 h-5" />
               </button>
            </div>
            <div className="p-6 overflow-y-auto space-y-3 custom-scrollbar">
               {priorityTasks.length === 0 ? (
-                  <div className="text-center py-10 text-sky-300 font-bold">沒有設定優先級的任務</div>
+                  <div className="text-center py-10 px-4 text-sky-300 font-bold">
+                      <p>還沒有優先任務</p>
+                      <p className="mt-2 text-xs text-sky-300/80">在任務設定裡勾選「設為優先任務」，就會出現在這裡。</p>
+                  </div>
               ) : (
                   <AnimatePresence mode="popLayout">
                       {priorityTasks.map((task, index) => (
@@ -68,10 +71,10 @@ const PriorityManager = ({ isOpen, onClose }) => {
                               </span>
                               <span className="flex-grow font-bold text-sky-800 text-sm truncate">{task.title}</span>
                               <div className="flex gap-1">
-                                  <button onClick={() => handleMove(task.id, -1)} disabled={index === 0} className="p-1.5 text-sky-300 hover:text-sky-600 disabled:opacity-30 hover:bg-sky-50 rounded-lg transition-colors">
+                                  <button onClick={() => handleMove(task.id, -1)} disabled={index === 0} title="上移" aria-label={`上移「${task.title || '未命名任務'}」`} className="p-1.5 text-sky-300 hover:text-sky-600 disabled:opacity-30 hover:bg-sky-50 rounded-lg transition-colors">
                                       <ArrowUp className="w-4 h-4" />
                                   </button>
-                                  <button onClick={() => handleMove(task.id, 1)} disabled={index === priorityTasks.length - 1} className="p-1.5 text-sky-300 hover:text-sky-600 disabled:opacity-30 hover:bg-sky-50 rounded-lg transition-colors">
+                                  <button onClick={() => handleMove(task.id, 1)} disabled={index === priorityTasks.length - 1} title="下移" aria-label={`下移「${task.title || '未命名任務'}」`} className="p-1.5 text-sky-300 hover:text-sky-600 disabled:opacity-30 hover:bg-sky-50 rounded-lg transition-colors">
                                       <ArrowDown className="w-4 h-4" />
                                   </button>
                               </div>

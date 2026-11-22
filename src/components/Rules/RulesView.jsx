@@ -17,7 +17,7 @@ const RulesView = () => {
   };
 
   const deleteRule = (id) => {
-    // 內容是空的守則沒有東西會遺失，直接刪；有內容的先確認
+    // 內容是空的準則沒有東西會遺失，直接刪；有內容的先確認
     const message = deleteRuleMessage(data.rules.find(r => r.id === id));
     if (message && !confirm(message)) return;
     updateData(prev => ({ ...prev, rules: prev.rules.filter(r => r.id !== id) }));
@@ -40,7 +40,7 @@ const RulesView = () => {
           </div>
           <div>
             <h2 className="text-3xl font-black text-sky-900">行動準則</h2>
-            <p className="text-[10px] font-black text-sky-600 uppercase tracking-widest">建立屬於你的生活規範與原則</p>
+            <p className="text-[10px] font-black text-sky-600 uppercase tracking-widest">寫下你想遵守的行動準則</p>
           </div>
         </div>
         <button
@@ -71,7 +71,7 @@ const RulesView = () => {
             <div className="flex-grow min-w-0">
               <textarea
                 className="w-full bg-transparent font-bold text-sky-900 outline-none focus:text-sky-600 text-lg resize-none overflow-hidden leading-relaxed block break-words whitespace-pre-wrap"
-                placeholder="請輸入準則內容..."
+                placeholder="請輸入準則內容"
                 value={rule.content}
                 rows={1}
                 ref={(el) => {
@@ -91,13 +91,13 @@ const RulesView = () => {
               />
             </div>
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-4 bg-white/40 backdrop-blur-md rounded-2xl p-1 border border-white/40">
-              <button onClick={() => moveRule(idx, -1)} className="p-2 text-sky-300 hover:text-sky-500 hover:bg-sky-50 rounded-xl transition-all" title="上移">
+              <button onClick={() => moveRule(idx, -1)} className="p-2 text-sky-300 hover:text-sky-500 hover:bg-sky-50 rounded-xl transition-all" title="上移" aria-label="上移">
                 <ArrowUp className="w-4 h-4" />
               </button>
-              <button onClick={() => moveRule(idx, 1)} className="p-2 text-sky-300 hover:text-sky-500 hover:bg-sky-50 rounded-xl transition-all" title="下移">
+              <button onClick={() => moveRule(idx, 1)} className="p-2 text-sky-300 hover:text-sky-500 hover:bg-sky-50 rounded-xl transition-all" title="下移" aria-label="下移">
                 <ArrowDown className="w-4 h-4" />
               </button>
-              <button onClick={() => deleteRule(rule.id)} className="p-2 text-sky-200 hover:text-red-400 hover:bg-red-50 rounded-xl transition-all" title="刪除">
+              <button onClick={() => deleteRule(rule.id)} className="p-2 text-sky-200 hover:text-red-400 hover:bg-red-50 rounded-xl transition-all" title="刪除準則" aria-label="刪除準則">
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
@@ -109,7 +109,7 @@ const RulesView = () => {
           <div className="py-20 text-center bg-white/20 rounded-[48px] border-4 border-dashed border-white/60">
             <ListChecks className="w-16 h-16 text-sky-100 mx-auto mb-6" />
             <p className="text-sky-300 font-black text-xl">還沒有任何行動準則</p>
-            <p className="text-sky-200 font-bold text-sm mt-2">點擊右上角開始建立你的生活原則吧！</p>
+            <p className="text-sky-200 font-bold text-sm mt-2">按右上角的「新增準則」，寫下第一條吧！</p>
           </div>
         )}
       </div>

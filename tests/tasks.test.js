@@ -1,14 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import {
+  canStopTask,
   computeActivePriorityTasks,
   completionRewardTickets,
   createRecentGuard,
   isCompletedOnDate,
   isOneTimeTask,
+  isStoppedTask,
   keepsPriorityAfterCompletion,
   priorityAfterCompletion,
   renumberPriorityTasks,
+  restoreStoppedSubTask,
+  stopSubTask,
 } from '../src/domain/tasks.js';
+import { archivePlan, countIndicatorProgress, restorePlan } from '../src/domain/plans.js';
 
 // 2026-11-16 是星期一（getDay() === 1），2026-11-18 是星期三
 const MONDAY = new Date(2026, 10, 16, 10, 0);
@@ -226,5 +231,98 @@ describe('Q11：每日、每週優先任務完成後保留優先標記', () => {
     expect(priorityAfterCompletion(list, 'n')).toBe(list);
     expect(priorityAfterCompletion(list, 'nope')).toBe(list);
     expect(priorityAfterCompletion(list, 'd')).toBe(list);
+  });
+});
+
+describe('停止重複任務與恢復', () => {
+  const NOW = '2026-11-22T06:00:00.000Z';
+  const makeData = () => ({
+    majorTasks: [{ id: 'p', title: '計畫' }],
+    archivedTasks: [],
+    subTasks: [
+      { id: 'd', majorTaskId: 'p', indicatorId: 'growth', type: 'daily', completionCount: 4, lastCompletedAt: '2026-11-21T08:00:00.000Z', isPriority: true, priorityOrder: 1, sortOrder: 3 },
+      { id: 'o', majorTaskId: 'p', indicatorId: 'growth', type: 'precise', isPriority: true, priorityOrder: 2 },
+      { id: 'inf', majorTaskId: 'p', indicatorId: 'growth', type: 'infinite', completionCount: 2 },
+    ],
+    archivedSubTasks: [
+      { id: 'done', majorTaskId: 'p', indicatorId: 'growth', type: 'precise', completed: true, completedAt: NOW },
+    ],
+    taskHistory: [{ id: 'h1', taskId: 'd', rewardTickets: 1 }],
+    lotteryTickets: 7,
+  });
+
+  it('canStopTask：只有每日、每週、隨時挑戰可以停止', () => {
+    expect(['daily', 'weekly', 'infinite'].every(type => canStopTask({ type }))).toBe(true);
+    expect(canStopTask({ type: 'precise' })).toBe(false);
+    expect(canStopTask(null)).toBe(false);
+  });
+
+  it('isStoppedTask：已歸檔的重複任務、沒有跟著計畫收起來的，就是停止的（含沒有 stoppedAt 的舊資料）', () => {
+    expect(isStoppedTask({ type: 'daily', completed: true })).toBe(true);
+    expect(isStoppedTask({ type: 'infinite', completed: true, stoppedAt: NOW })).toBe(true);
+    expect(isStoppedTask({ type: 'weekly', completed: false, archivedWithPlanId: 'p' })).toBe(false);
+    expect(isStoppedTask({ type: 'precise', completed: true })).toBe(false);
+  });
+
+  it('停止：搬到已結束區，資料格式和以前相同（completed: true），另記 stoppedAt；優先順序重新編號', () => {
+    const data = makeData();
+    const result = stopSubTask(data, 'd', NOW);
+    expect(result.subTasks.map(t => t.id)).toEqual(['o', 'inf']);
+    expect(result.subTasks.find(t => t.id === 'o').priorityOrder).toBe(1);
+    const stopped = result.archivedSubTasks.find(t => t.id === 'd');
+    expect(stopped).toMatchObject({ completed: true, completedAt: NOW, stoppedAt: NOW, isPriority: false, priorityOrder: 0, completionCount: 4, sortOrder: 3 });
+    expect(isStoppedTask(stopped)).toBe(true);
+    // 完成紀錄和券不在這裡處理（回傳值不含 taskHistory、lotteryTickets）
+    expect(result).not.toHaveProperty('taskHistory');
+    expect(result).not.toHaveProperty('lotteryTickets');
+  });
+
+  it('停止：一次性任務、找不到的任務不處理', () => {
+    expect(stopSubTask(makeData(), 'o', NOW)).toBeNull();
+    expect(stopSubTask(makeData(), 'nope', NOW)).toBeNull();
+  });
+
+  it('停止的任務完成次數照樣算進成就和維度進度', () => {
+    const data = makeData();
+    const before = countIndicatorProgress(data, 'growth');
+    const after = countIndicatorProgress({ ...data, ...stopSubTask(data, 'd', NOW) }, 'growth');
+    expect(after).toBe(before);
+  });
+
+  it('恢復：放回清單（保留排序位置、不是優先任務、次數和最後完成時間不變），清掉停止時加的欄位', () => {
+    const data = makeData();
+    const stopped = { ...data, ...stopSubTask(data, 'd', NOW) };
+    const result = restoreStoppedSubTask(stopped, 'd');
+    const back = result.subTasks.find(t => t.id === 'd');
+    expect(back).toMatchObject({ completed: false, isPriority: false, priorityOrder: 0, completionCount: 4, sortOrder: 3, lastCompletedAt: '2026-11-21T08:00:00.000Z' });
+    expect(back).not.toHaveProperty('stoppedAt');
+    expect(back).not.toHaveProperty('completedAt');
+    expect(result.archivedSubTasks.map(t => t.id)).toEqual(['done']);
+    expect(result).not.toHaveProperty('taskHistory');
+    expect(result).not.toHaveProperty('lotteryTickets');
+  });
+
+  it('恢復：舊版停止的資料（沒有 stoppedAt）也能恢復', () => {
+    const data = makeData();
+    data.archivedSubTasks.push({ id: 'old', majorTaskId: 'p', type: 'weekly', days: [1], completed: true, completedAt: NOW, completionCount: 9 });
+    const result = restoreStoppedSubTask(data, 'old');
+    expect(result.subTasks.find(t => t.id === 'old')).toMatchObject({ completed: false, completionCount: 9 });
+  });
+
+  it('恢復：真的完成的一次性任務、跟著計畫收起來的、計畫已完成的、進行中已有同 id 的，都不處理', () => {
+    const data = makeData();
+    expect(restoreStoppedSubTask(data, 'done')).toBeNull();
+    data.archivedSubTasks.push({ id: 'withPlan', majorTaskId: 'p', type: 'daily', completed: false, archivedWithPlanId: 'p' });
+    expect(restoreStoppedSubTask(data, 'withPlan')).toBeNull();
+    data.archivedSubTasks.push({ id: 'd', majorTaskId: 'p', type: 'daily', completed: true });
+    expect(restoreStoppedSubTask(data, 'd')).toBeNull();
+
+    const stopped = { ...makeData(), ...stopSubTask(makeData(), 'inf', NOW) };
+    const planDone = { ...stopped, ...archivePlan(stopped, 'p', NOW) };
+    expect(restoreStoppedSubTask(planDone, 'inf')).toBeNull();
+    // 恢復計畫時停止的任務不會跟著回來（它沒有 archivedWithPlanId），恢復計畫後才可以單獨恢復
+    const planBack = { ...planDone, ...restorePlan(planDone, 'p') };
+    expect(planBack.subTasks.some(t => t.id === 'inf')).toBe(false);
+    expect(restoreStoppedSubTask(planBack, 'inf').subTasks.some(t => t.id === 'inf')).toBe(true);
   });
 });

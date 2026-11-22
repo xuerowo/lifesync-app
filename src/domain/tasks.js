@@ -126,3 +126,67 @@ export function createRecentGuard(windowMs) {
     },
   };
 }
+
+/**
+ * 停止重複任務（每日、每週、隨時挑戰）與恢復（docs/wording-review.md「停止的任務被當成『已完成』」）。
+ *
+ * 停止：任務從進行中搬到 archivedSubTasks，不再出現在清單。完成紀錄、完成次數、抽卡券都不動。
+ * 存的資料格式和改版前「終止並歸檔」相同（completed: true、completedAt），舊版程式和成就、維度的算法照舊；
+ * 另外多記 stoppedAt（停止的時間）。
+ *
+ * 怎麼分辨「停止的」和「真的完成的」：重複任務只有兩種情況會進 archivedSubTasks——
+ * 停止（這裡），以及跟著計畫一起收起來（domain/plans.js 的 archivePlan，會帶 archivedWithPlanId）。
+ * 完成重複任務只會加次數，不會歸檔。所以 archivedSubTasks 裡的重複任務沒有 archivedWithPlanId，就是停止的；
+ * 改版前停止的舊資料沒有 stoppedAt，也照這個規則認得出來。
+ */
+const STOPPABLE_TYPES = ['daily', 'weekly', 'infinite'];
+
+/** 可以「停止」的任務類型（每日、每週、隨時挑戰） */
+export function canStopTask(task) {
+  return STOPPABLE_TYPES.includes(task?.type);
+}
+
+/** archivedSubTasks 裡的這個任務是不是「停止」的（不是真的完成，也不是跟著計畫收起來的） */
+export function isStoppedTask(archivedTask) {
+  return canStopTask(archivedTask) && !archivedTask.archivedWithPlanId;
+}
+
+/**
+ * 停止進行中的任務 id。回傳要更新的 { subTasks, archivedSubTasks }；
+ * 找不到、或不是可以停止的類型時回傳 null。原本是優先任務的，拿掉標記後剩下的優先任務重新編號。
+ */
+export function stopSubTask(data, id, nowIso = new Date().toISOString()) {
+  const subTasks = data?.subTasks || [];
+  const task = subTasks.find(t => t.id === id);
+  if (!task || !canStopTask(task)) return null;
+  const remaining = (task.isPriority ? renumberPriorityTasks(subTasks, id) : subTasks).filter(t => t.id !== id);
+  return {
+    subTasks: remaining,
+    archivedSubTasks: [
+      ...(data?.archivedSubTasks || []),
+      { ...task, completed: true, completedAt: nowIso, stoppedAt: nowIso, isPriority: false, priorityOrder: 0 },
+    ],
+  };
+}
+
+/**
+ * 恢復停止的任務 id：放回進行中的清單（保留原本的排序位置 sortOrder，不是優先任務）。
+ * 完成紀錄、完成次數、抽卡券都不動。回傳要更新的 { subTasks, archivedSubTasks }；以下情況回傳 null：
+ * - 找不到，或不是停止的任務（真的完成的一次性任務請用撤銷完成；跟著計畫收起來的請恢復計畫）
+ * - 它的計畫已經完成：要先恢復計畫，否則任務會掛在看不到的計畫底下
+ * - 進行中已經有同一個 id（不正常的舊資料），避免變成兩份
+ */
+export function restoreStoppedSubTask(data, id) {
+  const archivedSubTasks = data?.archivedSubTasks || [];
+  const task = archivedSubTasks.find(t => t.id === id);
+  if (!task || !isStoppedTask(task)) return null;
+  const subTasks = data?.subTasks || [];
+  if (subTasks.some(t => t.id === id)) return null;
+  if (task.majorTaskId && (data?.archivedTasks || []).some(m => m.id === task.majorTaskId)) return null;
+  // 清掉停止時加上的欄位（completedAt 是停止的時間，進行中的重複任務不該有）
+  const { stoppedAt: _stoppedAt, completedAt: _completedAt, ...rest } = task;
+  return {
+    subTasks: [...subTasks, { ...rest, completed: false, isPriority: false, priorityOrder: 0 }],
+    archivedSubTasks: archivedSubTasks.filter(t => t.id !== id),
+  };
+}

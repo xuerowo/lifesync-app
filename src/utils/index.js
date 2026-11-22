@@ -1,4 +1,6 @@
 import { WEEK_DAYS } from '../constants/index.jsx';
+import { parseLocalDate } from '../domain/dates.js';
+import { RANGE_SEP, formatDisplayDate } from './displayFormat.js';
 
 export const generateTeethPath = (width, height, teethHeight, isTop) => {
   const teethCount = 20;
@@ -42,22 +44,45 @@ export const formatForDateTimeLocal = (isoStr) => {
   return new Date(d.getTime() - offset).toISOString().slice(0, 16);
 };
 
+// 只有日期的字串（計畫的 startDate、endDate：'YYYY-MM-DD'）→ 2026/11/22；看不懂就原樣顯示
+export const formatDateOnly = (dateStr) => {
+  if (!dateStr) return '';
+  return formatDisplayDate(parseLocalDate(dateStr)) || String(dateStr);
+};
+
+// 本地時間字串（一次性任務的 startDateTime：'YYYY-MM-DDTHH:mm'，沒有時區）→ 2026/11/22 14:05。
+// 直接拆字串，不經過 Date，避免被當成 UTC 換算時區（和改版前切字串的解讀相同）
+const LOCAL_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/;
+const splitLocalDateTime = (str) => {
+  const m = typeof str === 'string' ? LOCAL_DATE_TIME.exec(str) : null;
+  return m ? { date: `${m[1]}/${m[2]}/${m[3]}`, time: `${m[4]}:${m[5]}` } : null;
+};
+
+const preciseRange = (startStr, endStr) => {
+  const start = splitLocalDateTime(startStr);
+  const end = splitLocalDateTime(endStr);
+  const startText = start ? `${start.date} ${start.time}` : (startStr || '');
+  if (!endStr) return startText;
+  if (!end) return `${startText}${RANGE_SEP}${endStr}`;
+  // 同一天結束：後面只寫時間，例如「2026/11/22 14:00～15:00」
+  const endText = start && start.date === end.date ? end.time : `${end.date} ${end.time}`;
+  return `${startText}${RANGE_SEP}${endText}`;
+};
+
 export const formatTaskTime = (task, isCompact = false) => {
+  const timeRange = `${task.startTime}${RANGE_SEP}${task.endTime}`;
   if (task.type === 'daily') {
-    if (task.noTime) return isCompact ? '' : '每日 (不限時間)';
-    return isCompact ? `${task.startTime} - ${task.endTime}` : `每日 ${task.startTime} - ${task.endTime}`;
+    if (task.noTime) return isCompact ? '' : '每日（不限時間）';
+    return isCompact ? timeRange : `每日 ${timeRange}`;
   }
   if (task.type === 'weekly') {
-    const daysStr = task.days.map(d => WEEK_DAYS[d]).join('、');
-    if (task.noTime) return isCompact ? '' : `每週(${daysStr}) (不限時間)`;
-    return isCompact ? `${task.startTime} - ${task.endTime}` : `每週(${daysStr}) ${task.startTime} - ${task.endTime}`;
+    const daysStr = (task.days || []).map(d => WEEK_DAYS[d]).join('、');
+    if (task.noTime) return isCompact ? '' : `每週${daysStr}（不限時間）`;
+    return isCompact ? timeRange : `每週${daysStr} ${timeRange}`;
   }
   if (task.type === 'precise') {
     if (task.noTime) return isCompact ? '' : '不限時間';
-    const startFull = task.startDateTime?.replace('T', ' ').slice(0, 16);
-    const endFull = task.endDateTime?.replace('T', ' ').slice(0, 16);
-    if (isCompact) return endFull ? `${startFull} ~ ${endFull}` : startFull;
-    return endFull ? `${startFull} ~ ${endFull}` : startFull;
+    return preciseRange(task.startDateTime, task.endDateTime);
   }
   if (task.type === 'infinite') {
     return isCompact ? '' : '隨時挑戰';

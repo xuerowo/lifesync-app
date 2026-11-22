@@ -3,9 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { History, Trash2, CheckCircle2, ChevronLeft, ChevronRight, Clock, Layers, Plus, Edit3 } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
 import { ITEMS_PER_PAGE, INDICATORS } from '../../constants/index.jsx';
-import { clampPage, getTotalPages } from '../../domain/pagination';
+import { clampPage, formatPageRange, getTotalPages } from '../../domain/pagination';
 import { deleteHistoryRecords } from '../../domain/taskHistory';
 import { deleteHistoryRecordsMessage } from '../../domain/confirmations.js';
+import { formatDisplayDate, formatDisplayTime } from '../../utils/displayFormat.js';
 
 const TasksHistory = ({ setEditingTaskHistory }) => {
   const { data, updateData } = useAppData();
@@ -62,10 +63,7 @@ const TasksHistory = ({ setEditingTaskHistory }) => {
           <div className="w-12 h-12 rounded-2xl bg-white/40 backdrop-blur-2xl border border-white/60 flex items-center justify-center shadow-xl shadow-sky-100/50 text-sky-500">
             <History className="w-5 h-5" />
           </div>
-          <div>
-            <h3 className="text-xl font-black text-sky-900">任務歷史</h3>
-            <p className="text-[10px] font-black text-sky-600 uppercase tracking-widest">Task Completion History</p>
-          </div>
+          <h3 className="text-xl font-black text-sky-900">任務歷史</h3>
         </div>
         <button
           onClick={() => setEditingTaskHistory({ title: '', majorTaskTitle: '手動補登', indicatorId: 'growth', type: 'daily', completedAt: new Date().toISOString() })}
@@ -82,10 +80,10 @@ const TasksHistory = ({ setEditingTaskHistory }) => {
       <div className="bg-white/40 backdrop-blur-md rounded-[40px] border border-white shadow-xl overflow-hidden flex flex-col">
         {selectedIds.length > 0 && (
           <div className="bg-rose-50/80 p-4 flex justify-between items-center border-b border-rose-100 animate-in slide-down">
-            <span className="text-xs font-black text-rose-600 ml-8">已選擇 {selectedIds.length} 筆紀錄</span>
+            <span className="text-xs font-black text-rose-600 ml-8">已選取 {selectedIds.length} 筆紀錄</span>
             <div className="flex gap-2 mr-4">
-              <button onClick={() => setSelectedIds([])} className="px-4 py-2 text-[10px] font-black text-rose-400 hover:bg-rose-100 rounded-xl transition-colors">取消選擇</button>
-              <button onClick={handleBulkDelete} className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black rounded-xl shadow-sm transition-colors flex items-center gap-2"><Trash2 className="w-3.5 h-3.5" /> 批量刪除</button>
+              <button onClick={() => setSelectedIds([])} className="px-4 py-2 text-[10px] font-black text-rose-400 hover:bg-rose-100 rounded-xl transition-colors">取消選取</button>
+              <button onClick={handleBulkDelete} className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black rounded-xl shadow-sm transition-colors flex items-center gap-2"><Trash2 className="w-3.5 h-3.5" /> 刪除選取的紀錄</button>
             </div>
           </div>
         )}
@@ -101,6 +99,7 @@ const TasksHistory = ({ setEditingTaskHistory }) => {
                       className="peer sr-only" 
                       checked={selectedIds.length > 0 && selectedIds.length === paginatedTasks.length} 
                       onChange={toggleSelectAll} 
+                      aria-label="選取這一頁的全部紀錄"
                     />
                     <div className="w-5 h-5 rounded-lg border-2 border-sky-100 bg-white peer-checked:bg-sky-500 peer-checked:border-sky-500 transition-all duration-200 flex items-center justify-center shadow-sm group-hover:border-sky-300">
                       <CheckCircle2 className="w-3.5 h-3.5 text-white opacity-0 peer-checked:opacity-100 transition-opacity duration-200" />
@@ -142,8 +141,8 @@ const TasksHistory = ({ setEditingTaskHistory }) => {
                       </td>
                       <td className={`px-4 py-4 bg-white/50 backdrop-blur-sm border-y transition-all duration-300 group-hover/row:bg-white group-hover/row:shadow-md ${isSelected ? 'border-sky-200 bg-sky-50/50' : 'border-white'}`}>
                         <div className="flex flex-col">
-                          <span className="text-xs font-black text-sky-800">{new Date(task.completedAt || task.createdAt).toLocaleDateString()}</span>
-                          <span className="text-[10px] font-bold text-sky-500">{new Date(task.completedAt || task.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span className="text-xs font-black text-sky-800">{formatDisplayDate(task.completedAt || task.createdAt)}</span>
+                          <span className="text-[10px] font-bold text-sky-500">{formatDisplayTime(task.completedAt || task.createdAt)}</span>
                         </div>
                       </td>
                       <td className={`px-4 py-4 bg-white/50 backdrop-blur-sm border-y transition-all duration-300 group-hover/row:bg-white group-hover/row:shadow-md ${isSelected ? 'border-sky-200 bg-sky-50/50' : 'border-white'}`}>
@@ -157,7 +156,7 @@ const TasksHistory = ({ setEditingTaskHistory }) => {
                               <div className="flex items-center gap-1">
                                 <Clock className="w-3 h-3 text-sky-400" />
                                 <span className="text-[9px] font-black text-sky-600 uppercase tracking-tighter">
-                                  {task.type === 'daily' ? '每日任務' : task.type === 'weekly' ? '每週任務' : task.type === 'infinite' ? '隨時挑戰' : '單次計畫'}
+                                  {task.type === 'daily' ? '每日任務' : task.type === 'weekly' ? '每週任務' : task.type === 'infinite' ? '隨時挑戰' : '一次性任務'}
                                 </span>
                               </div>
                               <div className="flex items-center gap-1.5 px-2 py-0.5 bg-sky-500/5 rounded-md border border-sky-500/10">
@@ -182,13 +181,15 @@ const TasksHistory = ({ setEditingTaskHistory }) => {
                             onClick={() => setEditingTaskHistory(task)}
                             className="p-2 text-sky-300 hover:text-sky-500 hover:bg-sky-50 rounded-xl transition-all"
                             title="編輯紀錄"
+                            aria-label="編輯紀錄"
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleDelete(task.id)}
                             className="p-2 text-sky-200 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                            title="永久刪除紀錄"
+                            title="刪除紀錄"
+                            aria-label="刪除紀錄"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -207,13 +208,15 @@ const TasksHistory = ({ setEditingTaskHistory }) => {
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
               <span className="text-[10px] font-black text-sky-600 uppercase tracking-widest">
-                顯示 {(currentPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, historyTasks.length)} 筆 / 共 {historyTasks.length} 筆
+                {formatPageRange(currentPage, historyTasks.length, ITEMS_PER_PAGE)}
               </span>
             </div>
             <div className="flex items-center gap-3">
               <button 
                 onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} 
                 disabled={currentPage === 1} 
+                title="上一頁"
+                aria-label="上一頁"
                 className="p-2.5 rounded-2xl bg-white/60 hover:bg-white disabled:opacity-30 text-sky-600 shadow-sm border border-white transition-all hover:-translate-x-1 active:scale-90"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -226,6 +229,8 @@ const TasksHistory = ({ setEditingTaskHistory }) => {
               <button 
                 onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} 
                 disabled={currentPage >= totalPages} 
+                title="下一頁"
+                aria-label="下一頁"
                 className="p-2.5 rounded-2xl bg-white/60 hover:bg-white disabled:opacity-30 text-sky-600 shadow-sm border border-white transition-all hover:translate-x-1 active:scale-90"
               >
                 <ChevronRight className="w-4 h-4" />
@@ -238,7 +243,7 @@ const TasksHistory = ({ setEditingTaskHistory }) => {
           <div className="py-20 text-center bg-white/20 rounded-[40px] border-4 border-dashed border-white/60">
             <Layers className="w-16 h-16 text-sky-100 mx-auto mb-6" />
             <p className="text-sky-300 font-black text-xl">尚無任務歷史紀錄</p>
-            <p className="text-sky-200 font-bold text-sm mt-2">完成計畫中的任務後，紀錄將會出現在這裡</p>
+            <p className="text-sky-200 font-bold text-sm mt-2">完成計畫中的任務後，紀錄會出現在這裡</p>
           </div>
         )}
       </div>

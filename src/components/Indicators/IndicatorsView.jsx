@@ -5,6 +5,7 @@ import { useAppData } from '../../contexts/AppDataContext';
 import { INDICATORS } from '../../constants/index.jsx';
 import { deleteGoalMessage } from '../../domain/confirmations.js';
 import { focusCardTextField } from '../../utils/cardFocus.js';
+import { formatDisplayDate } from '../../utils/displayFormat.js';
 
 // 每個維度最多幾個目標（新增與恢復目標都受這個限制）
 const MAX_GOALS_PER_INDICATOR = 3;
@@ -46,7 +47,7 @@ const IndicatorsView = () => {
   const uncompleteGoal = (goalId) => {
     const archived = data.archivedGoals.find(g => g.id === goalId);
     if (archived && (data.goals[archived.indicatorId] || []).length >= MAX_GOALS_PER_INDICATOR) {
-      alert(`每個維度最多 ${MAX_GOALS_PER_INDICATOR} 個目標`);
+      alert(`每個維度最多 ${MAX_GOALS_PER_INDICATOR} 個目標，請先達成或刪除一個，再恢復這個目標。`);
       return;
     }
     updateData(prev => {
@@ -79,7 +80,7 @@ const IndicatorsView = () => {
             <div className="flex justify-between items-start mb-6 md:mb-8">
               <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl md:rounded-3xl bg-gradient-to-br ${ind.color} flex items-center justify-center text-white shadow-lg shadow-sky-200`}>{ind.icon}</div>
               <div className="text-right">
-                <p className="text-[8px] md:text-[10px] font-black text-sky-400 uppercase tracking-widest mb-1">累計成就</p>
+                <p className="text-[8px] md:text-[10px] font-black text-sky-400 uppercase tracking-widest mb-1">累計完成</p>
                 <div className="flex items-baseline justify-end gap-1">
                   <span className="text-2xl md:text-3xl font-black text-sky-900">{totalCompleted}</span>
                   <span className="text-xs font-bold text-sky-400">次</span>
@@ -110,7 +111,7 @@ const IndicatorsView = () => {
                   <div className="flex-grow min-w-0 relative pt-1 md:pt-1">
                     <textarea
                       className="w-full bg-transparent font-bold text-sky-800 outline-none focus:text-sky-500 text-xs md:text-sm pr-10 md:pr-10 resize-none overflow-hidden min-h-[18px] md:min-h-[20px] leading-relaxed block break-words whitespace-pre-wrap"
-                      placeholder="請輸入目標名稱..."
+                      placeholder="請輸入目標名稱"
                       value={goal.title}
                       rows={1}
                       ref={(el) => {
@@ -123,10 +124,10 @@ const IndicatorsView = () => {
                     />
                   </div>
                   <div className="absolute right-1 top-1/2 -translate-y-1/2 flex opacity-0 group-hover:opacity-100 transition-opacity bg-white/60 backdrop-blur-md rounded-xl md:rounded-2xl p-0.5 shadow-xl border border-white/40 z-20 scale-90 md:scale-100">
-                    <button onClick={() => completeGoal(ind.id, goal.id)} className="p-1 md:p-1.5 text-sky-200 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg md:rounded-xl transition-all" title="完成目標"><CheckCircle2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
-                    <button onClick={() => moveGoal(ind.id, idx, -1)} className="p-1 md:p-1.5 text-sky-200 hover:text-sky-400 hover:bg-sky-50 rounded-lg md:rounded-xl transition-all" title="上移"><ArrowUp className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
-                    <button onClick={() => moveGoal(ind.id, idx, 1)} className="p-1 md:p-1.5 text-sky-200 hover:text-sky-400 hover:bg-sky-50 rounded-lg md:rounded-xl transition-all" title="下移"><ArrowDown className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
-                    <button onClick={() => { if (confirm(deleteGoalMessage(data, goal))) deleteGoal(ind.id, goal.id); }} className="p-1 md:p-1.5 text-sky-200 hover:text-red-400 hover:bg-red-50 rounded-lg md:rounded-xl transition-all" title="刪除"><Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
+                    <button onClick={() => completeGoal(ind.id, goal.id)} className="p-1 md:p-1.5 text-sky-200 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg md:rounded-xl transition-all" title="達成目標" aria-label="達成目標"><CheckCircle2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
+                    <button onClick={() => moveGoal(ind.id, idx, -1)} className="p-1 md:p-1.5 text-sky-200 hover:text-sky-400 hover:bg-sky-50 rounded-lg md:rounded-xl transition-all" title="上移" aria-label="上移"><ArrowUp className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
+                    <button onClick={() => moveGoal(ind.id, idx, 1)} className="p-1 md:p-1.5 text-sky-200 hover:text-sky-400 hover:bg-sky-50 rounded-lg md:rounded-xl transition-all" title="下移" aria-label="下移"><ArrowDown className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
+                    <button onClick={() => { if (confirm(deleteGoalMessage(data, goal))) deleteGoal(ind.id, goal.id); }} className="p-1 md:p-1.5 text-sky-200 hover:text-red-400 hover:bg-red-50 rounded-lg md:rounded-xl transition-all" title="刪除目標" aria-label="刪除目標"><Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
                   </div>
                 </motion.div>
               ))}
@@ -137,7 +138,7 @@ const IndicatorsView = () => {
                   <input
                     autoFocus
                     className="w-full bg-white/80 p-3 md:p-4 rounded-2xl md:rounded-3xl border-2 border-sky-400 font-bold text-sky-800 outline-none shadow-lg shadow-sky-100 text-sm"
-                    placeholder="輸入新目標名稱..."
+                    placeholder="輸入新目標名稱"
                     value={newGoalTitle}
                     onChange={e => setNewGoalTitle(e.target.value)}
                     onKeyDown={e => {
@@ -146,16 +147,22 @@ const IndicatorsView = () => {
                     }}
                     onBlur={() => addGoal(ind.id, newGoalTitle)}
                   />
-                  <p className="text-[7px] md:text-[8px] font-black text-sky-300 mt-2 ml-3 md:ml-4 uppercase tracking-widest">按 Enter 確認 / Esc 取消</p>
+                  <p className="text-[7px] md:text-[8px] font-black text-sky-300 mt-2 ml-3 md:ml-4 uppercase tracking-widest">按 Enter 確認，按 Esc 取消</p>
                 </div>
               ) : (
                 <button
                   onClick={() => { setAddingGoalTo(ind.id); setNewGoalTitle(''); }}
                   className="w-full py-3 md:py-4 border-2 border-dashed border-sky-100 rounded-2xl md:rounded-3xl text-sky-300 hover:text-sky-500 hover:border-sky-300 transition-all flex items-center justify-center gap-2 font-black text-[9px] md:text-[10px] uppercase tracking-widest mt-3 md:mt-4"
                 >
-                  <Plus className="w-4 h-4" /> 點擊新增核心目標
+                  <Plus className="w-4 h-4" /> 新增目標
                 </button>
               )
+            )}
+            {/* 滿 3 個時新增按鈕會消失，說明原因和下一步，免得以為按鈕壞了 */}
+            {(data.goals[ind.id] || []).length >= MAX_GOALS_PER_INDICATOR && (
+              <p className="mt-3 md:mt-4 px-2 text-[9px] md:text-[10px] font-bold text-sky-400 leading-relaxed">
+                每個維度最多 {MAX_GOALS_PER_INDICATOR} 個目標。要新增，請先達成或刪除一個。
+              </p>
             )}
           </div>
         </div>
@@ -166,7 +173,7 @@ const IndicatorsView = () => {
         <div className="col-span-full mt-8 md:mt-12 animate-in slide-up">
           <div className="flex items-center gap-3 md:gap-4 px-2 mb-6 md:mb-8">
             <Archive className="w-6 h-6 md:w-8 md:h-8 text-emerald-500" />
-            <h2 className="text-2xl md:text-3xl font-black text-sky-900 tracking-tight">已達成的核心目標</h2>
+            <h2 className="text-2xl md:text-3xl font-black text-sky-900 tracking-tight">已達成的目標</h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
             {data.archivedGoals.map(goal => {
@@ -179,12 +186,12 @@ const IndicatorsView = () => {
                       <span className="text-[8px] md:text-[9px] font-black uppercase tracking-widest text-emerald-600/60 bg-emerald-100/50 px-2 py-1 rounded-md">{ind?.name}</span>
                     </div>
                     <div className="flex gap-0.5 md:gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => uncompleteGoal(goal.id)} className="p-1.5 md:p-2 text-emerald-300 hover:text-sky-500 transition-colors" title="恢復目標"><RotateCcw className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
-                      <button onClick={() => { if (confirm(deleteGoalMessage(data, goal, { archived: true }))) updateData(prev => ({ ...prev, archivedGoals: prev.archivedGoals.filter(g => g.id !== goal.id) })); }} className="p-1.5 md:p-2 text-emerald-200 hover:text-red-400 transition-colors" title="刪除紀錄"><Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
+                      <button onClick={() => uncompleteGoal(goal.id)} className="p-1.5 md:p-2 text-emerald-300 hover:text-sky-500 transition-colors" title="恢復目標" aria-label="恢復目標"><RotateCcw className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
+                      <button onClick={() => { if (confirm(deleteGoalMessage(data, goal, { archived: true }))) updateData(prev => ({ ...prev, archivedGoals: prev.archivedGoals.filter(g => g.id !== goal.id) })); }} className="p-1.5 md:p-2 text-emerald-200 hover:text-red-400 transition-colors" title="刪除目標" aria-label="刪除目標"><Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
                     </div>
                   </div>
                   <h3 className="text-base md:text-lg font-black text-emerald-800 line-through mb-1 break-words leading-tight">{goal.title || '未命名目標'}</h3>
-                  <p className="text-[8px] md:text-[9px] font-bold text-emerald-400/60 uppercase tracking-tighter italic">達成於 {new Date(goal.completedAt).toLocaleDateString()}</p>
+                  <p className="text-[8px] md:text-[9px] font-bold text-emerald-400/60 uppercase tracking-tighter italic">達成於 {formatDisplayDate(goal.completedAt)}</p>
                   
                   <div className="absolute -bottom-2 -right-2 opacity-5 scale-125 md:scale-150 rotate-12">
                     <Trophy className="w-16 h-16 md:w-20 md:h-20 text-emerald-600" />

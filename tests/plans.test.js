@@ -208,10 +208,10 @@ describe('資料格式：計畫標記是新加的欄位', () => {
 describe('completeMajorTaskMessage：說明新的規則', () => {
   it('寫出沒做完的一次性任務不算進度、恢復時會一起回來、優先標記也會恢復', () => {
     const msg = completeMajorTaskMessage(baseData(), 'p');
-    expect(msg).toContain('3 個任務會一起歸檔');
+    expect(msg).toContain('3 個任務會跟著計畫一起收起來');
     expect(msg).toContain('其中 2 個一次性任務還沒完成，不會算進成就和維度的進度');
     expect(msg).toContain('這 3 個任務會一起回到進行中，原本的優先標記也會恢復');
-    expect(msg).toContain('之前就已經完成的任務會留在「已完成」區');
+    expect(msg).toContain('之前就已經結束的任務會留在「已結束」區');
     expect(msg).toContain('不會刪除任何完成紀錄');
   });
 

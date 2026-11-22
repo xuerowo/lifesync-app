@@ -6,6 +6,7 @@ import { useAppData } from '../../contexts/AppDataContext';
 import { INDICATORS } from '../../constants/index.jsx';
 import { formatForDateTimeLocal } from '../../utils';
 import { addHistoryRecord, historyFieldsFromTask, linkableHistoryTasks } from '../../domain/taskHistory';
+import { isStoppedTask } from '../../domain/tasks';
 
 const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
   const { data, updateData } = useAppData();
@@ -60,7 +61,7 @@ const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
           <h3 className="font-black text-2xl flex items-center gap-3 text-sky-900 drop-shadow-sm">
             <RotateCw className="w-7 h-7 text-sky-500" /> {isNew ? '任務紀錄補登' : '編輯任務紀錄'}
           </h3>
-          <button onClick={() => setEditingTaskHistory(null)} className="p-3 hover:bg-white/40 rounded-2xl transition-all hover:scale-110 active:scale-90">
+          <button onClick={() => setEditingTaskHistory(null)} title="關閉" aria-label="關閉" className="p-3 hover:bg-white/40 rounded-2xl transition-all hover:scale-110 active:scale-90">
             <X className="w-6 h-6 text-sky-600" />
           </button>
         </div>
@@ -76,7 +77,7 @@ const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
                 <option value="">不對應任何任務（只記一筆紀錄）</option>
                 {linkable.map(({ task, planTitle, archived }) => (
                   <option key={task.id} value={task.id}>
-                    {task.title || '（未命名任務）'}（{planTitle}）{archived ? '・已歸檔' : ''}
+                    {task.title || '（未命名任務）'}（{planTitle}）{archived ? (isStoppedTask(task) ? '・已停止' : '・計畫已完成') : ''}
                   </option>
                 ))}
               </select>
@@ -109,7 +110,7 @@ const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
               >
                 <option value="daily">每日任務</option>
                 <option value="weekly">每週任務</option>
-                <option value="precise">單次計畫</option>
+                <option value="precise">一次性任務</option>
                 <option value="infinite">隨時挑戰</option>
               </select>
             </div>
@@ -122,7 +123,7 @@ const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
               value={localItem.title} 
               disabled={linked}
               onChange={e => setLocalItem({ ...localItem, title: e.target.value })} 
-              placeholder="輸入任務名稱..." 
+              placeholder="輸入任務名稱" 
             />
           </div>
 
@@ -133,7 +134,7 @@ const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
               value={localItem.majorTaskTitle} 
               disabled={linked}
               onChange={e => setLocalItem({ ...localItem, majorTaskTitle: e.target.value })} 
-              placeholder="輸入計畫名稱..." 
+              placeholder="輸入計畫名稱" 
             />
           </div>
 
@@ -152,7 +153,7 @@ const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
 
           <button onClick={handleSave} className="group relative w-full py-6 bg-sky-500/80 backdrop-blur-xl text-white font-black rounded-[32px] shadow-2xl shadow-sky-200/50 hover:bg-sky-600 hover:scale-[1.02] hover:-translate-y-1 active:scale-[0.98] transition-all duration-300 overflow-hidden border border-white/20">
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-shine pointer-events-none" />
-            <span className="relative flex items-center justify-center gap-3 text-xl tracking-[0.2em]"><CheckCircle2 className="w-7 h-7" /> 確認保存</span>
+            <span className="relative flex items-center justify-center gap-3 text-xl tracking-[0.2em]"><CheckCircle2 className="w-7 h-7" /> 儲存紀錄</span>
           </button>
         </div>
       </motion.div>

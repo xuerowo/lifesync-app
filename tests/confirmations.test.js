@@ -175,7 +175,7 @@ describe('completeMajorTaskMessage', () => {
   it('說明進行中任務會一起歸檔、不刪紀錄不扣券', () => {
     const msg = completeMajorTaskMessage(baseData(), 'm1');
     expect(msg).toContain('「讀書計畫」');
-    expect(msg).toContain('2 個任務會一起歸檔');
+    expect(msg).toContain('2 個任務會跟著計畫一起收起來');
     expect(msg).toContain('不會刪除任何完成紀錄');
     // 「買書」還沒做完：不算進成就；恢復計畫時兩個任務會一起回來
     expect(msg).toContain('其中 1 個一次性任務還沒完成');
@@ -214,7 +214,7 @@ describe('deleteRuleMessage', () => {
   });
   it('長內容只顯示前 30 字', () => {
     const msg = deleteRuleMessage({ content: 'あ'.repeat(40) });
-    expect(msg).toContain(`「${'あ'.repeat(30)}…」`);
+    expect(msg).toContain(`「${'あ'.repeat(30)}……」`);
   });
 });
 

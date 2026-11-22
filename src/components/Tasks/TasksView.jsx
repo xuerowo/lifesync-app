@@ -1,19 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
-  LayoutDashboard, Zap, CheckCircle2, CalendarDays, Lock, Edit3, Archive, Trash2, Plus, ChevronUp, ChevronDown, Settings2, RotateCcw, GripVertical, Tag
+  LayoutDashboard, Zap, CheckCircle2, CalendarDays, Lock, Edit3, Archive, Trash2, Plus, ChevronUp, ChevronDown, Settings2, RotateCcw, GripVertical, Tag, CircleStop
 } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, useSortable, rectSortingStrategy, verticalListSortingStrategy, sortableKeyboardCoordinates, defaultAnimateLayoutChanges } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useAppData } from '../../contexts/AppDataContext';
 import { INDICATORS } from '../../constants/index.jsx';
-import { getTodayStr, formatTaskTime } from '../../utils';
+import { getTodayStr, formatTaskTime, formatDateOnly } from '../../utils';
+import { RANGE_SEP } from '../../utils/displayFormat.js';
 import {
   completeMajorTaskMessage, deleteMajorTaskMessage, deleteSubTaskMessage, revertCompletionMessage
 } from '../../domain/confirmations.js';
 import { applySortOrders, reorderSortOrders, sortBySortOrder } from '../../shared/taskOrder';
-import { completionRewardTickets } from '../../domain/tasks';
+import { canStopTask, completionRewardTickets, isStoppedTask } from '../../domain/tasks';
 
 // 可以拖曳換位置的一格。拖曳只從「把手」開始（handleProps 給把手按鈕），點卡片其他地方照常操作。
 // 位移用 dnd-kit 的 transform，所以裡面的動畫不要用 framer-motion 的 layout（兩者都改 transform 會互相干擾）。
@@ -74,7 +75,7 @@ function useSortSensors() {
 const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask }) => {
   const {
     data, updateData, activePriorityTasks, toggleMajorTask, restoreMajorTask,
-    completeSubTaskData, revertTaskCompletion, deleteMajorTask, deleteSubTask, terminateSubTask
+    completeSubTaskData, revertTaskCompletion, deleteMajorTask, deleteSubTask, stopSubTask, restoreStoppedSubTask
   } = useAppData();
   const [expandedArchived, setExpandedArchived] = useState({});
   const [filterIndicator, setFilterIndicator] = useState('all');
@@ -153,6 +154,20 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
     if (!confirm(deleteSubTaskMessage(data, subId))) return;
     lastInteractedMajorId.current = majorTaskId;
     deleteSubTask(subId);
+  };
+
+  // 停止重複任務：不刪紀錄、不扣券，只是不再出現在清單（規則見 domain/tasks.js）
+  const confirmStopSubTask = (sub, majorTaskId) => {
+    const name = sub.title?.trim() ? `「${sub.title.trim()}」` : '這個任務';
+    if (!confirm(`確定要停止${name}嗎？停止後不會再出現在清單，已完成的紀錄和抽卡券都會保留。`)) return;
+    lastInteractedMajorId.current = majorTaskId;
+    stopSubTask(sub.id);
+  };
+
+  // 恢復停止的任務：只放回清單，不動紀錄和券，所以不用確認
+  const handleRestoreStopped = (subId, majorTaskId) => {
+    lastInteractedMajorId.current = majorTaskId;
+    restoreStoppedSubTask(subId);
   };
 
   const confirmDeleteMajorTask = (majorTaskId) => {
@@ -246,7 +261,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                 <Plus className="w-3.5 h-3.5 md:w-4 md:h-4" /> 新增計畫
             </button>
             <button onClick={() => setIsPriorityManagerOpen(true)} className="flex-1 sm:flex-none px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-2xl font-black text-[10px] md:text-xs flex items-center justify-center gap-2 transition-colors shadow-sm">
-                <Zap className="w-3.5 h-3.5 md:w-4 md:h-4" /> 管理優先級
+                <Zap className="w-3.5 h-3.5 md:w-4 md:h-4" /> 管理優先順序
             </button>
           </div>
         </div>
@@ -276,15 +291,15 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
               <div className={`w-8 h-8 md:w-10 md:h-10 rounded-xl md:rounded-2xl bg-gradient-to-br ${ind?.color} flex items-center justify-center text-white shadow-lg shadow-sky-200/50`}>{ind?.icon}</div>
               <span className="text-[8px] md:text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 md:px-4 md:py-2 bg-white/60 text-sky-700 rounded-xl md:rounded-2xl border border-white/40 backdrop-blur-md truncate max-w-[120px] md:max-w-none">{goal?.title || '計畫中'}</span>
             </div>
-            <button onClick={() => { if (confirm(completeMajorTaskMessage(data, task.id))) toggleMajorTask(task.id); }} title="完成整個計畫" className="p-2 md:p-2.5 bg-white/60 hover:bg-emerald-50 text-sky-400 hover:text-emerald-500 rounded-xl md:rounded-2xl transition-all hover:scale-110 active:scale-90 border border-white/40 shadow-sm"><CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /></button>
+            <button onClick={() => { if (confirm(completeMajorTaskMessage(data, task.id))) toggleMajorTask(task.id); }} title="完成整個計畫" aria-label="完成整個計畫" className="p-2 md:p-2.5 bg-white/60 hover:bg-emerald-50 text-sky-400 hover:text-emerald-500 rounded-xl md:rounded-2xl transition-all hover:scale-110 active:scale-90 border border-white/40 shadow-sm"><CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /></button>
           </div>
           {isTopPriorityPlan && (
-            <span className="relative z-10 inline-flex items-center gap-1 mb-2 px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 border border-amber-200 text-[9px] md:text-[10px] font-black" title="管理優先級裡排第一、現在能做的任務在這個計畫">
+            <span className="relative z-10 inline-flex items-center gap-1 mb-2 px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 border border-amber-200 text-[9px] md:text-[10px] font-black" title="優先順序排第一、現在要先做的任務在這個計畫">
               <Zap className="w-3 h-3" /> 目前優先
             </span>
           )}
           <h3 className="text-xl md:text-2xl font-black text-sky-950 mb-1 md:mb-1.5 break-words tracking-tight relative z-10">{task.title}</h3>
-          <p className="text-[9px] md:text-[10px] font-black text-sky-800 mb-4 md:mb-6 flex items-center gap-1.5 md:gap-2 uppercase tracking-[0.1em] bg-sky-100/50 w-fit px-2.5 py-1 rounded-lg border border-sky-200/50 relative z-10"><CalendarDays className="w-3 md:w-3.5 h-3 md:h-3.5" /> {task.startDate} — {task.endDate}</p>
+          <p className="text-[9px] md:text-[10px] font-black text-sky-800 mb-4 md:mb-6 flex items-center gap-1.5 md:gap-2 uppercase tracking-[0.1em] bg-sky-100/50 w-fit px-2.5 py-1 rounded-lg border border-sky-200/50 relative z-10"><CalendarDays className="w-3 md:w-3.5 h-3 md:h-3.5" /> {formatDateOnly(task.startDate)}{RANGE_SEP}{formatDateOnly(task.endDate)}</p>
           {/* 新增任務放在清單上面：新的任務會出現在最上面，不用往下捲 */}
           <button onClick={() => addSubTask(task.id)} className="relative z-10 w-full py-2.5 md:py-3 mb-2.5 md:mb-3 bg-white/40 hover:bg-white text-sky-600 rounded-2xl md:rounded-[24px] text-[10px] md:text-[11px] font-black flex items-center justify-center gap-2 border-2 border-dashed border-white hover:border-sky-200 transition-all shadow-sm active:scale-95"><Plus className="w-3.5 h-3.5 md:w-4 md:h-4" /> 新增任務</button>
           <div className="space-y-2.5 md:space-y-3 relative z-10">
@@ -295,10 +310,16 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                 const currentDay = today.getDay();
                 const isWrongDay = sub.type === 'weekly' && !sub.days.includes(currentDay);
                 
-                // 無限任務不受優先級限制且不會被日期鎖定
-                const isLocked = sub.type !== 'infinite' && ((activePriorityTasks.length > 0 && activePriorityTasks[0].id !== sub.id) || isWrongDay);
+                // 隨時挑戰不受優先任務限制，也不會被日期鎖住
+                const blockingPriority = sub.type !== 'infinite' && activePriorityTasks.length > 0 && activePriorityTasks[0].id !== sub.id
+                  ? activePriorityTasks[0] : null;
+                const isLocked = sub.type !== 'infinite' && (!!blockingPriority || isWrongDay);
+                // 鎖住的原因分開寫：先講要先做哪個優先任務，再講今天不用做
+                const lockReason = blockingPriority
+                  ? `要先完成優先任務「${blockingPriority.title?.trim() || '未命名任務'}」`
+                  : '這個任務今天不用做';
                 
-                // 無限任務不顯示為「今日已完成」狀態，以便可以無限次點擊
+                // 隨時挑戰不顯示為「今日已完成」，才能一直重複完成
                 const isTodayCompleted = sub.type !== 'infinite' && (sub.type === 'daily' || sub.type === 'weekly') &&
                                          sub.lastCompletedAt &&
                                          sub.lastCompletedAt.startsWith(getTodayStr());
@@ -321,7 +342,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                   <DragHandle handleProps={subHandleProps} label="拖曳調整任務順序" className="p-2 -my-1.5 shrink-0" />
                   <div className="relative flex items-center justify-center shrink-0 w-5 h-5 md:w-6 md:h-6 mr-0.5">
                     {isLocked ? (
-                      <div className="w-5 h-5 md:w-6 md:h-6 rounded-md md:rounded-lg border-2 border-slate-200 bg-slate-100/50 flex items-center justify-center" title="被優先任務鎖住，或今天不用做">
+                      <div className="w-5 h-5 md:w-6 md:h-6 rounded-md md:rounded-lg border-2 border-slate-200 bg-slate-100/50 flex items-center justify-center" title={lockReason} aria-label={lockReason}>
                         <Lock className="w-3 h-3 text-slate-400" />
                       </div>
                     ) : (
@@ -356,7 +377,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                           isLocked ? 'bg-slate-200 text-slate-500 border-slate-300' :
                           isTodayCompleted ? 'bg-emerald-100 text-emerald-600 border-emerald-200' :
                           'bg-amber-100 text-amber-600 border-amber-200'
-                        }`} title={`優先順位第 ${sub.priorityOrder} 名`}>
+                        }`} title={`優先順序第 ${sub.priorityOrder} 名`}>
                           P{sub.priorityOrder}
                         </span>
                       )}
@@ -387,7 +408,8 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                             <button
                               onClick={() => confirmRevert(sub.id, task.id)}
                               className="p-1 -m-0.5 rounded-md text-rose-300 hover:text-rose-500 hover:bg-rose-50 transition-colors"
-                              title="撤銷最後一次完成"
+                              title="撤銷最近一次完成"
+                              aria-label="撤銷最近一次完成"
                             >
                               <RotateCcw className="w-3 h-3" />
                             </button>
@@ -399,9 +421,9 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                   {/* 操作按鈕：滑鼠移到任務上才浮出來，掛在任務框右上角的邊線上（不佔寬度，也不會蓋到框裡的文字和「撤銷」按鈕）；
                       用鍵盤移過來時也會出現；沒出現時不能被誤點 */}
                   <div className="absolute -top-3.5 right-3 z-20 flex items-center rounded-xl bg-white shadow-md border border-sky-100 opacity-0 pointer-events-none group-hover/sub:opacity-100 group-hover/sub:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto transition-opacity">
-                        <button onClick={() => { lastInteractedMajorId.current = task.id; setEditingTask({ type: 'sub', item: sub }); }} className="p-1.5 text-sky-500 hover:text-sky-800 hover:bg-sky-50 rounded-lg transition-all" title="編輯項目"><Edit3 className="w-3.5 h-3.5" /></button>
-                        {(sub.type === 'daily' || sub.type === 'weekly' || sub.type === 'infinite') && (<button onClick={() => { if(confirm('確定要終止此任務並將其歸檔嗎？')) { lastInteractedMajorId.current = task.id; terminateSubTask(sub.id); } }} className="p-1.5 text-sky-500 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-all" title="終止並歸檔"><Archive className="w-3.5 h-3.5" /></button>)}
-                        <button onClick={() => confirmDeleteSubTask(sub.id, task.id)} className="p-1.5 text-sky-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="刪除項目"><Trash2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => { lastInteractedMajorId.current = task.id; setEditingTask({ type: 'sub', item: sub }); }} className="p-1.5 text-sky-500 hover:text-sky-800 hover:bg-sky-50 rounded-lg transition-all" title="編輯任務" aria-label="編輯任務"><Edit3 className="w-3.5 h-3.5" /></button>
+                        {canStopTask(sub) && (<button onClick={() => confirmStopSubTask(sub, task.id)} className="p-1.5 text-sky-500 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-all" title="停止這個任務" aria-label="停止這個任務"><CircleStop className="w-3.5 h-3.5" /></button>)}
+                        <button onClick={() => confirmDeleteSubTask(sub.id, task.id)} className="p-1.5 text-sky-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="刪除任務" aria-label="刪除任務"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </motion.div>
                 )}
@@ -419,35 +441,49 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                     onClick={() => setExpandedArchived(prev => ({ ...prev, [task.id]: !prev[task.id] }))}
                     className="w-full py-1.5 text-[8px] md:text-[9px] font-black text-sky-600 hover:text-sky-800 flex items-center justify-between px-2"
                   >
-                    <span>已完成 ({archivedSubs.length})</span>
+                    <span>已結束（{archivedSubs.length}）</span>
                     {expandedArchived[task.id] ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                   </button>
                   {expandedArchived[task.id] && (
                     <div className="space-y-2 mt-2">
-                      {archivedSubs.map(sub => (
+                      {archivedSubs.map(sub => {
+                        // 停止的重複任務不是「完成」：不打勾，按鈕是「恢復這個任務」（不動紀錄和券）；
+                        // 真的完成的一次性任務照舊打勾，按勾勾撤銷完成
+                        const stopped = isStoppedTask(sub);
+                        return (
                         <div key={sub.id} className="flex items-center gap-2.5 p-2.5 bg-sky-50/30 rounded-xl md:rounded-2xl border border-sky-50 group/archived">
-                          <input type="checkbox" checked={true} onChange={() => confirmRevert(sub.id, task.id)} title="撤銷完成" className="w-4 h-4 md:w-5 md:h-5 rounded-md md:rounded-lg text-emerald-500 border-sky-100 cursor-pointer" />
+                          {stopped ? (
+                            <button onClick={() => handleRestoreStopped(sub.id, task.id)} title="恢復這個任務" aria-label="恢復這個任務" className="shrink-0 p-0.5 rounded-md text-sky-400 hover:text-sky-600 hover:bg-white transition-colors">
+                              <RotateCcw className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                            </button>
+                          ) : (
+                            <input type="checkbox" checked={true} onChange={() => confirmRevert(sub.id, task.id)} title="撤銷完成" aria-label="撤銷完成" className="w-4 h-4 md:w-5 md:h-5 rounded-md md:rounded-lg text-emerald-500 border-sky-100 cursor-pointer" />
+                          )}
                           <div className="flex-grow min-w-0">
-                            <p className="text-[11px] md:text-xs font-bold line-through text-sky-400 break-words leading-snug">{sub.title}</p>
+                            <p className={`text-[11px] md:text-xs font-bold break-words leading-snug ${stopped ? 'text-sky-500' : 'line-through text-sky-400'}`}>{sub.title}</p>
                             <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                              {stopped && (
+                                <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-slate-200 text-[8px] md:text-[9px] font-black leading-none">已停止</span>
+                              )}
                               <span className="text-[9px] md:text-[10px] font-semibold text-sky-300">{formatTaskTime(sub)}</span>
-                              {(sub.type === 'daily' || sub.type === 'weekly' || sub.type === 'infinite') && sub.completionCount > 0 && (
+                              {canStopTask(sub) && sub.completionCount > 0 && (
                                 <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/5 text-emerald-500/60 text-[8px] md:text-[9px] font-black leading-none" title={`已完成 ${sub.completionCount} 次`}>×{sub.completionCount}</span>
                               )}
                             </div>
                           </div>
-                          <button onClick={() => confirmDeleteSubTask(sub.id, task.id)} title="刪除項目" className="opacity-0 md:group-hover/archived:opacity-100 p-1 text-sky-100 hover:text-red-400">
+                          <button onClick={() => confirmDeleteSubTask(sub.id, task.id)} title="刪除任務" aria-label="刪除任務" className="opacity-0 md:group-hover/archived:opacity-100 focus:opacity-100 p-1 text-sky-100 hover:text-red-400">
                             <Trash2 className="w-3 h-3 md:w-3.5 md:h-3.5" />
                           </button>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
               );
             })()}
           </div>
-          <div className="mt-4 md:mt-6 pt-3 md:pt-4 border-t border-white/20 flex justify-between relative z-10"><button onClick={() => setEditingTask({ type: 'major', item: task })} className="text-[9px] md:text-[10px] font-black text-sky-600 hover:text-sky-800 flex items-center gap-1 md:gap-1.5 px-2 md:px-3 py-1 md:py-1.5 bg-white/40 hover:bg-white/80 rounded-lg md:rounded-xl transition-all border border-white/40 shadow-sm"><Settings2 className="w-3 md:w-3.5 h-3 md:h-3.5" /> 編輯</button><button onClick={() => confirmDeleteMajorTask(task.id)} title="刪除計畫" className="text-[9px] md:text-[10px] font-black text-sky-400 hover:text-red-500 flex items-center gap-1 md:gap-1.5 px-2 md:px-3 py-1 md:py-1.5 bg-white/40 hover:bg-red-50 rounded-lg md:rounded-xl transition-all border border-white/40 shadow-sm"><Trash2 className="w-3 md:w-3.5 h-3 md:h-3.5" /></button></div>
+          <div className="mt-4 md:mt-6 pt-3 md:pt-4 border-t border-white/20 flex justify-between relative z-10"><button onClick={() => setEditingTask({ type: 'major', item: task })} className="text-[9px] md:text-[10px] font-black text-sky-600 hover:text-sky-800 flex items-center gap-1 md:gap-1.5 px-2 md:px-3 py-1 md:py-1.5 bg-white/40 hover:bg-white/80 rounded-lg md:rounded-xl transition-all border border-white/40 shadow-sm"><Settings2 className="w-3 md:w-3.5 h-3 md:h-3.5" /> 編輯</button><button onClick={() => confirmDeleteMajorTask(task.id)} title="刪除計畫" className="text-[9px] md:text-[10px] font-black text-sky-400 hover:text-red-500 flex items-center gap-1 md:gap-1.5 px-2 md:px-3 py-1 md:py-1.5 bg-white/40 hover:bg-red-50 rounded-lg md:rounded-xl transition-all border border-white/40 shadow-sm" aria-label="刪除計畫"><Trash2 className="w-3 md:w-3.5 h-3 md:h-3.5" /></button></div>
         </motion.div>
         )}
         </SortableItem>
@@ -483,12 +519,12 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                   <span className="text-[8px] md:text-[9px] font-black uppercase tracking-widest px-2.5 py-1 md:px-3 md:py-1.5 bg-white/60 text-emerald-600 rounded-full border border-emerald-50">{goal?.title || '已完成'}</span>
                 </div>
                 <div className="flex gap-0.5 md:gap-1">
-                  <button onClick={() => restoreMajorTask(task.id)} className="p-1.5 md:p-2 text-emerald-300 hover:text-sky-500 transition-colors" title="恢復計畫"><RotateCcw className="w-4 h-4 md:w-5 md:h-5" /></button>
-                  <button onClick={() => confirmDeleteMajorTask(task.id)} className="p-1.5 md:p-2 text-emerald-200 hover:text-red-400 transition-colors" title="刪除計畫"><Trash2 className="w-4 h-4 md:w-5 md:h-5" /></button>
+                  <button onClick={() => restoreMajorTask(task.id)} className="p-1.5 md:p-2 text-emerald-300 hover:text-sky-500 transition-colors" title="恢復計畫" aria-label="恢復計畫"><RotateCcw className="w-4 h-4 md:w-5 md:h-5" /></button>
+                  <button onClick={() => confirmDeleteMajorTask(task.id)} className="p-1.5 md:p-2 text-emerald-200 hover:text-red-400 transition-colors" title="刪除計畫" aria-label="刪除計畫"><Trash2 className="w-4 h-4 md:w-5 md:h-5" /></button>
                 </div>
               </div>
               <h3 className="text-lg md:text-xl font-black text-emerald-800 mb-1 line-through break-words">{task.title}</h3>
-              <p className="text-[8px] md:text-[9px] font-bold text-emerald-400 mb-3 md:mb-4 flex items-center gap-1.5 md:gap-2 uppercase tracking-tighter"><CalendarDays className="w-3 md:w-3.5 h-3 md:h-3.5" /> {task.startDate} 至 {task.endDate}</p>
+              <p className="text-[8px] md:text-[9px] font-bold text-emerald-400 mb-3 md:mb-4 flex items-center gap-1.5 md:gap-2 uppercase tracking-tighter"><CalendarDays className="w-3 md:w-3.5 h-3 md:h-3.5" /> {formatDateOnly(task.startDate)}{RANGE_SEP}{formatDateOnly(task.endDate)}</p>
               
               {allSubs.length > 0 && (
                 <div className="mt-3 md:mt-4">
@@ -496,39 +532,51 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                     onClick={() => setExpandedArchived(prev => ({ ...prev, [task.id]: !prev[task.id] }))}
                     className="w-full py-1.5 md:py-2 text-[8px] md:text-[9px] font-black text-emerald-400 hover:text-emerald-600 flex items-center justify-between px-2 bg-emerald-100/30 rounded-xl transition-colors"
                   >
-                    <span>查看任務 ({allSubs.length})</span>
+                    <span>查看任務（{allSubs.length}）</span>
                     {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                   </button>
                   
                   {isExpanded && (
                     <div className="space-y-2 mt-2 md:mt-3 animate-in slide-down">
-                      {allSubs.map(sub => (
+                      {allSubs.map(sub => {
+                        // 停止的任務（在「已結束」區、不是跟著計畫收起來的重複任務）不是完成，不打勾也不能撤銷
+                        const stopped = !activeSubs.includes(sub) && isStoppedTask(sub);
+                        const done = !!sub.completed && !stopped;
+                        return (
                         <div key={sub.id} className="flex items-center gap-2.5 p-2.5 md:p-3 bg-white/40 rounded-xl md:rounded-2xl border border-emerald-100/50">
-                          {/* 顯示真實的完成狀態：已撤銷（回到進行中）的任務、跟著計畫一起收起來的任務不打勾，也不能撤銷，避免一直重複扣券 */}
+                          {/* 顯示真實的完成狀態：已撤銷（回到進行中）的任務、跟著計畫一起收起來的任務、停止的任務不打勾，
+                              也不能撤銷，避免一直重複扣券 */}
                           <input
                             type="checkbox"
-                            checked={!!sub.completed}
-                            disabled={!sub.completed}
-                            onChange={() => { if (sub.completed) confirmRevert(sub.id); }}
-                            title={sub.completed ? '撤銷完成'
+                            checked={done}
+                            disabled={!done}
+                            onChange={() => { if (done) confirmRevert(sub.id); }}
+                            title={done ? '撤銷完成'
+                              : stopped ? '已停止；恢復計畫後，可以在計畫的「已結束」區恢復這個任務'
                               : sub.archivedWithPlanId ? '沒有完成，跟著計畫一起收起來；按「恢復計畫」會回到進行中'
                               : '已撤銷完成；恢復計畫後可以在計畫裡重新完成'}
-                            className={`w-4 h-4 md:w-5 md:h-5 rounded-md md:rounded-lg text-emerald-500 border-sky-100 ${sub.completed ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
+                            className={`w-4 h-4 md:w-5 md:h-5 rounded-md md:rounded-lg text-emerald-500 border-sky-100 ${done ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
                           />
                           <div className="flex-grow min-w-0">
                             <div className="flex items-start justify-between gap-1 mb-0.5">
-                              <p className={`text-[11px] md:text-xs font-bold break-words leading-snug ${sub.completed ? 'line-through text-emerald-300' : 'text-emerald-700'}`}>
+                              <p className={`text-[11px] md:text-xs font-bold break-words leading-snug ${done ? 'line-through text-emerald-300' : 'text-emerald-700'}`}>
                                 {sub.title}
                               </p>
-                              {(sub.type === 'daily' || sub.type === 'weekly' || sub.type === 'infinite') && sub.completionCount > 0 && (
-                                <span className="flex-shrink-0 px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-500 text-[7px] md:text-[8px] font-black leading-none">完成 {sub.completionCount} 次</span>
-                              )}
+                              <div className="flex-shrink-0 flex items-center gap-1">
+                                {stopped && (
+                                  <span className="px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[7px] md:text-[8px] font-black leading-none">已停止</span>
+                                )}
+                                {canStopTask(sub) && sub.completionCount > 0 && (
+                                  <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-500 text-[7px] md:text-[8px] font-black leading-none">完成 {sub.completionCount} 次</span>
+                                )}
+                              </div>
                             </div>
                             <p className="text-[7px] md:text-[8px] font-black text-emerald-300/70">{formatTaskTime(sub)}</p>
                           </div>
-                          {sub.completed && <CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5 text-emerald-400 shrink-0" />}
+                          {done && <CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5 text-emerald-400 shrink-0" />}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

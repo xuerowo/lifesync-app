@@ -6,6 +6,7 @@ import {
   hasCompletionCount,
   historyFieldsFromTask,
   linkableHistoryTasks,
+  revertStoppedTaskRecord,
 } from '../src/domain/taskHistory.js';
 import { deleteHistoryRecordsMessage } from '../src/domain/confirmations.js';
 
@@ -190,14 +191,14 @@ describe('completionCountChanges 與確認文字一致', () => {
 
   it('刪一筆：寫出任務名稱、次數怎麼變、不扣券', () => {
     const msg = deleteHistoryRecordsMessage(baseData(), ['h1']);
-    expect(msg).toContain('確定要永久刪除這筆任務紀錄嗎？');
+    expect(msg).toContain('確定要刪除這筆任務紀錄嗎？');
     expect(msg).toContain('「掃地」的完成次數會從 12 次變成 11 次');
     expect(msg).toContain('不會扣回當初發的抽卡券');
   });
 
   it('刪好幾筆：逐一列出每個任務', () => {
     const msg = deleteHistoryRecordsMessage(baseData(), ['h1', 'h3', 'h2', 'h5']);
-    expect(msg).toContain('選中的 4 筆任務紀錄');
+    expect(msg).toContain('選取的 4 筆任務紀錄');
     expect(msg).toContain('「掃地」：12 次 → 10 次');
     expect(msg).toContain('「打字練習」：23 次 → 22 次');
   });
@@ -206,5 +207,39 @@ describe('completionCountChanges 與確認文字一致', () => {
     const msg = deleteHistoryRecordsMessage(baseData(), ['h4', 'h5', 'h6']);
     expect(msg).not.toContain('完成次數');
     expect(msg).toContain('刪除後無法復原');
+  });
+});
+
+describe('revertStoppedTaskRecord：番茄鐘撤銷已停止任務的某一筆紀錄', () => {
+  const data = () => ({
+    lotteryTickets: 5,
+    subTasks: [],
+    archivedSubTasks: [{ id: 'stop', type: 'infinite', completed: true, stoppedAt: '2026-11-22T00:00:00.000Z', completionCount: 3 }],
+    taskHistory: [
+      { id: 'r2', taskId: 'stop', rewardTickets: 2 },
+      { id: 'r1', taskId: 'stop', rewardTickets: 1 },
+      { id: 'x', taskId: 'other', rewardTickets: 1 },
+    ],
+  });
+
+  it('只刪指定那一筆、完成次數減 1，任務仍留在已結束區', () => {
+    const result = revertStoppedTaskRecord(data(), 'stop', 'r1');
+    expect(result.taskHistory.map(h => h.id)).toEqual(['r2', 'x']);
+    expect(result.archivedSubTasks[0]).toMatchObject({ id: 'stop', completed: true, completionCount: 2 });
+    expect(result.subTasks).toEqual([]);
+    // 番茄鐘的券要結算才發：預設不扣券
+    expect(result.lotteryTickets).toBe(5);
+    expect(result.ticketsDeducted).toBe(0);
+  });
+
+  it('要扣券時扣回那筆紀錄記的張數', () => {
+    const result = revertStoppedTaskRecord(data(), 'stop', 'r2', true);
+    expect(result.lotteryTickets).toBe(3);
+    expect(result.ticketsDeducted).toBe(2);
+  });
+
+  it('找不到紀錄、或紀錄不是這個任務的，不處理', () => {
+    expect(revertStoppedTaskRecord(data(), 'stop', 'nope')).toBeNull();
+    expect(revertStoppedTaskRecord(data(), 'stop', 'x')).toBeNull();
   });
 });

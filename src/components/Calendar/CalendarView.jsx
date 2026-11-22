@@ -4,6 +4,7 @@ import { useAppData } from '../../contexts/AppDataContext';
 import { getDateStr, getTodayStr, formatTaskTime } from '../../utils';
 import { WEEK_DAYS } from '../../constants/index.jsx';
 import { getCalendarTasksForDay, isDoneOnDate } from '../../domain/calendar';
+import { formatDisplayMonth } from '../../utils/displayFormat.js';
 
 const CalendarView = ({ calendarDate, setCalendarDate, setEditingTask }) => {
   const { data } = useAppData();
@@ -25,16 +26,16 @@ const CalendarView = ({ calendarDate, setCalendarDate, setEditingTask }) => {
             <CalendarIcon className="w-6 h-6 md:w-7 md:h-7" />
           </div>
           <div>
-            <h2 className="text-2xl md:text-3xl font-black text-sky-900">時間地圖</h2>
-            <p className="text-[8px] md:text-[10px] font-black text-sky-600 uppercase tracking-widest">{calendarDate.getFullYear()} . {calendarDate.getMonth() + 1}</p>
+            <h2 className="text-2xl md:text-3xl font-black text-sky-900">週曆</h2>
+            <p className="text-[8px] md:text-[10px] font-black text-sky-600 uppercase tracking-widest">{formatDisplayMonth(calendarDate)}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 p-1 md:p-1.5 bg-white/50 rounded-xl md:rounded-2xl border border-white">
-          <button onClick={() => { const d = new Date(calendarDate); d.setDate(d.getDate() - 7); setCalendarDate(d); }} className="p-1.5 md:p-2 hover:bg-sky-100 rounded-lg md:rounded-xl text-sky-500">
+          <button onClick={() => { const d = new Date(calendarDate); d.setDate(d.getDate() - 7); setCalendarDate(d); }} title="上一週" aria-label="上一週" className="p-1.5 md:p-2 hover:bg-sky-100 rounded-lg md:rounded-xl text-sky-500">
             <ChevronLeft className="w-4 h-4 md:w-5 md:h-5" />
           </button>
           <button onClick={() => setCalendarDate(new Date())} className="px-3 md:px-4 py-1.5 md:py-2 text-[9px] md:text-[10px] font-black text-sky-600 whitespace-nowrap">今天</button>
-          <button onClick={() => { const d = new Date(calendarDate); d.setDate(d.getDate() + 7); setCalendarDate(d); }} className="p-1.5 md:p-2 hover:bg-sky-100 rounded-lg md:rounded-xl text-sky-500">
+          <button onClick={() => { const d = new Date(calendarDate); d.setDate(d.getDate() + 7); setCalendarDate(d); }} title="下一週" aria-label="下一週" className="p-1.5 md:p-2 hover:bg-sky-100 rounded-lg md:rounded-xl text-sky-500">
             <ChevronRight className="w-4 h-4 md:w-5 md:h-5" />
           </button>
         </div>

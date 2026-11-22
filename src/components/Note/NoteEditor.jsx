@@ -23,7 +23,7 @@ const NoteEditor = ({ editingNote, setEditingNote }) => {
     setEditingNote(null);
   };
 
-  // 按 X 關閉：有還沒保存的修改時先確認，避免一按就丟掉剛寫的內容
+  // 按 X 關閉：有還沒儲存的修改時先確認，避免一按就丟掉剛寫的內容
   const handleClose = () => {
     if (hasUnsavedNoteChanges(editingNote, localItem) && !confirm(DISCARD_NOTE_MESSAGE)) return;
     setEditingNote(null);
@@ -40,19 +40,19 @@ const NoteEditor = ({ editingNote, setEditingNote }) => {
           <h3 className="font-black text-2xl flex items-center gap-3 text-sky-900 drop-shadow-sm">
             <BookOpen className="w-7 h-7 text-sky-500" /> {isNew ? '撰寫筆記' : '編輯筆記'}
           </h3>
-          <button onClick={handleClose} title="關閉" className="p-3 hover:bg-white/40 rounded-2xl transition-all hover:scale-110 active:scale-90">
+          <button onClick={handleClose} title="關閉" aria-label="關閉" className="p-3 hover:bg-white/40 rounded-2xl transition-all hover:scale-110 active:scale-90">
             <X className="w-6 h-6 text-sky-600" />
           </button>
         </div>
         <div className="p-10 space-y-8 relative z-10">
           <div>
-            <label className="block text-[10px] font-black text-sky-600 mb-2 uppercase tracking-widest ml-1">主題</label>
+            <label className="block text-[10px] font-black text-sky-600 mb-2 uppercase tracking-widest ml-1">標題</label>
             <input
               type="text"
               className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 outline-none border border-white/60 focus:bg-white/60"
               value={localItem.title}
               onChange={e => setLocalItem({ ...localItem, title: e.target.value })}
-              placeholder="輸入筆記主題..."
+              placeholder="輸入筆記標題"
             />
           </div>
           <div>
@@ -70,7 +70,7 @@ const NoteEditor = ({ editingNote, setEditingNote }) => {
           >
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:animate-shine pointer-events-none" />
             <span className="relative flex items-center justify-center gap-3 text-xl tracking-[0.2em]">
-              <CheckCircle2 className="w-7 h-7" /> 保存筆記
+              <CheckCircle2 className="w-7 h-7" /> 儲存筆記
             </span>
           </button>
         </div>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { BookOpen, Plus, Edit3, Trash2, Clock, RotateCw, Cloud } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
+import { formatDisplayDateTime } from '../../utils/displayFormat.js';
 
 const NoteView = ({ setEditingNote }) => {
   const { data, updateData } = useAppData();
@@ -18,7 +19,7 @@ const NoteView = ({ setEditingNote }) => {
   };
 
   const deleteNote = (id) => {
-    if (confirm('確定要刪除這篇筆記嗎？')) {
+    if (confirm('確定要刪除這篇筆記嗎？刪除後無法復原。')) {
       updateData(prev => ({ ...prev, notes: prev.notes.filter(n => n.id !== id) }));
     }
   };
@@ -51,30 +52,30 @@ const NoteView = ({ setEditingNote }) => {
             <div className="flex justify-between items-start mb-4 md:mb-6">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="px-3 py-1.5 md:px-4 md:py-2 bg-sky-500/10 rounded-xl text-sky-600 font-black text-[10px] md:text-xs border border-sky-500/20 truncate max-w-[200px]">
-                  {note.title || '無主題'}
+                  {note.title || '無標題'}
                 </div>
               </div>
               <div className="flex gap-0.5 md:gap-1 opacity-0 md:group-hover:opacity-100 transition-opacity">
-                <button onClick={() => setEditingNote(note)} className="p-1.5 md:p-2 text-sky-300 hover:text-sky-500 hover:bg-sky-50 rounded-xl transition-all">
+                <button onClick={() => setEditingNote(note)} title="編輯筆記" aria-label="編輯筆記" className="p-1.5 md:p-2 text-sky-300 hover:text-sky-500 hover:bg-sky-50 rounded-xl transition-all">
                   <Edit3 className="w-4 h-4" />
                 </button>
-                <button onClick={() => deleteNote(note.id)} className="p-1.5 md:p-2 text-sky-200 hover:text-red-400 hover:bg-red-50 rounded-xl transition-all">
+                <button onClick={() => deleteNote(note.id)} title="刪除筆記" aria-label="刪除筆記" className="p-1.5 md:p-2 text-sky-200 hover:text-red-400 hover:bg-red-50 rounded-xl transition-all">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             </div>
             <div className="flex flex-col gap-0.5 md:gap-1 mb-4">
               <div className="flex items-center gap-1.5 md:gap-2 text-[8px] md:text-[9px] font-bold text-sky-500 uppercase tracking-tighter">
-                <Clock className="w-3 h-3" /> 創建於 {new Date(note.createdAt).toLocaleString()}
+                <Clock className="w-3 h-3" /> 建立於 {formatDisplayDateTime(note.createdAt)}
               </div>
               {note.updatedAt && note.updatedAt !== note.createdAt && (
                 <div className="flex items-center gap-1.5 md:gap-2 text-[8px] md:text-[9px] font-bold text-amber-600 uppercase tracking-tighter">
-                  <RotateCw className="w-3 h-3" /> 更新於 {new Date(note.updatedAt).toLocaleString()}
+                  <RotateCw className="w-3 h-3" /> 更新於 {formatDisplayDateTime(note.updatedAt)}
                 </div>
               )}
             </div>
             <p className="text-sky-900 font-bold leading-relaxed whitespace-pre-wrap break-words text-base md:text-lg">
-              {note.content || <span className="text-sky-200 italic font-normal">這篇筆記還沒有內容...</span>}
+              {note.content || <span className="text-sky-200 italic font-normal">這篇筆記還沒有內容</span>}
             </p>
             
             <div className="absolute -bottom-2 -right-2 md:-bottom-4 md:-right-4 opacity-5 scale-100 md:scale-150 rotate-12 pointer-events-none">
@@ -87,7 +88,7 @@ const NoteView = ({ setEditingNote }) => {
           <div className="col-span-full py-12 md:py-20 text-center bg-white/20 rounded-3xl md:rounded-[48px] border-4 border-dashed border-white/60">
             <BookOpen className="w-12 h-12 md:w-16 md:h-16 text-sky-100 mx-auto mb-4 md:mb-6" />
             <p className="text-sky-300 font-black text-lg md:text-xl">還沒有任何筆記</p>
-            <p className="text-sky-200 font-bold text-xs md:text-sm mt-2">點擊上方開始記錄想法吧！</p>
+            <p className="text-sky-200 font-bold text-xs md:text-sm mt-2">按上方的「撰寫新筆記」開始記錄想法吧！</p>
           </div>
         )}
       </div>

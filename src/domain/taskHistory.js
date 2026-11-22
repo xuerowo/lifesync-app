@@ -14,6 +14,8 @@
  * - 已經對不上的舊資料（完成次數比紀錄多）不會被自動修正。
  */
 
+import { completionRewardTickets } from './tasks.js';
+
 const COUNTED_TYPES = ['daily', 'weekly', 'infinite'];
 
 /** 這個任務有沒有完成次數 */
@@ -124,5 +126,23 @@ export function historyFieldsFromTask(task, planTitle) {
     majorTaskTitle: planTitle || '獨立任務',
     indicatorId: task.indicatorId,
     type: task.type,
+  };
+}
+
+/**
+ * 番茄鐘撤銷任務 taskId 的某一筆完成紀錄（recordId），但那個任務已經停止了（domain/tasks.js 的 isStoppedTask）：
+ * 刪掉那一筆紀錄、完成次數減 1，任務仍維持停止（不會被搬回清單）。
+ * deductTickets 為 true 時扣回那筆紀錄記的券（最少到 0）；番茄鐘的券要結算才發，所以它傳 false。
+ * 回傳要更新的 { taskHistory, subTasks, archivedSubTasks, lotteryTickets } 和 ticketsDeducted；
+ * 找不到這個任務的這筆紀錄時回傳 null。
+ */
+export function revertStoppedTaskRecord(data, taskId, recordId, deductTickets = false) {
+  const record = (data?.taskHistory || []).find((h) => h?.id === recordId && h?.taskId === taskId);
+  if (!record) return null;
+  const ticketsDeducted = deductTickets ? completionRewardTickets(record) : 0;
+  return {
+    ...deleteHistoryRecords(data, [recordId]),
+    lotteryTickets: Math.max(0, (data?.lotteryTickets || 0) - ticketsDeducted),
+    ticketsDeducted,
   };
 }
