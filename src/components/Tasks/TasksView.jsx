@@ -308,7 +308,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className={`flex items-center gap-1.5 md:gap-2 p-3 md:p-4 pl-1 md:pl-2 backdrop-blur-md rounded-2xl md:rounded-[24px] border transition-[background-color,border-color,box-shadow,opacity] group/sub ${
+                  className={`flex items-start gap-1.5 md:gap-2 p-3 md:p-3.5 pl-1 md:pl-1.5 backdrop-blur-md rounded-2xl md:rounded-[24px] border transition-[background-color,border-color,box-shadow,opacity] group/sub ${
                     subDragging ? 'shadow-lg ring-2 ring-sky-300 bg-white' : 'shadow-sm'
                   } ${
                     isLocked ? 'bg-slate-100/50 border-slate-200 opacity-70 grayscale-[0.5]' :
@@ -316,11 +316,12 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                     'bg-white/60 border-white hover:border-sky-200 hover:bg-white'
                   }`}
                 >
-                  <DragHandle handleProps={subHandleProps} label="拖曳調整任務順序" className="p-2 -my-2 -ml-1 shrink-0" />
-                  <div className="relative flex items-center justify-center shrink-0 mr-1">
+                  {/* 把手、勾選框對齊標題第一行；標題獨佔整行寬度，次數和操作按鈕放到下面那一行 */}
+                  <DragHandle handleProps={subHandleProps} label="拖曳調整任務順序" className="p-2 -my-1.5 shrink-0" />
+                  <div className="relative flex items-center justify-center shrink-0 w-5 h-5 md:w-6 md:h-6 mr-0.5">
                     {isLocked ? (
-                      <div className="w-6 h-6 md:w-8 md:h-8 rounded-lg md:rounded-xl border-2 border-slate-200 bg-slate-100/50 flex items-center justify-center">
-                        <Lock className="w-3 h-3 md:w-4 md:h-4 text-slate-400" />
+                      <div className="w-5 h-5 md:w-6 md:h-6 rounded-md md:rounded-lg border-2 border-slate-200 bg-slate-100/50 flex items-center justify-center" title="被優先任務鎖住，或今天不用做">
+                        <Lock className="w-3 h-3 text-slate-400" />
                       </div>
                     ) : (
                       <>
@@ -334,6 +335,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                               completeSubTask(sub.id, task.id);
                             }
                           }}
+                          title={isTodayCompleted ? '撤銷今天的完成' : '完成'}
                           className={`peer w-5 h-5 md:w-6 md:h-6 rounded-md md:rounded-lg border-2 appearance-none cursor-pointer transition-all ${
                             isTodayCompleted
                               ? 'bg-emerald-500 border-emerald-400 shadow-lg shadow-emerald-200/50'
@@ -344,43 +346,46 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                       </>
                     )}
                   </div>
-                  <div className="flex-grow min-w-0">
-                    <div className="flex items-start justify-between gap-1 mb-0.5">
-                      <div className="flex items-center gap-1 flex-wrap">
-                        {sub.isPriority && (
-                          <span className={`px-1.5 py-0.5 rounded-md text-[7px] md:text-[8px] font-black uppercase tracking-wider border ${
-                            isLocked ? 'bg-slate-200 text-slate-500 border-slate-300' :
-                            isTodayCompleted ? 'bg-emerald-100 text-emerald-600 border-emerald-200' :
-                            'bg-amber-100 text-amber-600 border-amber-200'
-                          }`}>
-                            P{sub.priorityOrder}
-                          </span>
-                        )}
-                        <p className={`text-xs md:text-sm font-black break-words leading-tight transition-colors ${
-                          isTodayCompleted ? 'text-emerald-800/60 line-through' : 'text-sky-900'
-                        }`}>{sub.title}</p>
-                      </div>
-                      {(sub.type === 'daily' || sub.type === 'weekly' || sub.type === 'infinite') && sub.completionCount > 0 && (
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            onClick={() => confirmRevert(sub.id, task.id)}
-                            className="p-1 text-rose-300 hover:text-rose-500 transition-colors"
-                            title="撤銷最後一次完成"
-                          >
-                            <RotateCcw className="w-2.5 h-2.5 md:w-3 md:h-3" />
-                          </button>
-                          <span className="flex-shrink-0 px-1.5 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-600 text-[8px] md:text-[9px] font-black leading-none border border-emerald-500/20">
-                            ×{sub.completionCount}
-                          </span>
-                        </div>
+                  <div className="flex-grow min-w-0 md:pt-0.5">
+                    <p className={`text-[13px] md:text-sm font-bold break-words leading-snug transition-colors ${
+                      isTodayCompleted ? 'text-emerald-800/60 line-through' : 'text-sky-900'
+                    }`}>
+                      {sub.isPriority && (
+                        <span className={`inline-block align-[1px] mr-1.5 px-1.5 py-0.5 rounded-md text-[9px] font-black leading-none border no-underline ${
+                          isLocked ? 'bg-slate-200 text-slate-500 border-slate-300' :
+                          isTodayCompleted ? 'bg-emerald-100 text-emerald-600 border-emerald-200' :
+                          'bg-amber-100 text-amber-600 border-amber-200'
+                        }`} title={`優先順位第 ${sub.priorityOrder} 名`}>
+                          P{sub.priorityOrder}
+                        </span>
                       )}
+                      {sub.title}
+                    </p>
+                    <div className="relative flex items-center mt-1 min-h-[24px]">
+                      <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                        <span className="text-[10px] md:text-[11px] font-semibold text-sky-600/90">{formatTaskTime(sub)}</span>
+                        {(sub.type === 'daily' || sub.type === 'weekly' || sub.type === 'infinite') && sub.completionCount > 0 && (
+                          <>
+                            <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 text-[9px] md:text-[10px] font-black leading-none border border-emerald-500/20" title={`已完成 ${sub.completionCount} 次`}>
+                              ×{sub.completionCount}
+                            </span>
+                            <button
+                              onClick={() => confirmRevert(sub.id, task.id)}
+                              className="p-1 -m-0.5 rounded-md text-rose-300 hover:text-rose-500 hover:bg-rose-50 transition-colors"
+                              title="撤銷最後一次完成"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                      {/* 操作按鈕：滑鼠移到任務上才浮出來（蓋在這一行右邊，不佔寬度），用鍵盤移過來時也會出現；沒出現時不能被誤點 */}
+                      <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-1 flex items-center rounded-xl bg-white/95 shadow-sm border border-sky-100 opacity-0 pointer-events-none group-hover/sub:opacity-100 group-hover/sub:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto transition-opacity">
+                        <button onClick={() => { lastInteractedMajorId.current = task.id; setEditingTask({ type: 'sub', item: sub }); }} className="p-1.5 text-sky-500 hover:text-sky-800 hover:bg-sky-50 rounded-lg transition-all" title="編輯項目"><Edit3 className="w-3.5 h-3.5" /></button>
+                        {(sub.type === 'daily' || sub.type === 'weekly' || sub.type === 'infinite') && (<button onClick={() => { if(confirm('確定要終止此任務並將其歸檔嗎？')) { lastInteractedMajorId.current = task.id; terminateSubTask(sub.id); } }} className="p-1.5 text-sky-500 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-all" title="終止並歸檔"><Archive className="w-3.5 h-3.5" /></button>)}
+                        <button onClick={() => confirmDeleteSubTask(sub.id, task.id)} className="p-1.5 text-sky-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="刪除項目"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
                     </div>
-                    <p className="text-[8px] md:text-[9px] font-black text-sky-800 uppercase tracking-tighter">{formatTaskTime(sub)}</p>
-                  </div>
-                  <div className="flex gap-0 opacity-0 md:group-hover/sub:opacity-100 transition-opacity shrink-0">
-                    <button onClick={() => { lastInteractedMajorId.current = task.id; setEditingTask({ type: 'sub', item: sub }); }} className="p-1.5 md:p-2 text-sky-600 hover:text-sky-800 hover:bg-sky-50 rounded-lg md:rounded-xl transition-all" title="編輯項目"><Edit3 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
-                    {(sub.type === 'daily' || sub.type === 'weekly' || sub.type === 'infinite') && (<button onClick={() => { if(confirm('確定要終止此任務並將其歸檔嗎？')) { lastInteractedMajorId.current = task.id; terminateSubTask(sub.id); } }} className="p-1.5 md:p-2 text-sky-600 hover:text-amber-500 hover:bg-amber-50 rounded-lg md:rounded-xl transition-all" title="終止並歸檔"><Archive className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>)}
-                    <button onClick={() => confirmDeleteSubTask(sub.id, task.id)} className="p-1.5 md:p-2 text-sky-600 hover:text-red-500 hover:bg-red-50 rounded-lg md:rounded-xl transition-all" title="刪除項目"><Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
                   </div>
                 </motion.div>
                 )}
@@ -407,13 +412,13 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                         <div key={sub.id} className="flex items-center gap-2.5 p-2.5 bg-sky-50/30 rounded-xl md:rounded-2xl border border-sky-50 group/archived">
                           <input type="checkbox" checked={true} onChange={() => confirmRevert(sub.id, task.id)} title="撤銷完成" className="w-4 h-4 md:w-5 md:h-5 rounded-md md:rounded-lg text-emerald-500 border-sky-100 cursor-pointer" />
                           <div className="flex-grow min-w-0">
-                            <div className="flex items-start justify-between gap-1 mb-0.5">
-                              <p className="text-[11px] md:text-xs font-bold line-through text-sky-300 break-words leading-tight">{sub.title}</p>
+                            <p className="text-[11px] md:text-xs font-bold line-through text-sky-400 break-words leading-snug">{sub.title}</p>
+                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                              <span className="text-[9px] md:text-[10px] font-semibold text-sky-300">{formatTaskTime(sub)}</span>
                               {(sub.type === 'daily' || sub.type === 'weekly' || sub.type === 'infinite') && sub.completionCount > 0 && (
-                                <span className="flex-shrink-0 px-1.5 py-0.5 rounded-full bg-emerald-500/5 text-emerald-500/40 text-[7px] md:text-[8px] font-black leading-none">×{sub.completionCount}</span>
+                                <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/5 text-emerald-500/60 text-[8px] md:text-[9px] font-black leading-none" title={`已完成 ${sub.completionCount} 次`}>×{sub.completionCount}</span>
                               )}
                             </div>
-                            <p className="text-[7px] md:text-[8px] font-black text-sky-200">{formatTaskTime(sub)}</p>
                           </div>
                           <button onClick={() => confirmDeleteSubTask(sub.id, task.id)} title="刪除項目" className="opacity-0 md:group-hover/archived:opacity-100 p-1 text-sky-100 hover:text-red-400">
                             <Trash2 className="w-3 h-3 md:w-3.5 md:h-3.5" />
