@@ -1,0 +1,10 @@
+{
+  // Electron 主程序、瀏覽器模式的 server、腳本與設定檔（在 Node 裡跑）
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
+    "lib": ["ES2023"],
+    "types": ["node"]
+  },
+  "include": ["electron", "scripts", "server.*", "vite.config.*", "vitest.config.*"]
+}

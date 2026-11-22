@@ -4,12 +4,13 @@ import react from 'eslint-plugin-react'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
+import tseslint from 'typescript-eslint'
 
 export default defineConfig([
   // 建置產物與打包輸出不檢查
   globalIgnores(['dist', 'dist-electron', 'dist_electron', 'coverage', '.claude']),
   {
-    files: ['**/*.{js,jsx}'],
+    files: ['**/*.{js,jsx,ts,tsx}'],
     extends: [
       js.configs.recommended,
       reactHooks.configs.flat.recommended,
@@ -31,15 +32,24 @@ export default defineConfig([
     },
   },
   {
+    // TypeScript 檔：用 typescript-eslint 的建議規則；型別錯誤交給 tsc（npm run typecheck）檢查
+    files: ['**/*.{ts,tsx}'],
+    extends: [tseslint.configs.recommended],
+    rules: {
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^_', destructuredArrayIgnorePattern: '^_', ignoreRestSiblings: true }],
+    },
+  },
+  {
     // Electron 主程序、開發伺服器、腳本與測試在 Node 環境執行
-    files: ['electron/**/*.js', 'server.js', 'scripts/**/*.js', 'vite.config.js', '**/*.test.{js,jsx}', 'tests/**/*.js'],
+    files: ['electron/**/*.{js,ts}', 'server.{js,ts}', 'scripts/**/*.{js,ts}', 'vite.config.{js,ts}', 'vitest.config.{js,ts}', '**/*.test.{js,jsx,ts,tsx}', 'tests/**/*.{js,ts}'],
     languageOptions: {
       globals: { ...globals.node },
     },
   },
   {
     // preload 會被建置成 CommonJS，可以使用 require
-    files: ['electron/preload.js'],
+    files: ['electron/preload.{js,ts}'],
     languageOptions: {
       sourceType: 'commonjs',
       globals: { ...globals.node },
