@@ -37,7 +37,7 @@ const SaveErrorBanner = ({ saveError, isRetrying = false, onRetry }) => {
             className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white text-rose-700 text-xs font-black hover:bg-rose-50 transition-colors disabled:opacity-60"
           >
             <RefreshCw className={`w-4 h-4 ${isRetrying ? 'animate-spin' : ''}`} />
-            {isRetrying ? '重試中…' : '立即重試'}
+            {isRetrying ? '重試中……' : '立即重試'}
           </button>
         )}
       </div>

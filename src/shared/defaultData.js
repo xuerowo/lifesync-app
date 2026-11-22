@@ -120,7 +120,7 @@ export function normalizeData(raw) {
   // 舊版的日記（diaries）遷移成筆記（notes）
   if (!Array.isArray(raw.notes) && Array.isArray(raw.diaries)) {
     result.notes = raw.diaries.map((d) =>
-      isPlainObject(d) ? { ...d, title: d.title || d.date || '無主題' } : d
+      isPlainObject(d) ? { ...d, title: d.title || d.date || '無標題' } : d
     );
   }
 

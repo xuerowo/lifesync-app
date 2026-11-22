@@ -230,6 +230,10 @@ describe('讀檔失敗時禁止存檔', () => {
     expect(res.code).toBe('PARSE_ERROR')
     await expect(storage.save(createDefaultData())).rejects.toMatchObject({ code: 'SAVE_BLOCKED' })
     expect(() => storage.saveSync(createDefaultData())).toThrow(expect.objectContaining({ code: 'SAVE_BLOCKED' }))
+    // 錯誤訊息會顯示在畫面上，不露出 error、ok 這種內部狀態代碼
+    const blocked = await storage.save(createDefaultData()).catch((e) => e)
+    expect(blocked.message).toContain('上次讀檔失敗')
+    expect(blocked.message).not.toMatch(/狀態：|\berror\b/)
     expect(fs.readFileSync(dataFile, 'utf-8')).toBe(broken)
     expect(listDir(dir)).toEqual([DATA_FILE_NAME])
   })

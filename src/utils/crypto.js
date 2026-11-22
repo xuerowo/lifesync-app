@@ -88,6 +88,6 @@ export async function decryptData(encryptedBuffer, password) {
     return dec.decode(decrypted);
   } catch (e) {
     // 帶上錯誤碼，讓畫面自己決定怎麼說明（訊息本身已經以「解密失敗」開頭，畫面不要再加一次）
-    throw Object.assign(new Error('解密失敗，可能是主密碼錯誤或數據損壞'), { code: DECRYPT_FAILED, cause: e });
+    throw Object.assign(new Error('解密失敗，可能是主密碼錯誤或資料損壞'), { code: DECRYPT_FAILED, cause: e });
   }
 }

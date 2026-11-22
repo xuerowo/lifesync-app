@@ -3,17 +3,15 @@
  * 只處理文字，不碰畫面和檔案，所以可以直接測試。
  */
 
+import { formatDisplayDateTime } from '../utils/displayFormat.js';
+
 /** 檔案暫時被別的程式鎖住、或沒有權限時的錯誤碼（Windows 上常見於防毒、雲端硬碟同步軟體） */
 const LOCKED_CODES = new Set(['EBUSY', 'EPERM', 'EACCES']);
 
-const pad = (n) => String(n).padStart(2, '0');
-
-/** 把 ISO 時間轉成本地時間「2026/11/20 09:30」；看不懂就回傳 null */
+/** 把 ISO 時間轉成本地時間「2026/11/20 09:30」（全 App 統一的寫法）；看不懂就回傳 null */
 export function formatLocalDateTime(iso) {
   if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return formatDisplayDateTime(new Date(iso)) || null;
 }
 
 /** 只取完整路徑最後的檔名（Windows 與其他系統的路徑都適用） */
@@ -119,7 +117,7 @@ export function describeRestoreSuccess(info) {
 
 const SECRET_LABELS = {
   password: 'WebDAV 應用程式密碼',
-  masterPassword: '數據加密主密碼',
+  masterPassword: '資料加密主密碼',
 };
 
 /**
@@ -130,8 +128,11 @@ const SECRET_LABELS = {
 export function describeSecretsUnavailable(fields) {
   if (!Array.isArray(fields) || fields.length === 0) return null;
   const labels = fields.map((f) => SECRET_LABELS[f] || f);
+  // 中文後面接英文（例如「的 WebDAV」「和 WebDAV」）時空一格
+  const list = labels.join('和').replace(/和(?=[A-Za-z0-9])/g, '和 ');
+  const lead = /^[A-Za-z0-9]/.test(list) ? ' ' : '';
   return (
-    `這台電腦解不開之前存起來的${labels.join('和')}（例如資料是從另一台電腦搬過來的），所以設定頁的${labels.length > 1 ? '這兩個欄位' : '這個欄位'}會是空白。` +
+    `這台電腦解不開之前存起來的${lead}${list}（例如資料是從另一台電腦搬過來的），所以設定頁的${labels.length > 1 ? '這兩個欄位' : '這個欄位'}會是空白。` +
     '請到「設定」頁重新輸入一次。原本加密的內容沒有被刪除，重新輸入之前也不會被清掉。'
   );
 }

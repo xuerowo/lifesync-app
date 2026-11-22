@@ -1,5 +1,5 @@
 /**
- * 用別的資料（雲端備份、匯入的 JSON、本地完整備份）覆蓋本機資料之前的保護：
+ * 用別的資料（雲端備份、匯入的 JSON、本機完整備份）覆蓋本機資料之前的保護：
  * 先跳確認，再請主程序把目前的資料拍一份快照存到 backups\。
  * 快照失敗就不可覆蓋。瀏覽器模式（沒有 electronAPI.snapshotData）沒辦法拍快照，只做確認。
  */
@@ -40,7 +40,7 @@ export const CONFIRM_BACKUP_RESTORE =
  * @param {{ canSnapshot?: boolean }} [options] canSnapshot：覆蓋前能不能自動拍快照（用 canSnapshot(window.electronAPI) 判斷）
  */
 export const confirmJsonImportMessage = (fileName, { canSnapshot: snapshotPossible = true } = {}) =>
-  `確定要匯入${fileName ? `「${fileName}」` : '這個 JSON 檔'}，取代這台電腦上目前的資料嗎？\n\n` +
+  `確定要匯入${fileName ? `「${fileName}」` : '這個資料檔'}，取代這台電腦上目前的資料嗎？\n\n` +
   '檔案裡有的項目（例如計畫、任務、完成紀錄、抽卡券、筆記）會整個換成檔案裡的內容。\n' +
   CLOUD_CONFIG_NOTE + '\n\n' +
   (snapshotPossible ? KEEP_NOTE : NO_SNAPSHOT_NOTE);

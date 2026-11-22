@@ -3,7 +3,7 @@ import {
   versionName, parseVersionName, selectVersionsToPrune, cloudPathParts, utcStamp,
   keepPreviousVersion, pruneOldVersions, MAX_CLOUD_VERSIONS,
 } from '../electron/cloudVersions.js';
-import { cloudUploadSuccessMessage } from '../src/domain/cloudUpload.js';
+import { cloudUploadSuccessMessage, CLOUD_VERSIONS_KEPT, CONFIRM_CLOUD_UPLOAD } from '../src/domain/cloudUpload.js';
 
 // ---- 模擬的 WebDAV 雲端：只存在記憶體裡，不連任何真實伺服器 ----
 const cloud = {
@@ -307,7 +307,7 @@ describe('cloud-upload（模擬的雲端）', () => {
 
 describe('cloudUploadSuccessMessage', () => {
   it('第一次上傳只說成功', () => {
-    expect(cloudUploadSuccessMessage({ success: true, versionedAs: null })).toBe('加密數據上傳成功！');
+    expect(cloudUploadSuccessMessage({ success: true, versionedAs: null })).toBe('已加密並上傳到雲端！');
   });
 
   it('有留舊版時說明檔名、保留份數與怎麼找回', () => {
@@ -315,9 +315,58 @@ describe('cloudUploadSuccessMessage', () => {
     expect(msg).toContain('lifesync_backup_e2ee.prev-20261120-014112Z.dat');
     expect(msg).toContain('最近 5 份');
     expect(msg).toContain('改名');
+    expect(msg).toContain('「從雲端還原」');
   });
 
   it('附上刪舊版失敗的提醒', () => {
     expect(cloudUploadSuccessMessage({ success: true, versionedAs: 'x', keep: 5, warning: '有 1 份' })).toContain('注意：有 1 份');
+  });
+});
+
+describe('上傳前的確認文字', () => {
+  it('畫面寫的保留份數和主程序實際保留的一樣', () => {
+    expect(CLOUD_VERSIONS_KEPT).toBe(MAX_CLOUD_VERSIONS);
+    expect(CONFIRM_CLOUD_UPLOAD).toContain(`最近 ${MAX_CLOUD_VERSIONS} 份`);
+  });
+
+  it('說明會整份取代雲端的備份，新電腦要改按「從雲端還原」', () => {
+    expect(CONFIRM_CLOUD_UPLOAD).toContain('整份換成這台電腦目前的資料');
+    expect(CONFIRM_CLOUD_UPLOAD).toContain('「從雲端還原」');
+  });
+});
+
+describe('雲端錯誤訊息（模擬的雲端）', () => {
+  let handlers;
+  const config = { url: 'https://webdav.invalid', username: 'u', password: 'p' };
+  const httpError = (status, text) => Object.assign(new Error(`Invalid response: ${status} ${text}`), { status });
+  beforeEach(() => {
+    handlers = {};
+    setupCloudHandlers({ handle: (name, fn) => { handlers[name] = fn; } }, { GALLERY_DIR: '/unused' });
+  });
+
+  it('測試連線遇到 401：說帳號或應用程式密碼錯誤，並保留英文原文', async () => {
+    const spy = vi.spyOn(fakeClient, 'getDirectoryContents').mockRejectedValueOnce(httpError(401, 'Unauthorized'));
+    const res = await handlers['cloud-test-connection']({}, config);
+    spy.mockRestore();
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('帳號或應用程式密碼錯誤');
+    expect(res.error).toContain('技術細節：Invalid response: 401 Unauthorized');
+  });
+
+  it('下載遇到 404：說雲端上還沒有備份，請先在另一台電腦上傳', async () => {
+    const spy = vi.spyOn(fakeClient, 'getFileContents').mockRejectedValueOnce(httpError(404, 'Not Found'));
+    const res = await handlers['cloud-download']({}, { config, fileName: FILE });
+    spy.mockRestore();
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('雲端上還沒有備份');
+    expect(res.error).toContain('「上傳到雲端」');
+  });
+
+  it('上傳前連不上雲端：白話說明加上原文', async () => {
+    cloud.failExists = true;
+    const res = await handlers['cloud-upload']({}, { config, fileName: FILE, encryptedData: 'X' });
+    expect(res.error).toContain('這次沒有上傳');
+    expect(res.error).toContain('連不上伺服器');
+    expect(res.error).toContain('network down');
   });
 });

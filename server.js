@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createStorage } from './electron/storage.js';
 import { resolveDevServerImagePath } from './electron/galleryFiles.js';
+import { describeFileError } from './src/shared/errorMessages.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,37 +34,37 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(express.json({ limit: '50mb' })); // 支援大型圖片數據
+app.use(express.json({ limit: '50mb' })); // 支援很大的資料
 
-// 讀取數據
+// 讀取資料
 app.get('/api/data', async (req, res) => {
   try {
     const result = await storage.load();
     if (result.status === 'error') {
-      console.error('讀取數據錯誤（已停止存檔）:', result.code, result.error);
-      return res.status(500).json({ error: `讀取數據失敗（${result.code}）`, code: result.code });
+      console.error('讀取資料錯誤（已停止存檔）:', result.code, result.error);
+      return res.status(500).json({ error: `讀取資料失敗（${result.code}）`, code: result.code });
     }
     currentData = result.data;
     res.json(result.data);
   } catch (error) {
-    console.error('讀取數據錯誤:', error);
-    res.status(500).json({ error: '讀取數據失敗' });
+    console.error('讀取資料錯誤:', error);
+    res.status(500).json({ error: '讀取資料失敗' });
   }
 });
 
-// 保存數據
+// 儲存資料
 app.post('/api/data', async (req, res) => {
   try {
     await storage.save(req.body);
     currentData = req.body;
-    res.json({ success: true, message: '數據已保存' });
+    res.json({ success: true, message: '資料已儲存' });
   } catch (error) {
     if (error.code === 'SAVE_BLOCKED') {
       console.error('已拒絕存檔:', error.message);
       return res.status(409).json({ error: error.message, code: error.code });
     }
-    console.error('保存數據錯誤:', error);
-    res.status(500).json({ error: '保存數據失敗' });
+    console.error('儲存資料錯誤:', error);
+    res.status(500).json({ error: '儲存資料失敗' });
   }
 });
 
@@ -72,7 +73,7 @@ app.post('/api/rewards/scan', async (req, res) => {
   const { folderPath } = req.body;
 
   if (!folderPath) {
-    return res.status(400).json({ error: '請提供資料夾路徑' });
+    return res.status(400).json({ error: '請先輸入資料夾路徑。' });
   }
 
   try {
@@ -100,18 +101,19 @@ app.post('/api/rewards/scan', async (req, res) => {
       count: imageFiles.length
     });
   } catch (error) {
-    if (error.code === 'ENOENT') {
-      res.status(404).json({ error: '資料夾不存在' });
-    } else if (error.code === 'EACCES') {
-      res.status(403).json({ error: '無權訪問該資料夾' });
+    // 白話說明＋技術細節，和桌面版（electron/main.js 的 scan-folder）相同
+    if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
+      res.status(404).json({ error: describeFileError(error, { action: 'scan-folder' }) });
+    } else if (error.code === 'EACCES' || error.code === 'EPERM') {
+      res.status(403).json({ error: describeFileError(error, { action: 'scan-folder' }) });
     } else {
       console.error('掃描資料夾錯誤:', error);
-      res.status(500).json({ error: '掃描資料夾失敗' });
+      res.status(500).json({ error: describeFileError(error, { action: 'scan-folder' }) });
     }
   }
 });
 
-// 提供圖片文件訪問
+// 提供圖片檔案
 app.get('/api/rewards/image', async (req, res) => {
   const { imagePath } = req.query;
 
@@ -136,7 +138,7 @@ app.get('/api/rewards/image', async (req, res) => {
 
 // 健康檢查
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'LifeSync API 運行中' });
+  res.json({ status: 'ok', message: 'LifeSync API 執行中' });
 });
 
 // 啟動時先讀一次，讓讀檔問題立刻顯示在主控台
@@ -148,6 +150,6 @@ if (initialLoad.status === 'error') {
 }
 
 app.listen(PORT, HOST, () => {
-  console.log(`\n🚀 LifeSync API 服務器運行在 http://${HOST}:${PORT}（只限本機）`);
-  console.log(`📁 數據文件位置: ${storage.dataFile}\n`);
+  console.log(`\n🚀 LifeSync API 伺服器執行中：http://${HOST}:${PORT}（只限本機）`);
+  console.log(`📁 資料檔位置：${storage.dataFile}\n`);
 });

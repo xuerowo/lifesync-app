@@ -120,7 +120,7 @@ describe('normalizeData', () => {
         { id: 3 },
       ],
     })
-    expect(result.notes.map((n) => n.title)).toEqual(['有標題', '2026-01-02', '無主題'])
+    expect(result.notes.map((n) => n.title)).toEqual(['有標題', '2026-01-02', '無標題'])
     expect(result.notes[0].id).toBe(1)
   })
 

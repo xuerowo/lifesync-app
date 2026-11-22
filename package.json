@@ -2,7 +2,7 @@
   "name": "lifesync-app",
   "private": true,
   "version": "1.0.0",
-  "description": "LifeSync App - A personal productivity and data synchronization tool",
+  "description": "LifeSync：用完成任務換獎勵的自律工具",
   "author": "xuerowo",
   "type": "module",
   "main": "dist-electron/main.js",

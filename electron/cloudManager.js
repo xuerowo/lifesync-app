@@ -4,6 +4,7 @@ import path from 'path';
 import { encryptBuffer, decryptBuffer } from './galleryCrypto.js';
 import { toSafeLocalName, resolveInsideDir, pushError, ENCRYPTED_EXT, DOWNLOAD_TMP_EXT } from './galleryFiles.js';
 import { keepPreviousVersion, pruneOldVersions, MAX_CLOUD_VERSIONS } from './cloudVersions.js';
+import { describeCloudError } from '../src/shared/errorMessages.js';
 
 // 全局取消旗標
 let abortSync = false;
@@ -27,7 +28,7 @@ export function setupCloudHandlers(ipcMain, { GALLERY_DIR }) {
       await client.getDirectoryContents('/');
       return { success: true };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: describeCloudError(error, { action: 'test' }) };
     }
   });
 
@@ -43,14 +44,14 @@ export function setupCloudHandlers(ipcMain, { GALLERY_DIR }) {
     } catch (error) {
       return {
         success: false,
-        error: `沒辦法先把雲端上原本那份另存為舊版，為了安全，這次沒有上傳，雲端上的檔案也沒有被改動。（${error.message}）`,
+        error: `沒辦法先把雲端上原本那份另存為舊版，為了安全，這次沒有上傳，雲端上的檔案也沒有被改動。\n\n${describeCloudError(error, { action: 'upload' })}`,
       };
     }
     // 2. 上傳
     try {
       await client.putFileContents(fileName, Buffer.from(encryptedData), { overwrite: true });
     } catch (error) {
-      return { success: false, error: error.message, versionedAs: previous.versionedAs };
+      return { success: false, error: describeCloudError(error, { action: 'upload' }), versionedAs: previous.versionedAs };
     }
     // 3. 舊版超過保留份數時刪掉最舊的（只刪符合舊版命名規則的檔案）；刪不掉不影響這次上傳
     let warning = null;
@@ -72,7 +73,7 @@ export function setupCloudHandlers(ipcMain, { GALLERY_DIR }) {
       const content = await client.getFileContents(fileName);
       return { success: true, data: content };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: describeCloudError(error, { action: 'download' }) };
     }
   });
 
@@ -113,7 +114,7 @@ export function setupCloudHandlers(ipcMain, { GALLERY_DIR }) {
         event.sender.send('cloud-progress', {
             current: i + 1,
             total,
-            message: `正在同步: ${fileName}`
+            message: `正在上傳圖庫：${fileName}`
         });
 
         if (cloudFileNames.has(encryptedName)) {
@@ -133,7 +134,7 @@ export function setupCloudHandlers(ipcMain, { GALLERY_DIR }) {
       }
       return { success: true, results, aborted: results.aborted };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: describeCloudError(error, { action: 'gallery-upload' }) };
     }
   });
 
@@ -166,7 +167,7 @@ export function setupCloudHandlers(ipcMain, { GALLERY_DIR }) {
         event.sender.send('cloud-progress', {
             current: i + 1,
             total,
-            message: `正在下載: ${originalName || item.basename}`
+            message: `正在下載圖庫：${originalName || item.basename}`
         });
 
         if (!localPath) {
@@ -181,7 +182,7 @@ export function setupCloudHandlers(ipcMain, { GALLERY_DIR }) {
           results.skipped++;
           continue;
         } catch {
-          // 本地沒有這個檔案，繼續下載
+          // 本機沒有這個檔案，繼續下載
         }
 
         // 先寫到暫存檔，完整寫完才改成正式檔名；中斷時不會留下半截的正式檔
@@ -210,7 +211,7 @@ export function setupCloudHandlers(ipcMain, { GALLERY_DIR }) {
       }
       return { success: true, results, aborted: results.aborted };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: describeCloudError(error, { action: 'gallery-download' }) };
     }
   });
 }

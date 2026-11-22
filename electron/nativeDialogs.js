@@ -25,7 +25,7 @@ export function normalizeDialogMessage(message) {
     }
   }
   if (text.length > MAX_DIALOG_MESSAGE_LENGTH) {
-    text = `${text.slice(0, MAX_DIALOG_MESSAGE_LENGTH)}…`;
+    text = `${text.slice(0, MAX_DIALOG_MESSAGE_LENGTH)}……`;
   }
   return text;
 }

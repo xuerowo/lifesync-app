@@ -1,5 +1,5 @@
 /**
- * 設定頁的「數據加密主密碼」與「再輸入一次主密碼」（H11），以及 WebDAV 網址的 http 警告。
+ * 設定頁的「資料加密主密碼」與「再輸入一次主密碼」（H11），以及 WebDAV 網址的 http 警告。
  *
  * 主密碼打錯一個字，雲端備份就永遠解不開，所以「修改」主密碼時要輸入兩次，兩次一樣才儲存。
  * 已經存好主密碼的人（沒有在改）不強迫重新輸入：他們一直用這個主密碼上傳，雲端那份就是用它加密的，
@@ -82,7 +82,7 @@ export const MASTER_PASSWORD_SAVED_MESSAGE = '新的主密碼已儲存。';
 /**
  * 主密碼還沒確認好時，按雲端按鈕要跳出的說明。
  * @param {ReturnType<typeof evaluateMasterPassword>} state
- * @param {string} actionLabel 例如「上傳」「還原」
+ * @param {string} actionLabel 例如「上傳到雲端」「從雲端還原」
  * @returns {string|null} 不需要擋的時候回傳 null
  */
 export function masterPasswordBlockMessage(state, actionLabel) {

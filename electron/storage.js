@@ -58,6 +58,10 @@ const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),
 
 const makeError = (code, message) => Object.assign(new Error(message), { code });
 
+// 錯誤訊息裡描述讀檔狀態的中文（訊息會顯示在畫面的「錯誤代碼」那一行，不要露出 error、ok 這種內部代碼）
+const LOAD_STATUS_TEXT = { ok: '已正常讀取', new: '新建立的資料', error: '上次讀檔失敗' };
+const loadStatusText = (status) => LOAD_STATUS_TEXT[status] || '還沒讀取';
+
 const existsSync = (p) => {
   try {
     fs.accessSync(p);
@@ -104,7 +108,7 @@ export function createStorage({
 
   const assertCanSave = () => {
     if (!canSave()) {
-      throw makeError('SAVE_BLOCKED', `資料未成功載入（狀態：${lastLoadStatus ?? '尚未載入'}），已停止存檔以免覆蓋原檔`);
+      throw makeError('SAVE_BLOCKED', `資料沒有成功載入（${loadStatusText(lastLoadStatus)}），已停止存檔以免覆蓋原檔`);
     }
   };
 
@@ -373,7 +377,7 @@ export function createStorage({
       if (!canSave() && !dataFileParses()) {
         throw makeError(
           'SNAPSHOT_BLOCKED',
-          `資料檔沒有成功載入（狀態：${lastLoadStatus ?? '尚未載入'}），而且現在仍讀不出來，不替它拍快照，以免擠掉較舊的好快照`,
+          `資料檔沒有成功載入（${loadStatusText(lastLoadStatus)}），而且現在仍讀不出來，不替它拍快照，以免擠掉較舊的好快照`,
         );
       }
       fs.mkdirSync(backupDir, { recursive: true });
@@ -405,7 +409,7 @@ export function createStorage({
         return {
           status: 'error',
           code: 'RESTORE_NOT_ALLOWED',
-          error: `資料沒有讀檔失敗（狀態：${lastLoadStatus ?? '尚未載入'}），不需要也不允許從備份還原`,
+          error: `資料沒有讀檔失敗（${loadStatusText(lastLoadStatus)}），不需要也不允許從備份還原`,
         };
       }
       const candidates = [...listBackupFiles(DAILY_BACKUP_RE), ...listBackupFiles(SNAPSHOT_RE)]

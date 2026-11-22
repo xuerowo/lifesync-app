@@ -87,8 +87,10 @@ describe('describeSecretsUnavailable', () => {
 
   it('列出要重新輸入的欄位', () => {
     const text = describeSecretsUnavailable(['password', 'masterPassword']);
-    expect(text).toContain('WebDAV 應用程式密碼和數據加密主密碼');
+    // 中文和英文之間空一格
+    expect(text).toContain('存起來的 WebDAV 應用程式密碼和資料加密主密碼');
     expect(text).toContain('重新輸入');
+    expect(describeSecretsUnavailable(['masterPassword', 'password'])).toContain('資料加密主密碼和 WebDAV 應用程式密碼');
   });
 });
 
@@ -170,7 +172,7 @@ describe('LoadErrorScreen', () => {
 
   it('進行中時按鈕停用並顯示進度文字', () => {
     const html = render({ busy: 'restore' });
-    expect(html).toContain('載入備份中…');
+    expect(html).toContain('載入備份中……');
     expect((html.match(/disabled=""/g) || []).length).toBe(2);
   });
 });

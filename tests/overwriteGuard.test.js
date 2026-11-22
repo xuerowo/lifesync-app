@@ -60,7 +60,7 @@ describe('提示文字', () => {
 
   it('匯入 JSON 的確認文字包含檔名', () => {
     expect(confirmJsonImportMessage('a.json')).toContain('「a.json」');
-    expect(confirmJsonImportMessage('')).toContain('這個 JSON 檔');
+    expect(confirmJsonImportMessage('')).toContain('這個資料檔');
   });
 
   it('能拍快照時才承諾會自動備份；瀏覽器模式改成提醒自己先備份', () => {

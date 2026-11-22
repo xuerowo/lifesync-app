@@ -39,8 +39,8 @@ describe('主程序：組訊息框設定', () => {
     expect(normalizeDialogMessage(throwing)).toBe('');
     const long = 'a'.repeat(MAX_DIALOG_MESSAGE_LENGTH + 10);
     const result = normalizeDialogMessage(long);
-    expect(result).toHaveLength(MAX_DIALOG_MESSAGE_LENGTH + 1);
-    expect(result.endsWith('…')).toBe(true);
+    expect(result).toHaveLength(MAX_DIALOG_MESSAGE_LENGTH + 2);
+    expect(result.endsWith('……')).toBe(true);
     expect(normalizeDialogMessage('a'.repeat(MAX_DIALOG_MESSAGE_LENGTH))).toHaveLength(MAX_DIALOG_MESSAGE_LENGTH);
   });
 

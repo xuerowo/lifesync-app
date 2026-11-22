@@ -7,7 +7,9 @@ import {
   SNAPSHOT_REASONS, CONFIRM_BACKUP_RESTORE, CONFIRM_CLOUD_RESTORE, confirmJsonImportMessage,
   snapshotBeforeOverwrite, snapshotFailedMessage, snapshotSavedNote, canSnapshot
 } from '../../domain/overwriteGuard';
-import { cloudUploadSuccessMessage, cloudRestoreFailureMessage } from '../../domain/cloudUpload';
+import {
+  cloudUploadSuccessMessage, cloudRestoreFailureMessage, galleryResultMessage, CONFIRM_CLOUD_UPLOAD
+} from '../../domain/cloudUpload';
 import {
   evaluateMasterPassword, masterPasswordBlockMessage, isInsecureWebdavUrl, INSECURE_URL_WARNING,
   MASTER_PASSWORD_SAVED_MESSAGE
@@ -69,7 +71,7 @@ const SettingsView = () => {
     return Boolean(message);
   };
 
-  // --- 本地備份處理 ---
+  // --- 本機備份處理 ---
 
   const handleFullExport = async () => {
     if (!window.electronAPI) return;
@@ -77,20 +79,20 @@ const SettingsView = () => {
     if (!targetDir) return;
 
     setIsSyncing(true);
-    setSyncProgress({ message: '準備匯出...' });
+    setSyncProgress({ message: '準備匯出……' });
     try {
         const result = await window.electronAPI.exportFullBackup({ targetDir, data });
         if (result.success) {
             if (result.aborted) {
-                alert('匯出已中斷');
+                alert(`匯出已中斷，這份備份不完整，可以刪掉。\n路徑：${result.path}`);
             } else {
                 alert(`完整備份匯出成功！\n路徑：${result.path}\n\n備份裡不含雲端密碼和主密碼；在別台電腦還原後，需要重新輸入雲端設定。`);
             }
         } else {
-            alert(`匯出失敗: ${result.error}`);
+            alert(`匯出失敗：${result.error}`);
         }
     } catch (err) {
-        alert(`發生錯誤: ${err.message}`);
+        alert(`匯出時發生錯誤：${err.message}`);
     } finally {
         setIsSyncing(false);
         setSyncProgress(null);
@@ -105,7 +107,7 @@ const SettingsView = () => {
     if (!confirm(CONFIRM_BACKUP_RESTORE)) return;
 
     setIsSyncing(true);
-    setSyncProgress({ message: '正在備份目前的資料...' });
+    setSyncProgress({ message: '正在備份目前的資料……' });
     try {
         // 覆蓋前先拍快照；失敗就整個取消，連圖庫也不動
         const snapshot = await snapshotBeforeOverwrite(window.electronAPI, { reason: SNAPSHOT_REASONS.backupRestore, data });
@@ -113,21 +115,21 @@ const SettingsView = () => {
             alert(snapshotFailedMessage(snapshot));
             return;
         }
-        setSyncProgress({ message: '準備還原...' });
+        setSyncProgress({ message: '準備還原……' });
         const result = await window.electronAPI.importFullBackup(backupDir);
         if (result.success) {
             if (result.aborted) {
-                alert('還原已中斷');
+                alert('還原已中斷。目前的資料沒有變動，但已經複製過來的圖庫圖片會留著（同名的圖片已被蓋掉）。');
             } else {
                 // 雲端設定保留這台電腦目前的，不用備份裡的
                 setData(prev => mergeIncomingData(prev, result.data));
-                alert(`完整數據與圖庫還原成功！${snapshotSavedNote(snapshot)}`);
+                alert(`完整備份還原成功！資料已換成備份裡的內容，備份裡的圖片也已複製回圖庫（同名的會被蓋掉）。${snapshotSavedNote(snapshot)}`);
             }
         } else {
-            alert(`還原失敗: ${result.error}`);
+            alert(`還原失敗：${result.error}\n\n目前的資料沒有變動。`);
         }
     } catch (err) {
-        alert(`還原過程發生錯誤: ${err.message}`);
+        alert(`還原時發生錯誤：${err.message}`);
     } finally {
         setIsSyncing(false);
         setSyncProgress(null);
@@ -145,11 +147,11 @@ const SettingsView = () => {
       try {
         imported = JSON.parse(ev.target.result);
       } catch {
-        alert('導入失敗');
+        alert('匯入失敗：這個檔案打不開或已損壞，不是 LifeSync 匯出的資料檔。目前的資料沒有變動。');
         return;
       }
       if (!isImportableData(imported)) {
-        alert('導入失敗：檔案內容不是 LifeSync 的資料格式');
+        alert('匯入失敗：這個檔案不是 LifeSync 匯出的資料檔。目前的資料沒有變動。');
         return;
       }
       // 瀏覽器模式不能拍快照，確認文字不能承諾會自動備份
@@ -162,7 +164,7 @@ const SettingsView = () => {
       }
       // 雲端設定保留這台電腦目前的，不用檔案裡的（檔案裡的密碼可能是加密過、這台解不開的字串）
       setData(prev => mergeIncomingData(prev, imported));
-      alert(`JSON 數據導入成功！${snapshotSavedNote(snapshot)}`);
+      alert(`資料匯入成功！${snapshotSavedNote(snapshot)}`);
     };
     reader.readAsText(file);
   };
@@ -184,20 +186,22 @@ const SettingsView = () => {
 
   const testCloudConnection = async () => {
     if (!window.electronAPI) return;
-    setTestResult('測試中...');
+    setTestResult('測試中……');
     const result = await window.electronAPI.cloudTestConnection(data.cloudConfig);
-    setTestResult(result.success ? '連線成功！' : `連線失敗: ${result.error}`);
+    setTestResult(result.success ? '連線成功！' : `連線失敗：${result.error}`);
   };
 
   const handleCloudUpload = async () => {
-    if (blockedByMasterPassword('上傳')) return;
+    if (blockedByMasterPassword('上傳到雲端')) return;
     if (!data.cloudConfig.masterPassword) {
-      alert('請先設定主密碼以進行加密備份');
+      alert('請先在上方「資料加密主密碼」欄位設定主密碼，才能上傳。');
       return;
     }
     if (!window.electronAPI) return;
+    // 上傳會整份取代雲端上的備份（原本那份另存為舊版），先確認
+    if (!confirm(CONFIRM_CLOUD_UPLOAD)) return;
     setIsSyncing(true);
-    setSyncProgress({ message: '正在加密並同步 JSON 數據...' });
+    setSyncProgress({ message: '正在加密並上傳……' });
     try {
       // 上傳的內容不放密碼：下載時一律保留本機的雲端設定，用不到；也少一份可能外流的密碼
       const encrypted = await encryptData(JSON.stringify(stripCloudSecrets(data)), data.cloudConfig.masterPassword);
@@ -209,10 +213,10 @@ const SettingsView = () => {
       if (result.success) {
         alert(cloudUploadSuccessMessage(result));
       } else {
-        alert(`上傳失敗: ${result.error}`);
+        alert(`上傳失敗：${result.error}`);
       }
     } catch (err) {
-      alert(`加密失敗: ${err.message}`);
+      alert(`上傳失敗：${err.message}`);
     } finally {
       setIsSyncing(false);
       setSyncProgress(null);
@@ -220,15 +224,15 @@ const SettingsView = () => {
   };
 
   const handleCloudDownload = async () => {
-    if (blockedByMasterPassword('還原')) return;
+    if (blockedByMasterPassword('從雲端還原')) return;
     if (!data.cloudConfig.masterPassword) {
-      alert('請輸入主密碼以進行解密');
+      alert('請先在上方「資料加密主密碼」欄位設定主密碼（要和上傳時用的一樣），才能從雲端還原。');
       return;
     }
     if (!window.electronAPI) return;
     if (!confirm(CONFIRM_CLOUD_RESTORE)) return;
     setIsSyncing(true);
-    setSyncProgress({ message: '正在從雲端獲取數據...' });
+    setSyncProgress({ message: '正在從雲端下載資料……' });
     try {
       const result = await window.electronAPI.cloudDownload({
         config: data.cloudConfig,
@@ -239,7 +243,7 @@ const SettingsView = () => {
         const imported = JSON.parse(decryptedJson);
         if (!isImportableData(imported)) throw new Error('雲端上的檔案不是 LifeSync 的資料格式');
         // 下載、解密都成功了，覆蓋前先拍快照；失敗就不覆蓋
-        setSyncProgress({ message: '正在備份目前的資料...' });
+        setSyncProgress({ message: '正在備份目前的資料……' });
         const snapshot = await snapshotBeforeOverwrite(window.electronAPI, { reason: SNAPSHOT_REASONS.cloudRestore, data });
         if (!snapshot.ok) {
           alert(snapshotFailedMessage(snapshot));
@@ -247,9 +251,9 @@ const SettingsView = () => {
         }
         // 雲端設定保留這台電腦目前的，不用雲端那份的
         setData(prev => mergeIncomingData(prev, imported));
-        alert(`加密數據還原成功！${snapshotSavedNote(snapshot)}`);
+        alert(`已從雲端還原資料！${snapshotSavedNote(snapshot)}`);
       } else {
-        alert(`下載失敗: ${result.error}`);
+        alert(`下載失敗：${result.error}\n\n這台電腦上的資料沒有變動。`);
       }
     } catch (err) {
       alert(cloudRestoreFailureMessage(err));
@@ -260,30 +264,25 @@ const SettingsView = () => {
   };
 
   const handleSyncGallery = async () => {
-    if (blockedByMasterPassword('同步圖庫')) return;
+    if (blockedByMasterPassword('上傳圖庫')) return;
     if (!data.cloudConfig.masterPassword) {
-        alert('請先設定主密碼以進行加密備份');
+        alert('請先在上方「資料加密主密碼」欄位設定主密碼，才能上傳圖庫。');
         return;
     }
     setIsSyncing(true);
-    setSyncProgress({ message: '初始化圖庫同步...', current: 0, total: 100 });
+    setSyncProgress({ message: '準備上傳圖庫……', current: 0, total: 100 });
     try {
         const result = await window.electronAPI.cloudSyncGallery({
             config: data.cloudConfig,
             masterPassword: data.cloudConfig.masterPassword
         });
         if (result.success) {
-            if (result.aborted) {
-                alert('圖庫同步已中斷');
-            } else {
-                const { uploaded, skipped, failed } = result.results;
-                alert(`圖庫同步完成！\n新增上傳：${uploaded}\n已存在：${skipped}\n失敗：${failed}`);
-            }
+            alert(galleryResultMessage('upload', result.results, { aborted: result.aborted }));
         } else {
-            alert(`圖庫同步失敗: ${result.error}`);
+            alert(`圖庫上傳失敗：${result.error}`);
         }
     } catch (err) {
-        alert(`發生錯誤: ${err.message}`);
+        alert(`圖庫上傳時發生錯誤：${err.message}`);
     } finally {
         setIsSyncing(false);
         setSyncProgress(null);
@@ -291,30 +290,25 @@ const SettingsView = () => {
   };
 
   const handleRestoreGallery = async () => {
-    if (blockedByMasterPassword('還原圖庫')) return;
+    if (blockedByMasterPassword('下載圖庫')) return;
     if (!data.cloudConfig.masterPassword) {
-        alert('請輸入主密碼以進行解密');
+        alert('請先在上方「資料加密主密碼」欄位設定主密碼（要和上傳時用的一樣），才能下載圖庫。');
         return;
     }
     setIsSyncing(true);
-    setSyncProgress({ message: '初始化還原程序...', current: 0, total: 100 });
+    setSyncProgress({ message: '準備下載圖庫……', current: 0, total: 100 });
     try {
         const result = await window.electronAPI.cloudRestoreGallery({
             config: data.cloudConfig,
             masterPassword: data.cloudConfig.masterPassword
         });
         if (result.success) {
-            if (result.aborted) {
-                alert('還原已中斷');
-            } else {
-                const { downloaded, skipped, failed } = result.results;
-                alert(`圖庫還原完成！\n新下載：${downloaded}\n本地已存在：${skipped}\n失敗：${failed}`);
-            }
+            alert(galleryResultMessage('download', result.results, { aborted: result.aborted }));
         } else {
-            alert(`圖庫還原失敗: ${result.error}`);
+            alert(`圖庫下載失敗：${result.error}`);
         }
     } catch (err) {
-        alert(`發生錯誤: ${err.message}`);
+        alert(`圖庫下載時發生錯誤：${err.message}`);
     } finally {
         setIsSyncing(false);
         setSyncProgress(null);
@@ -324,10 +318,10 @@ const SettingsView = () => {
   return (
     <div className="max-w-4xl mx-auto space-y-6 md:space-y-8 animate-in slide-up pb-20 text-sky-950">
       
-      {/* 本地完整備份 */}
+      {/* 本機完整備份 */}
       <div className="bg-white/40 backdrop-blur-xl rounded-3xl md:rounded-[48px] p-6 md:p-12 border border-white/60 shadow-xl text-center text-sky-950">
         <h2 className="text-2xl md:text-3xl font-black mb-8 md:mb-12 text-sky-900 flex items-center justify-center gap-3 md:gap-4 text-sky-950">
-          <Settings2 className="w-8 h-8 md:w-10 md:h-10 text-sky-500" /> 本地完整備份
+          <Settings2 className="w-8 h-8 md:w-10 md:h-10 text-sky-500" /> 本機完整備份
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 text-sky-950">
           <button
@@ -337,7 +331,7 @@ const SettingsView = () => {
           >
             <FolderOpen className="w-10 h-10 md:w-12 md:h-12 mx-auto mb-4 text-sky-500 group-hover:scale-110 transition-transform" />
             <h3 className="text-base md:text-lg font-black text-sky-900 mb-2">匯出完整備份</h3>
-            <p className="text-[8px] md:text-[10px] font-bold text-sky-300 uppercase tracking-widest text-sky-950">包含所有數據與圖庫圖片</p>
+            <p className="text-[8px] md:text-[10px] font-bold text-sky-300 uppercase tracking-widest text-sky-950">包含所有資料與圖庫圖片</p>
           </button>
           <button
             disabled={isSyncing}
@@ -346,22 +340,22 @@ const SettingsView = () => {
           >
             <Upload className="w-10 h-10 md:w-12 md:h-12 mx-auto mb-4 text-emerald-400 group-hover:scale-110 transition-transform" />
             <h3 className="text-base md:text-lg font-black text-sky-900 mb-2 text-sky-950">還原完整備份</h3>
-            <p className="text-[8px] md:text-[10px] font-bold text-sky-300 uppercase tracking-widest text-sky-950 text-sky-950">從目錄還原數據與圖片</p>
+            <p className="text-[8px] md:text-[10px] font-bold text-sky-300 uppercase tracking-widest text-sky-950 text-sky-950">選擇之前匯出的備份資料夾來還原</p>
           </button>
         </div>
         <div className="mt-6 md:mt-8 text-sky-950">
             <label className="text-[9px] md:text-[10px] font-black text-sky-300 hover:text-sky-500 cursor-pointer transition-colors text-sky-950">
-                [進階] 僅匯入單一 JSON 檔案
-                <input type="file" className="hidden" onChange={handleJsonImportOnly} />
+                進階：只匯入資料檔（.json，不含圖片）
+                <input type="file" accept=".json,application/json" className="hidden" onChange={handleJsonImportOnly} />
             </label>
         </div>
       </div>
 
-      {/* 雲端抗審查同步 (E2EE) */}
+      {/* 雲端加密備份 */}
       <div className="bg-gradient-to-br from-sky-50/50 to-white/50 backdrop-blur-xl rounded-3xl md:rounded-[48px] p-6 md:p-12 border border-sky-100 shadow-xl text-sky-950">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 md:mb-8 gap-4 text-sky-950">
           <h2 className="text-xl md:text-2xl font-black text-sky-900 flex items-center gap-3 md:gap-4 text-sky-950">
-            <Cloud className="w-6 h-6 md:w-8 md:h-8 text-sky-500" /> 雲端抗審查同步 (E2EE)
+            <Cloud className="w-6 h-6 md:w-8 md:h-8 text-sky-500" /> 雲端加密備份
           </h2>
           <div className="flex flex-wrap items-center gap-2 md:gap-4 text-sky-950">
             <button 
@@ -383,8 +377,7 @@ const SettingsView = () => {
                             <Info className="w-5 h-5 md:w-6 md:h-6" />
                         </div>
                         <div>
-                            雲端同步詳細設定指南
-                            <p className="text-[10px] font-bold text-sky-400 mt-0.5 md:mt-1 uppercase tracking-widest text-sky-950">Cloud Setup Guide</p>
+                            雲端加密備份設定教學
                         </div>
                     </div>
 
@@ -395,12 +388,12 @@ const SettingsView = () => {
                                 <Link2 className="w-4 h-4 md:w-5 md:h-5" /> WebDAV 服務
                             </h4>
                             <p className="text-[11px] md:text-xs font-bold text-sky-800 leading-relaxed relative z-10 text-sky-950">
-                                使用 WebDAV 協議確保數據不被審查。
+                                WebDAV 是很多雲端硬碟都支援的連線方式。LifeSync 會先在這台電腦把資料加密，再存到你的雲端硬碟。
                             </p>
                             <div className="space-y-2 mt-3 md:mt-4 text-sky-950 relative z-10">
                                 <div className="text-[9px] md:text-[10px] font-black text-sky-400 uppercase tracking-tighter">推薦服務商：</div>
                                 <a href="https://koofr.eu" target="_blank" className="flex items-center justify-between p-2.5 md:p-3 bg-white rounded-xl md:rounded-2xl border border-sky-100 hover:border-sky-400 transition-colors group/link shadow-sm text-sky-950">
-                                    <span className="text-[11px] md:text-xs font-bold text-sky-900">Koofr (最推)</span>
+                                    <span className="text-[11px] md:text-xs font-bold text-sky-900">Koofr（最推薦）</span>
                                     <ExternalLink className="w-3 h-3 text-sky-300 group-hover/link:text-sky-500" />
                                 </a>
                                 <a href="https://www.infomaniak.com/en/kdrive" target="_blank" className="flex items-center justify-between p-2.5 md:p-3 bg-white rounded-xl md:rounded-2xl border border-sky-100 hover:border-sky-400 transition-colors group/link shadow-sm text-sky-950">
@@ -425,7 +418,7 @@ const SettingsView = () => {
                                 <div className="p-2.5 md:p-3 bg-white rounded-xl border border-sky-100 shadow-sm text-sky-950">
                                     <p className="text-[9px] md:text-[10px] font-black text-sky-400 mb-0.5 md:mb-1 tracking-widest text-sky-950 uppercase">應用程式密碼</p>
                                     <p className="text-[11px] md:text-xs font-bold text-sky-800 leading-relaxed text-sky-950">
-                                        請在服務設定中生成專用密碼。
+                                        到雲端服務網站的設定裡，建立一組給 LifeSync 用的「應用程式密碼」（不是你的登入密碼）。
                                     </p>
                                 </div>
                             </div>
@@ -434,15 +427,15 @@ const SettingsView = () => {
                         <div className="group space-y-3 md:space-y-4 p-5 md:p-6 bg-sky-50/50 rounded-2xl md:rounded-[32px] border border-sky-100/50 relative overflow-hidden text-sky-950">
                             <div className="absolute top-0 right-0 text-sky-100 font-black text-6xl md:text-8xl opacity-40 group-hover:scale-110 transition-transform pointer-events-none select-none leading-none -translate-y-2 translate-x-2 text-sky-950">3</div>
                             <h4 className="font-black text-sky-600 flex items-center gap-2 relative z-10 text-sky-950 text-sm md:text-base">
-                                <Lock className="w-4 h-4 md:w-5 md:h-5 text-sky-950" /> 數據加密主密碼
+                                <Lock className="w-4 h-4 md:w-5 md:h-5 text-sky-950" /> 資料加密主密碼
                             </h4>
                             <p className="text-[11px] md:text-xs font-bold text-sky-800 leading-relaxed relative z-10 text-sky-950">
-                                LifeSync 專用的二次加密金鑰。
+                                另外設定的一組密碼，上傳前用它把資料加密；和雲端帳號密碼不同。
                             </p>
                             <div className="p-3 md:p-4 bg-amber-50 rounded-xl md:rounded-2xl border border-amber-100 space-y-2 relative z-10 shadow-sm text-sky-950">
                                 <p className="text-[9px] md:text-[10px] font-bold text-amber-700 leading-tight flex items-start gap-1.5 md:gap-2 text-sky-950">
                                     <AlertTriangle className="w-3.5 h-3.5 md:w-4 md:h-4 shrink-0 text-sky-950" />
-                                    此密碼僅存於電腦，遺失將無法還原數據。
+                                    這組密碼只存在這台電腦，忘記的話雲端上的備份就永遠打不開，請另外記下來。
                                 </p>
                             </div>
                         </div>
@@ -468,21 +461,21 @@ const SettingsView = () => {
                                         <td className="p-5 border-b border-sky-50 font-bold text-sky-700 text-sky-950">2 GB</td>
                                         <td className="p-5 border-b border-sky-50 text-xs font-medium text-sky-800 text-sky-950">
                                             <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full text-[10px] mb-1">最推薦</span><br/>
-                                            設定極其簡單，連線非常穩定，歐洲隱私法律保護。
+                                            設定很簡單，連線穩定，受歐洲隱私法保護。
                                         </td>
                                     </tr>
                                     <tr className="hover:bg-sky-50/30 transition-colors text-sky-950">
                                         <td className="p-5 border-b border-sky-50 font-black text-sky-900 font-mono text-sky-950 text-sky-950">Infomaniak</td>
                                         <td className="p-5 border-b border-sky-50 font-bold text-sky-700 text-sky-950 text-sky-950">15 GB</td>
                                         <td className="p-5 border-b border-sky-50 text-xs font-medium text-sky-800 text-sky-950 text-sky-950">
-                                            瑞士主機，空間大。WebDAV 設定稍繁瑣（需建立專屬 K-Drive 連線）。
+                                            瑞士主機，空間大。WebDAV 設定稍微麻煩（要另外建立 kDrive 的連線）。
                                         </td>
                                     </tr>
                                     <tr className="hover:bg-sky-50/30 transition-colors text-sky-950">
                                         <td className="p-5 border-b border-sky-50 font-black text-sky-900 text-sky-950">Nextcloud</td>
                                         <td className="p-5 border-b border-sky-50 font-bold text-sky-700 text-sky-950">自選</td>
                                         <td className="p-5 border-b border-sky-50 text-xs font-medium text-sky-800 text-sky-950">
-                                            如果你有自己的 NAS 或伺服器，這是最具備掌控權的選擇。
+                                            如果你有自己的 NAS（家用網路硬碟）或伺服器，這是最能自己掌控的選擇。
                                         </td>
                                     </tr>
                                 </tbody>
@@ -525,7 +518,7 @@ const SettingsView = () => {
                 name="url"
                 value={data.cloudConfig.url}
                 onChange={handleCloudConfigChange}
-                placeholder="https://koofr.eu/dav"
+                placeholder="https://app.koofr.net/dav/Koofr"
                 className="w-full px-5 md:px-6 py-3 md:py-4 rounded-2xl md:rounded-3xl bg-white border-2 border-sky-100 focus:border-sky-400 outline-none transition-all font-medium text-sky-900 text-sm shadow-sm"
               />
               {isInsecureWebdavUrl(data.cloudConfig.url) && (
@@ -554,11 +547,14 @@ const SettingsView = () => {
                     name="password"
                     value={data.cloudConfig.password}
                     onChange={handleCloudConfigChange}
-                    placeholder="16 位專用密碼"
+                    placeholder="應用程式專用密碼"
                     className="w-full px-5 md:px-6 py-3 md:py-4 pr-12 md:pr-14 rounded-2xl md:rounded-3xl bg-white border-2 border-sky-100 focus:border-sky-400 outline-none transition-all font-medium text-sky-900 text-sm shadow-sm"
                 />
                 <button 
+                    type="button"
                     onClick={() => setShowAppPassword(!showAppPassword)}
+                    title={showAppPassword ? '隱藏密碼' : '顯示密碼'}
+                    aria-label={showAppPassword ? '隱藏密碼' : '顯示密碼'}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-sky-300 hover:text-sky-500 transition-colors p-1"
                 >
                     {showAppPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
@@ -566,7 +562,7 @@ const SettingsView = () => {
               </div>
             </div>
             <div className="space-y-2 text-sky-950 relative">
-              <label className="text-xs md:text-sm font-bold text-sky-700 ml-3 md:ml-4 text-sky-950">數據加密主密碼</label>
+              <label className="text-xs md:text-sm font-bold text-sky-700 ml-3 md:ml-4 text-sky-950">資料加密主密碼</label>
               <div className="relative text-sky-950">
                 <input
                     type={showMasterPassword ? "text" : "password"}
@@ -574,11 +570,14 @@ const SettingsView = () => {
                     value={masterState.value}
                     onChange={(e) => applyMasterInput(e.target.value, masterConfirm)}
                     onKeyDown={commitMasterOnEnter}
-                    placeholder="遺失此密碼將無法救回數據"
+                    placeholder="忘記這組密碼，雲端備份就打不開"
                     className="w-full px-5 md:px-6 py-3 md:py-4 pr-12 md:pr-14 rounded-2xl md:rounded-3xl bg-sky-900 text-white placeholder:text-sky-400 border-2 border-sky-900 focus:border-sky-400 outline-none transition-all font-medium text-sm shadow-lg"
                 />
                 <button 
+                    type="button"
                     onClick={() => setShowMasterPassword(!showMasterPassword)}
+                    title={showMasterPassword ? '隱藏主密碼' : '顯示主密碼'}
+                    aria-label={showMasterPassword ? '隱藏主密碼' : '顯示主密碼'}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-sky-400 hover:text-white transition-colors p-1"
                 >
                     {showMasterPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
@@ -631,7 +630,7 @@ const SettingsView = () => {
             </div>
           </div>
 
-          {/* 數據同步按鈕 */}
+          {/* 雲端備份按鈕 */}
           <div className="pt-2 md:pt-4 space-y-4">
             <div className="flex flex-wrap gap-3 md:gap-4 text-sky-950">
               <button
@@ -646,7 +645,7 @@ const SettingsView = () => {
                 className="flex-1 md:flex-none px-6 md:px-8 py-3 md:py-4 rounded-2xl md:rounded-3xl bg-white border-2 border-sky-400 text-sky-700 font-bold hover:bg-sky-50 transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-sm text-sky-950"
               >
                 {isSyncing ? <RefreshCw className="w-4 h-4 md:w-5 md:h-5 animate-spin" /> : <Cloud className="w-4 h-4 md:w-5 md:h-5 text-sky-500" />}
-                同步數據
+                上傳到雲端
               </button>
               <button
                 disabled={isSyncing}
@@ -654,15 +653,15 @@ const SettingsView = () => {
                 className="flex-1 md:flex-none px-6 md:px-8 py-3 md:py-4 rounded-2xl md:rounded-3xl bg-white border-2 border-sky-400 text-sky-600 font-bold hover:bg-sky-50 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-sm text-sm text-sky-950"
               >
                 {isSyncing ? <RefreshCw className="w-4 h-4 md:w-5 md:h-5 animate-spin" /> : <RefreshCw className="w-4 h-4 md:w-5 md:h-5" />}
-                還原數據
+                從雲端還原
               </button>
             </div>
 
-            {/* 圖庫同步區域 */}
+            {/* 雲端圖庫 */}
             <div className="p-6 md:p-8 rounded-3xl md:rounded-[40px] bg-sky-900/5 border-2 border-dashed border-sky-200 text-sky-950">
                 <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-6">
                     <ImageIcon className="w-5 h-5 md:w-6 md:h-6 text-sky-500" />
-                    <h3 className="text-base md:text-lg font-black text-sky-900 text-sky-950">雲端圖庫同步</h3>
+                    <h3 className="text-base md:text-lg font-black text-sky-900 text-sky-950">雲端圖庫備份</h3>
                 </div>
                 <div className="flex flex-wrap gap-3 md:gap-4 text-sky-950">
                     <button
@@ -671,7 +670,7 @@ const SettingsView = () => {
                         className="flex-1 md:flex-none px-6 md:px-8 py-3 md:py-4 rounded-2xl md:rounded-3xl bg-white border-2 border-sky-400 text-sky-700 font-bold hover:bg-sky-100 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-sm text-sm text-sky-950"
                     >
                         {isSyncing ? <RefreshCw className="w-4 h-4 md:w-5 md:h-5 animate-spin" /> : <Upload className="w-4 h-4 md:w-5 md:h-5" />}
-                        同步圖庫
+                        上傳圖庫
                     </button>
                     <button
                         disabled={isSyncing}
@@ -679,23 +678,23 @@ const SettingsView = () => {
                         className="flex-1 md:flex-none px-6 md:px-8 py-3 md:py-4 rounded-2xl md:rounded-3xl bg-white border-2 border-emerald-400 text-emerald-600 font-bold hover:bg-emerald-50 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-sm text-sm text-sky-950"
                     >
                         {isSyncing ? <RefreshCw className="w-4 h-4 md:w-5 md:h-5 animate-spin" /> : <Download className="w-4 h-4 md:w-5 md:h-5" />}
-                        還原圖庫
+                        下載圖庫
                     </button>
                 </div>
                 <p className="mt-3 md:mt-4 text-[8px] md:text-[10px] text-sky-400 font-bold uppercase tracking-widest text-sky-950">
-                    圖片逐一加密傳輸，大型圖庫需時較久。
+                    上傳只補傳雲端還沒有的圖片，下載只補這台電腦還沒有的圖片，都不會刪除或蓋掉已有的圖片。圖片會一張一張加密後傳輸，圖片很多時會花比較久。
                 </p>
             </div>
           </div>
 
           {testResult && (
-            <div className={`p-3 md:p-4 rounded-xl md:rounded-2xl text-xs md:sm font-bold ${testResult.includes('成功') ? 'bg-emerald-100 text-emerald-600 shadow-sm' : 'bg-red-100 text-red-600 shadow-sm'}`}>
+            <div className={`p-3 md:p-4 rounded-xl md:rounded-2xl text-xs md:sm font-bold whitespace-pre-line break-words ${testResult.includes('成功') ? 'bg-emerald-100 text-emerald-600 shadow-sm' : 'bg-red-100 text-red-600 shadow-sm'}`}>
               {testResult}
             </div>
           )}
 
           <p className="text-[10px] md:text-xs text-sky-400 font-medium px-2 md:px-4 text-sky-950">
-            * 提醒：所有雲端數據皆經過本地加密，雲端商無法讀取內容。
+            * 提醒：上傳到雲端的資料和圖片，都會先在這台電腦加密，雲端服務商看不到內容（圖片的檔名不會加密）。
           </p>
         </div>
       </div>

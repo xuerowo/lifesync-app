@@ -2,20 +2,17 @@
 import React from 'react';
 import { AlertTriangle, RotateCcw, History, RefreshCw } from 'lucide-react';
 import { describeLoadError, describeRestoreFailure, restoreConfirmMessage, LOAD_ERROR_SAFETY_NOTE } from '../../domain/loadError';
+import { formatDisplayTime } from '../../utils/displayFormat';
 
-/** 「09:30:05」；看不懂就回傳 null */
-const formatLocalTime = (iso) => {
-  const d = iso ? new Date(iso) : null;
-  if (!d || Number.isNaN(d.getTime())) return null;
-  return d.toLocaleTimeString('zh-TW', { hour12: false });
-};
+/** 「09:30」（全 App 統一的 24 小時制、不顯示秒）；看不懂就回傳 null */
+const formatLocalTime = (iso) => (iso ? formatDisplayTime(new Date(iso)) || null : null);
 
 /** 技術性的錯誤訊息最多顯示幾個字 */
 const MAX_DETAIL_LENGTH = 300;
 
 const clip = (text) => {
   const s = String(text || '').trim();
-  return s.length > MAX_DETAIL_LENGTH ? `${s.slice(0, MAX_DETAIL_LENGTH)}…` : s;
+  return s.length > MAX_DETAIL_LENGTH ? `${s.slice(0, MAX_DETAIL_LENGTH)}……` : s;
 };
 
 /**
@@ -48,7 +45,7 @@ const LoadErrorScreen = ({ loadError, busy = null, canRestore, restoreFailure = 
       className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white hover:bg-emerald-50 text-emerald-700 border-2 border-emerald-400 font-black rounded-2xl shadow-sm transition-colors disabled:opacity-50"
     >
       {busy === 'restore' ? <RefreshCw className="w-5 h-5 animate-spin" /> : <History className="w-5 h-5" />}
-      {busy === 'restore' ? '載入備份中…' : '載入最近一次自動備份'}
+      {busy === 'restore' ? '載入備份中……' : '載入最近一次自動備份'}
     </button>
   );
 
@@ -88,7 +85,7 @@ const LoadErrorScreen = ({ loadError, busy = null, canRestore, restoreFailure = 
             className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-sky-500 hover:bg-sky-600 text-white font-black rounded-2xl shadow-md transition-colors disabled:opacity-50"
           >
             {busy === 'retry' ? <RefreshCw className="w-5 h-5 animate-spin" /> : <RotateCcw className="w-5 h-5" />}
-            {busy === 'retry' ? '重新讀取中…' : '重試'}
+            {busy === 'retry' ? '重新讀取中……' : '重試'}
           </button>
           {canRestore && !restoreWarning && restoreButton}
         </div>

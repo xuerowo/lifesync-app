@@ -11,6 +11,7 @@ import { decideWindowOpen } from './windowOpen.js';
 import { setupSingleInstance } from './singleInstance.js';
 import { buildMessageBoxOptions, confirmResultFromResponse } from './nativeDialogs.js';
 import { createFocusDiagnostics } from './focusDiagnostics.js';
+import { describeFileError } from '../src/shared/errorMessages.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -215,21 +216,22 @@ app.whenReady().then(() => {
   // 定義基本的快速鍵選單，保留全螢幕與開發者工具功能
   const template = [
     {
-      label: 'View',
+      // 有指定 label 時選單顯示這個文字，role 照樣負責實際的動作
+      label: '檢視',
       submenu: [
-        { role: 'reload', accelerator: 'CmdOrCtrl+R' },
-        { role: 'forceReload', accelerator: 'CmdOrCtrl+Shift+R' },
-        { role: 'toggleDevTools', accelerator: 'F12' },
+        { role: 'reload', label: '重新載入', accelerator: 'CmdOrCtrl+R' },
+        { role: 'forceReload', label: '強制重新載入', accelerator: 'CmdOrCtrl+Shift+R' },
+        { role: 'toggleDevTools', label: '開發者工具', accelerator: 'F12' },
         { type: 'separator' },
-        { role: 'zoomIn', accelerator: 'CmdOrCtrl+=' },
-        { role: 'zoomIn', accelerator: 'CmdOrCtrl+Plus', visible: false },
-        { role: 'zoomIn', accelerator: 'CmdOrCtrl+numadd', visible: false },
-        { role: 'zoomOut', accelerator: 'CmdOrCtrl+-' },
-        { role: 'zoomOut', accelerator: 'CmdOrCtrl+numsub', visible: false },
-        { role: 'resetZoom', accelerator: 'CmdOrCtrl+0' },
-        { role: 'resetZoom', accelerator: 'CmdOrCtrl+num0', visible: false },
+        { role: 'zoomIn', label: '放大', accelerator: 'CmdOrCtrl+=' },
+        { role: 'zoomIn', label: '放大', accelerator: 'CmdOrCtrl+Plus', visible: false },
+        { role: 'zoomIn', label: '放大', accelerator: 'CmdOrCtrl+numadd', visible: false },
+        { role: 'zoomOut', label: '縮小', accelerator: 'CmdOrCtrl+-' },
+        { role: 'zoomOut', label: '縮小', accelerator: 'CmdOrCtrl+numsub', visible: false },
+        { role: 'resetZoom', label: '實際大小', accelerator: 'CmdOrCtrl+0' },
+        { role: 'resetZoom', label: '實際大小', accelerator: 'CmdOrCtrl+num0', visible: false },
         { type: 'separator' },
-        { role: 'togglefullscreen', accelerator: 'F11' },
+        { role: 'togglefullscreen', label: '全螢幕', accelerator: 'F11' },
         { type: 'separator' },
         ...focusDiagnostics.menuItems,
       ]
@@ -435,11 +437,19 @@ ipcMain.handle('snapshot-data', async (event, { reason, data } = {}) => {
 });
 
 // 掃描資料夾
+// 失敗時回傳 { success: false, error }（白話說明＋技術細節），不丟錯：
+// 丟出的錯誤到畫面時會被加上「Error invoking remote method 'scan-folder'」這串英文
 ipcMain.handle('scan-folder', async (event, folderPath) => {
-  if (!folderPath) throw new Error('請提供資料夾路徑');
-  
-  await fs.access(folderPath);
-  const files = await fs.readdir(folderPath);
+  if (!folderPath) return { success: false, error: '請先輸入資料夾路徑。' };
+
+  let files;
+  try {
+    await fs.access(folderPath);
+    files = await fs.readdir(folderPath);
+  } catch (error) {
+    console.warn('[scan-folder] 讀不到資料夾:', folderPath, error.message);
+    return { success: false, error: describeFileError(error, { action: 'scan-folder' }) };
+  }
   const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
   
   const imageFiles = files
@@ -578,7 +588,7 @@ ipcMain.handle('export-full-backup', async (event, { targetDir, data }) => {
       event.sender.send('cloud-progress', {
           current: i + 1,
           total,
-          message: `正在備份圖庫: ${file}`
+          message: `正在備份圖庫：${file}`
       });
       await fs.copyFile(path.join(GALLERY_DIR, file), path.join(galleryBackupDir, file));
     }
@@ -603,7 +613,7 @@ ipcMain.handle('export-full-backup', async (event, { targetDir, data }) => {
       return {
         success: false,
         path: partialDir,
-        error: `備份已寫入「${partialDir}」，但改成正式名稱時失敗：${renameError.message}`,
+        error: `備份已寫入「${partialDir}」，但最後改成正式名稱時失敗。這份備份是完整的，可以自己把資料夾名稱結尾的「.partial」刪掉。\n${describeFileError(renameError, { action: 'export-backup' })}`,
       };
     }
     return { success: true, path: finalDir, aborted: false };
@@ -612,7 +622,9 @@ ipcMain.handle('export-full-backup', async (event, { targetDir, data }) => {
     return {
       success: false,
       path: leftPartial ? partialDir : null,
-      error: leftPartial ? `${error.message}（未完成的備份留在「${partialDir}」）` : error.message,
+      error: leftPartial
+        ? `${describeFileError(error, { action: 'export-backup' })}\n（沒完成的備份留在「${partialDir}」，可以刪掉）`
+        : describeFileError(error, { action: 'export-backup' }),
     };
   }
 });
@@ -639,7 +651,7 @@ ipcMain.handle('import-full-backup', async (event, backupDir) => {
         event.sender.send('cloud-progress', { 
             current: i + 1, 
             total, 
-            message: `正在還原圖庫: ${file}` 
+            message: `正在還原圖庫：${file}` 
         });
         await fs.copyFile(path.join(gallerySrcDir, file), path.join(GALLERY_DIR, file));
       }
@@ -649,6 +661,6 @@ ipcMain.handle('import-full-backup', async (event, backupDir) => {
     
     return { success: true, data: jsonData, aborted: abortLocalSync };
   } catch (error) {
-    return { success: false, error: error.message };
+    return { success: false, error: describeFileError(error, { action: 'restore-backup' }) };
   }
 });
