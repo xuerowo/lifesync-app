@@ -1,18 +1,78 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
-  LayoutDashboard, Zap, CheckCircle2, CalendarDays, Lock, Edit3, Archive, Trash2, Plus, ChevronUp, ChevronDown, Settings2, RotateCcw
+  LayoutDashboard, Zap, CheckCircle2, CalendarDays, Lock, Edit3, Archive, Trash2, Plus, ChevronUp, ChevronDown, Settings2, RotateCcw, GripVertical
 } from 'lucide-react';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, useSortable, rectSortingStrategy, verticalListSortingStrategy, sortableKeyboardCoordinates, defaultAnimateLayoutChanges } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useAppData } from '../../contexts/AppDataContext';
 import { INDICATORS } from '../../constants/index.jsx';
 import { getTodayStr, formatTaskTime } from '../../utils';
 import {
   completeMajorTaskMessage, deleteMajorTaskMessage, deleteSubTaskMessage, revertCompletionMessage
 } from '../../domain/confirmations.js';
+import { applySortOrders, reorderSortOrders, sortBySortOrder } from '../../shared/taskOrder';
+
+// 可以拖曳換位置的一格。拖曳只從「把手」開始（handleProps 給把手按鈕），點卡片其他地方照常操作。
+// 位移用 dnd-kit 的 transform，所以裡面的動畫不要用 framer-motion 的 layout（兩者都改 transform 會互相干擾）。
+// animateLayoutChanges：放開後其他卡片也平順滑到新位置，不會瞬間跳過去。
+const animateAfterDrop = (args) => defaultAnimateLayoutChanges({ ...args, wasDragging: true });
+function SortableItem({ id, className, children }) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id, animateLayoutChanges: animateAfterDrop });
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    position: 'relative',
+    zIndex: isDragging ? 40 : undefined,
+  };
+  return (
+    <div ref={setNodeRef} style={style} className={className}>
+      {children({ handleProps: { ref: setActivatorNodeRef, ...attributes, ...listeners }, isDragging })}
+    </div>
+  );
+}
+
+// 拖曳把手：手機上一直看得到；滑鼠移上去會變成可以抓的手勢
+function DragHandle({ handleProps, label, className = '' }) {
+  return (
+    <button
+      type="button"
+      {...handleProps}
+      title={label}
+      aria-label={label}
+      className={`touch-none cursor-grab active:cursor-grabbing rounded-lg text-sky-400 hover:text-sky-600 hover:bg-white/60 transition-colors ${className}`}
+    >
+      <GripVertical className="w-4 h-4" />
+    </button>
+  );
+}
+
+// 用鍵盤拖曳時，讀螢幕軟體念出來的中文提示（dnd-kit 預設是英文）
+function dragAccessibility(getName) {
+  const name = (item) => (item ? `「${getName(item.id) || '未命名'}」` : '');
+  return {
+    screenReaderInstructions: { draggable: '按空白鍵或 Enter 抓起，用方向鍵移動，再按一次空白鍵或 Enter 放下，按 Esc 取消。' },
+    announcements: {
+      onDragStart: ({ active }) => `已抓起${name(active)}。`,
+      onDragOver: ({ active, over }) => (over ? `${name(active)}移到${name(over)}的位置。` : `${name(active)}不在可以放的位置。`),
+      onDragEnd: ({ active, over }) => (over ? `${name(active)}已放到${name(over)}的位置。` : `已放下${name(active)}，順序沒有改變。`),
+      onDragCancel: ({ active }) => `已取消，${name(active)}回到原位。`,
+    },
+  };
+}
+
+// 滑鼠要拖動一點點才算開始拖（避免點一下就被當成拖曳）；鍵盤可以用空白鍵抓起、方向鍵移動
+function useSortSensors() {
+  return useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+}
 
 const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask }) => {
   const {
-    data, activePriorityTasks, toggleMajorTask, restoreMajorTask,
+    data, updateData, activePriorityTasks, toggleMajorTask, restoreMajorTask,
     completeSubTaskData, revertTaskCompletion, deleteMajorTask, deleteSubTask, terminateSubTask
   } = useAppData();
   const [expandedArchived, setExpandedArchived] = useState({});
@@ -25,7 +85,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
   useEffect(() => {
     if (lastInteractedMajorId.current && majorTaskRefs.current[lastInteractedMajorId.current]) {
       const element = majorTaskRefs.current[lastInteractedMajorId.current];
-      // 延遲一點點執行，等待 Framer Motion 的 layout 動畫開始
+      // 延遲一點點執行，等畫面更新完再捲過去
       setTimeout(() => {
         element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         lastInteractedMajorId.current = null;
@@ -98,6 +158,56 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
     if (confirm(deleteMajorTaskMessage(data, majorTaskId))) deleteMajorTask(majorTaskId);
   };
 
+  // 新增計畫：篩選某個維度時就用那個維度，否則用第一個有目標的維度（打開後可以在設定裡改）
+  const addPlan = () => {
+    if (filterIndicator !== 'all') {
+      const goals = data.goals[filterIndicator] || [];
+      if (goals.length === 0) {
+        const name = INDICATORS.find(i => i.id === filterIndicator)?.name || '這個維度';
+        alert(`請先到維度頁幫「${name}」新增至少一個目標`);
+        return;
+      }
+      addMajorTask(filterIndicator, goals[0].id);
+      return;
+    }
+    const ind = INDICATORS.find(i => (data.goals[i.id] || []).length > 0);
+    if (!ind) {
+      alert('請先到維度頁新增至少一個目標');
+      return;
+    }
+    addMajorTask(ind.id, data.goals[ind.id][0].id);
+  };
+
+  // 使用者自己排的順序（見 shared/taskOrder.js）
+  const sensors = useSortSensors();
+  const visiblePlans = sortBySortOrder(data.majorTasks)
+    .filter(t => filterIndicator === 'all' || t.indicatorId === filterIndicator);
+  const visiblePlanIds = visiblePlans.map(t => t.id);
+  const planA11y = dragAccessibility(id => data.majorTasks.find(t => t.id === id)?.title);
+  const taskA11y = dragAccessibility(id => data.subTasks.find(t => t.id === id)?.title);
+  // 現在能做的第一優先任務在哪個計畫：計畫不再自動排到最前面，改用醒目的框和標籤標出來
+  const topPriorityPlanId = activePriorityTasks[0]?.majorTaskId;
+
+  // 拖曳不算「操作某個計畫」：清掉待捲動的目標，免得拖完畫面突然捲走
+  const handlePlanDragEnd = ({ active, over }) => {
+    lastInteractedMajorId.current = null;
+    if (!over || active.id === over.id) return;
+    updateData(prev => {
+      const orders = reorderSortOrders(prev.majorTasks, visiblePlanIds, active.id, over.id);
+      return { ...prev, majorTasks: applySortOrders(prev.majorTasks, orders) };
+    });
+  };
+
+  const handleTaskDragEnd = (planId) => ({ active, over }) => {
+    lastInteractedMajorId.current = null;
+    if (!over || active.id === over.id) return;
+    updateData(prev => {
+      const inPlan = prev.subTasks.filter(s => s.majorTaskId === planId);
+      const orders = reorderSortOrders(inPlan, null, active.id, over.id);
+      return { ...prev, subTasks: applySortOrders(prev.subTasks, orders) };
+    });
+  };
+
 
   return (
     <div className="space-y-6 md:space-y-10 animate-in fade-in">
@@ -130,81 +240,55 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
               );
             })}
           </div>
-          <button onClick={() => setIsPriorityManagerOpen(true)} className="px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-2xl font-black text-[10px] md:text-xs flex items-center justify-center gap-2 transition-colors shadow-sm">
-              <Zap className="w-3.5 h-3.5 md:w-4 md:h-4" /> 管理優先級
-          </button>
+          <div className="flex gap-3">
+            <button onClick={addPlan} className="flex-1 sm:flex-none px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-2xl font-black text-[10px] md:text-xs flex items-center justify-center gap-2 transition-colors shadow-sm">
+                <Plus className="w-3.5 h-3.5 md:w-4 md:h-4" /> 新增計畫
+            </button>
+            <button onClick={() => setIsPriorityManagerOpen(true)} className="flex-1 sm:flex-none px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-2xl font-black text-[10px] md:text-xs flex items-center justify-center gap-2 transition-colors shadow-sm">
+                <Zap className="w-3.5 h-3.5 md:w-4 md:h-4" /> 管理優先級
+            </button>
+          </div>
         </div>
       </div>
 
-      <motion.div
-        layout
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8"
-      >
-        <AnimatePresence mode="popLayout">
-    {data.majorTasks
-      .filter(t => filterIndicator === 'all' || t.indicatorId === filterIndicator)
-      .sort((a, b) => {
-      const getHighestPriority = (taskId) => {
-        const subs = data.subTasks.filter(s => s.majorTaskId === taskId && s.isPriority);
-        if (subs.length === 0) return Infinity;
-        return Math.min(...subs.map(s => s.priorityOrder || Infinity));
-      };
-      const priorityA = getHighestPriority(a.id);
-      const priorityB = getHighestPriority(b.id);
-      if (priorityA !== priorityB) return priorityA - priorityB;
-
-      const getActiveUnfinishedCount = (taskId) => {
-        const today = new Date();
-        const currentDay = today.getDay();
-        const todayStr = getTodayStr();
-        
-        return data.subTasks.filter(s => {
-          if (s.majorTaskId !== taskId) return false;
-          
-          // 如果是重複性任務
-          if (s.type === 'daily' || s.type === 'weekly') {
-            const isTodayCompleted = s.lastCompletedAt && s.lastCompletedAt.startsWith(todayStr);
-            const isWrongDay = s.type === 'weekly' && !s.days.includes(currentDay);
-            // 排除已勾選或被鎖定(非指定日期)的任務
-            return !isTodayCompleted && !isWrongDay;
-          }
-          
-          // 如果是一次性任務，排除已完成的 (雖然理論上 subTasks 裡都是未完成的，但為了嚴謹性保留)
-          return !s.completed;
-        }).length;
-      };
-
-      const countA = getActiveUnfinishedCount(a.id);
-      const countB = getActiveUnfinishedCount(b.id);
-      if (countA !== countB) return countB - countA; // 數量越多越前
-
-      if (a.startDate !== b.startDate) return a.startDate.localeCompare(b.startDate);
-      return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
-    }).map(task => {
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handlePlanDragEnd} accessibility={planA11y}>
+      <SortableContext items={visiblePlanIds} strategy={rectSortingStrategy}>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+    {visiblePlans.map(task => {
       const ind = INDICATORS.find(i => i.id === task.indicatorId);
-      const subs = data.subTasks.filter(s => s.majorTaskId === task.id);
+      const subs = sortBySortOrder(data.subTasks.filter(s => s.majorTaskId === task.id));
       const goal = data.goals[task.indicatorId]?.find(g => g.id === task.goalId);
+      const isTopPriorityPlan = task.id === topPriorityPlanId;
       return (
+        <SortableItem key={task.id} id={task.id}>
+        {({ handleProps: planHandleProps, isDragging: planDragging }) => (
         <motion.div
-          key={task.id}
           ref={el => majorTaskRefs.current[task.id] = el}
-          layout
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white/40 backdrop-blur-2xl rounded-[32px] md:rounded-[48px] p-6 md:p-8 border border-white/60 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] group transition-all hover:shadow-[0_30px_60px_-10px_rgba(0,0,0,0.1)] hover:-translate-y-1 md:hover:-translate-y-2 relative overflow-hidden"
+          className={`bg-white/40 backdrop-blur-2xl rounded-[32px] md:rounded-[48px] p-6 md:p-8 border border-white/60 group transition-shadow relative overflow-hidden h-full ${planDragging ? 'shadow-[0_30px_60px_-10px_rgba(0,0,0,0.2)] ring-2 ring-sky-300' : 'shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] hover:shadow-[0_30px_60px_-10px_rgba(0,0,0,0.1)]'} ${isTopPriorityPlan && !planDragging ? 'ring-2 ring-amber-300' : ''}`}
         >
           <div className={`absolute top-0 right-0 w-24 h-24 md:w-32 md:h-32 bg-gradient-to-br ${ind?.color} opacity-[0.03] blur-3xl pointer-events-none`} />
           <div className="flex justify-between items-start mb-4 md:mb-6 relative z-10">
-            <div className="flex items-center gap-2 md:gap-3">
+            <div className="flex items-center gap-2 md:gap-3 min-w-0">
+              <DragHandle handleProps={planHandleProps} label="拖曳調整計畫順序" className="p-2.5 -m-2 -ml-3 md:-ml-4 shrink-0" />
               <div className={`w-8 h-8 md:w-10 md:h-10 rounded-xl md:rounded-2xl bg-gradient-to-br ${ind?.color} flex items-center justify-center text-white shadow-lg shadow-sky-200/50`}>{ind?.icon}</div>
               <span className="text-[8px] md:text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 md:px-4 md:py-2 bg-white/60 text-sky-700 rounded-xl md:rounded-2xl border border-white/40 backdrop-blur-md truncate max-w-[120px] md:max-w-none">{goal?.title || '計畫中'}</span>
             </div>
             <button onClick={() => { if (confirm(completeMajorTaskMessage(data, task.id))) toggleMajorTask(task.id); }} title="完成整個計畫" className="p-2 md:p-2.5 bg-white/60 hover:bg-emerald-50 text-sky-400 hover:text-emerald-500 rounded-xl md:rounded-2xl transition-all hover:scale-110 active:scale-90 border border-white/40 shadow-sm"><CheckCircle2 className="w-5 h-5 md:w-6 md:h-6" /></button>
           </div>
+          {isTopPriorityPlan && (
+            <span className="relative z-10 inline-flex items-center gap-1 mb-2 px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 border border-amber-200 text-[9px] md:text-[10px] font-black" title="管理優先級裡排第一、現在能做的任務在這個計畫">
+              <Zap className="w-3 h-3" /> 目前優先
+            </span>
+          )}
           <h3 className="text-xl md:text-2xl font-black text-sky-950 mb-1 md:mb-1.5 break-words tracking-tight relative z-10">{task.title}</h3>
-          <p className="text-[9px] md:text-[10px] font-black text-sky-800 mb-6 md:mb-8 flex items-center gap-1.5 md:gap-2 uppercase tracking-[0.1em] bg-sky-100/50 w-fit px-2.5 py-1 rounded-lg border border-sky-200/50 relative z-10"><CalendarDays className="w-3 md:w-3.5 h-3 md:h-3.5" /> {task.startDate} — {task.endDate}</p>
+          <p className="text-[9px] md:text-[10px] font-black text-sky-800 mb-4 md:mb-6 flex items-center gap-1.5 md:gap-2 uppercase tracking-[0.1em] bg-sky-100/50 w-fit px-2.5 py-1 rounded-lg border border-sky-200/50 relative z-10"><CalendarDays className="w-3 md:w-3.5 h-3 md:h-3.5" /> {task.startDate} — {task.endDate}</p>
+          {/* 新增任務放在清單上面：新的任務會出現在最上面，不用往下捲 */}
+          <button onClick={() => addSubTask(task.id)} className="relative z-10 w-full py-2.5 md:py-3 mb-2.5 md:mb-3 bg-white/40 hover:bg-white text-sky-600 rounded-2xl md:rounded-[24px] text-[10px] md:text-[11px] font-black flex items-center justify-center gap-2 border-2 border-dashed border-white hover:border-sky-200 transition-all shadow-sm active:scale-95"><Plus className="w-3.5 h-3.5 md:w-4 md:h-4" /> 新增任務</button>
           <div className="space-y-2.5 md:space-y-3 relative z-10">
-            <AnimatePresence mode="popLayout">
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTaskDragEnd(task.id)} accessibility={taskA11y}>
+            <SortableContext items={subs.map(s => s.id)} strategy={verticalListSortingStrategy}>
               {subs.map(sub => {
                 const today = new Date();
                 const currentDay = today.getDay();
@@ -219,19 +303,21 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                                          sub.lastCompletedAt.startsWith(getTodayStr());
 
                 return (
+                <SortableItem key={sub.id} id={sub.id}>
+                {({ handleProps: subHandleProps, isDragging: subDragging }) => (
                 <motion.div
-                  key={sub.id}
-                  layout
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className={`flex items-center gap-2.5 md:gap-3 p-3 md:p-4 backdrop-blur-md rounded-2xl md:rounded-[24px] border shadow-sm transition-all group/sub ${
+                  className={`flex items-center gap-1.5 md:gap-2 p-3 md:p-4 pl-1 md:pl-2 backdrop-blur-md rounded-2xl md:rounded-[24px] border transition-[background-color,border-color,box-shadow,opacity] group/sub ${
+                    subDragging ? 'shadow-lg ring-2 ring-sky-300 bg-white' : 'shadow-sm'
+                  } ${
                     isLocked ? 'bg-slate-100/50 border-slate-200 opacity-70 grayscale-[0.5]' :
                     isTodayCompleted ? 'bg-emerald-50/40 border-emerald-100/50 opacity-80' :
                     'bg-white/60 border-white hover:border-sky-200 hover:bg-white'
                   }`}
                 >
-                  <div className="relative flex items-center justify-center shrink-0">
+                  <DragHandle handleProps={subHandleProps} label="拖曳調整任務順序" className="p-2 -my-2 -ml-1 shrink-0" />
+                  <div className="relative flex items-center justify-center shrink-0 mr-1">
                     {isLocked ? (
                       <div className="w-6 h-6 md:w-8 md:h-8 rounded-lg md:rounded-xl border-2 border-slate-200 bg-slate-100/50 flex items-center justify-center">
                         <Lock className="w-3 h-3 md:w-4 md:h-4 text-slate-400" />
@@ -297,10 +383,12 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                     <button onClick={() => confirmDeleteSubTask(sub.id, task.id)} className="p-1.5 md:p-2 text-sky-600 hover:text-red-500 hover:bg-red-50 rounded-lg md:rounded-xl transition-all" title="刪除項目"><Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
                   </div>
                 </motion.div>
+                )}
+                </SortableItem>
                 );
               })}
-            </AnimatePresence>
-            <button onClick={() => addSubTask(task.id)} className="w-full py-3 md:py-4 bg-white/40 hover:bg-white text-sky-600 rounded-2xl md:rounded-[24px] text-[10px] md:text-[11px] font-black flex items-center justify-center gap-2 mt-3 md:mt-4 border-2 border-dashed border-white hover:border-sky-200 transition-all shadow-sm active:scale-95"><Plus className="w-3.5 h-3.5 md:w-4 md:h-4" /> 新增任務</button>
+            </SortableContext>
+            </DndContext>
             {(() => {
               const archivedSubs = data.archivedSubTasks.filter(s => s.majorTaskId === task.id);
               if (archivedSubs.length === 0) return null;
@@ -340,11 +428,17 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
           </div>
           <div className="mt-4 md:mt-6 pt-3 md:pt-4 border-t border-white/20 flex justify-between relative z-10"><button onClick={() => setEditingTask({ type: 'major', item: task })} className="text-[9px] md:text-[10px] font-black text-sky-600 hover:text-sky-800 flex items-center gap-1 md:gap-1.5 px-2 md:px-3 py-1 md:py-1.5 bg-white/40 hover:bg-white/80 rounded-lg md:rounded-xl transition-all border border-white/40 shadow-sm"><Settings2 className="w-3 md:w-3.5 h-3 md:h-3.5" /> 編輯</button><button onClick={() => confirmDeleteMajorTask(task.id)} title="刪除計畫" className="text-[9px] md:text-[10px] font-black text-sky-400 hover:text-red-500 flex items-center gap-1 md:gap-1.5 px-2 md:px-3 py-1 md:py-1.5 bg-white/40 hover:bg-red-50 rounded-lg md:rounded-xl transition-all border border-white/40 shadow-sm"><Trash2 className="w-3 md:w-3.5 h-3 md:h-3.5" /></button></div>
         </motion.div>
+        )}
+        </SortableItem>
       );
     })}
-        </AnimatePresence>
-    <div className="bg-white/20 border-4 border-dashed border-white/60 rounded-3xl md:rounded-[40px] p-6 md:p-10 flex flex-col items-center justify-center gap-4 md:gap-6 min-h-[300px] md:min-h-[350px]"><div className="flex gap-2.5 md:gap-4">{INDICATORS.map(ind => (<button key={ind.id} onClick={() => { const firstGoal = data.goals[ind.id]?.[0]; if (firstGoal) addMajorTask(ind.id, firstGoal.id); else alert('請先到維度頁新增至少一個目標'); }} className={`w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl bg-gradient-to-br ${ind.color} text-white flex items-center justify-center shadow-xl hover:scale-110 active:scale-95 transition-all`}>{ind.icon}</button>))}</div><div className="text-center"><p className="font-black text-[9px] md:text-[10px] text-sky-400 uppercase tracking-widest mb-1">展開新旅程</p><p className="text-[8px] md:text-[9px] text-sky-300 italic">選擇維度開始一個計畫</p></div></div>
-  </motion.div>
+    {/* 沒有計畫時才顯示：直接選維度開始（平常用上方的「新增計畫」，不用捲到最下面） */}
+    {visiblePlans.length === 0 && (
+    <div className="bg-white/20 border-4 border-dashed border-white/60 rounded-3xl md:rounded-[40px] p-6 md:p-10 flex flex-col items-center justify-center gap-4 md:gap-6 min-h-[300px] md:min-h-[350px]"><div className="flex gap-2.5 md:gap-4">{INDICATORS.filter(ind => filterIndicator === 'all' || ind.id === filterIndicator).map(ind => (<button key={ind.id} title={`新增${ind.name}計畫`} onClick={() => { const firstGoal = data.goals[ind.id]?.[0]; if (firstGoal) addMajorTask(ind.id, firstGoal.id); else alert(`請先到維度頁幫「${ind.name}」新增至少一個目標`); }} className={`w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl bg-gradient-to-br ${ind.color} text-white flex items-center justify-center shadow-xl hover:scale-110 active:scale-95 transition-all`}>{ind.icon}</button>))}</div><div className="text-center"><p className="font-black text-[9px] md:text-[10px] text-sky-400 uppercase tracking-widest mb-1">展開新旅程</p><p className="text-[8px] md:text-[9px] text-sky-300 italic">選擇維度開始一個計畫</p></div></div>
+    )}
+  </div>
+  </SortableContext>
+  </DndContext>
   {data.archivedTasks.length > 0 && (
     <div className="space-y-6">
       <div className="flex items-center gap-3 md:gap-4 px-2">

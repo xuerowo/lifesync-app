@@ -5,6 +5,7 @@ import { Settings2, X, Zap, CheckCircle2, TrendingUp, Tag } from 'lucide-react';
 import { useAppData } from '../../contexts/AppDataContext';
 import { INDICATORS, WEEK_DAYS } from '../../constants/index.jsx';
 import { firstGoalId, toggleWeekDay, toNonNegativeInt, validateSubTaskTimes } from '../../domain/inputs';
+import { topSortOrder } from '../../shared/taskOrder';
 
 const TaskEditor = ({ editingTask, setEditingTask }) => {
   const { data, updateData, reorderPriorityTasks } = useAppData();
@@ -28,7 +29,8 @@ const TaskEditor = ({ editingTask, setEditingTask }) => {
       if (isMajor) {
           const exists = prev.majorTasks.some(t => t.id === localItem.id);
           if (exists) return { ...prev, majorTasks: prev.majorTasks.map(t => t.id === localItem.id ? localItem : t) };
-          return { ...prev, majorTasks: [...prev.majorTasks, localItem] };
+          // 新的計畫放在最上面
+          return { ...prev, majorTasks: [...prev.majorTasks, { ...localItem, sortOrder: topSortOrder(prev.majorTasks) }] };
       } else {
           let newSubTasks = [...prev.subTasks];
           const originalTask = prev.subTasks.find(t => t.id === localItem.id);
@@ -49,11 +51,13 @@ const TaskEditor = ({ editingTask, setEditingTask }) => {
                const updatedItem = { ...localItem, priorityOrder: maxOrder + 1 };
                newSubTasks = newSubTasks.map(t => t.id === localItem.id ? updatedItem : t);
           } else if (!originalTask) {
+               // 新的任務放在這個計畫的最上面
+               const sortOrder = topSortOrder(prev.subTasks.filter(t => t.majorTaskId === localItem.majorTaskId));
                if (localItem.isPriority) {
                    const maxOrder = Math.max(0, ...prev.subTasks.filter(t => t.isPriority).map(t => t.priorityOrder || 0));
-                   newSubTasks = [...newSubTasks, { ...localItem, priorityOrder: maxOrder + 1 }];
+                   newSubTasks = [...newSubTasks, { ...localItem, sortOrder, priorityOrder: maxOrder + 1 }];
                } else {
-                   newSubTasks = [...newSubTasks, localItem];
+                   newSubTasks = [...newSubTasks, { ...localItem, sortOrder }];
                }
           } else {
                newSubTasks = newSubTasks.map(t => t.id === localItem.id ? localItem : t);

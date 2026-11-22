@@ -2,6 +2,8 @@
 // 主程序（electron/main.js、electron/storage.js）、開發伺服器（server.js）與畫面端都從這裡取得預設值。
 // 這個檔案必須維持純 JS（不可有 JSX、不可 import 瀏覽器或 Electron 專用模組），才能被 Node 直接 import。
 
+import { fillPlanSortOrders, fillTaskSortOrders } from './taskOrder.js';
+
 export const RARITIES = ['N', 'R', 'SR', 'SSR', 'UR'];
 
 // 每次呼叫都回傳全新物件，避免不同呼叫端共用同一個陣列而互相污染
@@ -131,6 +133,10 @@ export function normalizeData(raw) {
     const tasks = migrateTaskList(session.tasks);
     return tasks.every((t, i) => t === session.tasks[i]) ? session : { ...session, tasks };
   });
+
+  // 計畫與任務的排列順序：舊資料沒有 sortOrder，照升級前畫面上的順序補上（見 taskOrder.js）
+  result.majorTasks = fillPlanSortOrders(result.majorTasks, result.subTasks);
+  result.subTasks = fillTaskSortOrders(result.subTasks);
 
   const goals = isPlainObject(raw.goals) ? { ...raw.goals } : {};
   // 目標的分類鍵：舊代號底下的目標併到新代號底下（兩邊都有時，新的在前、舊的接在後面，同一個 id 只留一個）

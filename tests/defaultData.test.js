@@ -63,7 +63,7 @@ describe('normalizeData', () => {
 
   it('補齊缺少的欄位', () => {
     const result = normalizeData({ majorTasks: [{ id: 'a' }] })
-    expect(result.majorTasks).toEqual([{ id: 'a' }])
+    expect(result.majorTasks).toEqual([{ id: 'a', sortOrder: 0 }])
     expect(result.subTasks).toEqual([])
     expect(result.taskHistory).toEqual([])
     expect(result.goals).toEqual({ growth: [], health: [], happiness: [] })
@@ -83,7 +83,7 @@ describe('normalizeData', () => {
       anotherOne: 'keep me',
     }
     const result = normalizeData(raw)
-    expect(result.subTasks).toEqual([{ id: 's1' }])
+    expect(result.subTasks).toEqual([{ id: 's1', sortOrder: 0 }])
     expect(result.rewardFolderPath).toBe('C:\\pics')
     expect(result.lotteryTickets).toBe(7)
     expect(result.futureField).toEqual({ nested: true })
@@ -182,8 +182,8 @@ describe('normalizeData', () => {
     const prev = normalizeData({ subTasks: [{ id: 'keep' }], lotteryTickets: 4 })
     const imported = { majorTasks: [{ id: 'm' }], lotteryPrizes: { UR: [{ name: 'u' }] } }
     const result = normalizeData({ ...prev, ...imported })
-    expect(result.subTasks).toEqual([{ id: 'keep' }])
-    expect(result.majorTasks).toEqual([{ id: 'm' }])
+    expect(result.subTasks).toEqual([{ id: 'keep', sortOrder: 0 }])
+    expect(result.majorTasks).toEqual([{ id: 'm', sortOrder: 0 }])
     expect(result.lotteryTickets).toBe(4)
     expect(result.lotteryPrizes.N).toEqual([])
     expect(result.lotteryPrizes.UR).toEqual([{ name: 'u' }])
@@ -193,8 +193,8 @@ describe('normalizeData', () => {
 describe('維度代號改名：學習 learning → 成長 growth（2026-11-22）', () => {
   const old = () => ({
     goals: { learning: [{ id: 'g1' }], health: [{ id: 'h1' }] },
-    majorTasks: [{ id: 'm1', indicatorId: 'learning' }, { id: 'm2', indicatorId: 'health' }],
-    subTasks: [{ id: 's1', indicatorId: 'learning' }],
+    majorTasks: [{ id: 'm1', indicatorId: 'learning', sortOrder: 0 }, { id: 'm2', indicatorId: 'health', sortOrder: 1 }],
+    subTasks: [{ id: 's1', indicatorId: 'learning', sortOrder: 0 }],
     archivedTasks: [{ id: 'a1', indicatorId: 'learning' }],
     archivedSubTasks: [{ id: 'as1', indicatorId: 'learning' }],
     taskHistory: [{ id: 'th1', indicatorId: 'learning' }, { id: 'th2', indicatorId: 'happiness' }],

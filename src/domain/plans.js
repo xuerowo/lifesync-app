@@ -15,6 +15,7 @@
  * 照舊算進成就，恢復計畫時也不會搬回來。normalizeData 不需要特別處理，沒有這個欄位就是舊資料。
  */
 import { renumberPriorityTasks } from './tasks.js';
+import { topSortOrder } from '../shared/taskOrder.js';
 
 const COUNTED_TYPES = ['daily', 'weekly', 'infinite'];
 const isCounted = (task) => COUNTED_TYPES.includes(task?.type);
@@ -85,7 +86,8 @@ export function restorePlan(data, planId) {
   if (restoredAnyPriority) nextSubTasks = renumberPriorityTasks(nextSubTasks);
 
   return {
-    majorTasks: [...(data?.majorTasks || []), { ...plan, completed: false }],
+    // 恢復的計畫放在進行中清單的最上面
+    majorTasks: [...(data?.majorTasks || []), { ...plan, completed: false, sortOrder: topSortOrder(data?.majorTasks) }],
     archivedTasks: (data?.archivedTasks || []).filter((t) => t.id !== planId),
     subTasks: nextSubTasks,
     archivedSubTasks: archivedSubTasks.filter((s) => !comesBack(s)),

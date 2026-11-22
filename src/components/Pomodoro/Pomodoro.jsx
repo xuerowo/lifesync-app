@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import {
   Timer, Settings2, Target, CheckCircle2, ChevronUp, ChevronDown, Play, Square, Pause, FastForward, Trophy, Gift, Infinity as InfinityIcon, Plus, Trash2, X, RotateCcw, BellOff, BellRing, Coffee
@@ -11,6 +11,7 @@ import PomodoroHistory from './PomodoroHistory';
 import { completionRewardTickets } from '../../domain/tasks';
 import { addableSessionTasks, nextBreakInfo, normalizePomodoroSettings, POMODORO_RANGES, pomodoroCandidateTasks, pomodoroSettlementTickets, settlePomodoroTickets } from '../../domain/pomodoro';
 import AddSessionTaskPicker from './AddSessionTaskPicker';
+import { sortTasksLikePlanList } from '../../shared/taskOrder';
 
 const Pomodoro = ({
   subTasks,
@@ -53,7 +54,9 @@ const Pomodoro = ({
   const longBreakSettings = normalizePomodoroSettings(settings);
 
   // 可選的目標任務（成長維度、未完成；規則見 domain/pomodoro.js，「＋」加入任務也用同一份）
-  const candidateTasks = pomodoroCandidateTasks(subTasks);
+  // 任務的先後和計畫清單一樣（使用者自己排的順序）
+  const orderedSubTasks = useMemo(() => sortTasksLikePlanList(subTasks, data.majorTasks), [subTasks, data.majorTasks]);
+  const candidateTasks = pomodoroCandidateTasks(orderedSubTasks);
 
   // 「時間到」的自動處理在 App 層（usePomodoroAutoAdvance），這裡不再監聽，避免重複觸發
 
@@ -777,7 +780,7 @@ const Pomodoro = ({
       {/* 進行中加入目標任務（專注、心流、休息都可以）；只是畫面上的清單，不影響計時 */}
       {isAddingTask && !showSummary && !showSettlement && (
         <AddSessionTaskPicker
-          tasks={addableSessionTasks(subTasks, sessionTasks)}
+          tasks={addableSessionTasks(orderedSubTasks, sessionTasks)}
           onAdd={addSessionTask}
           onClose={() => setIsAddingTask(false)}
         />

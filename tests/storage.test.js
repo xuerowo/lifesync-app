@@ -60,7 +60,7 @@ describe('load', () => {
     writeJson(dataFile, { majorTasks: [{ id: 'x' }], extra: 1 })
     const res = await makeStorage().load()
     expect(res.status).toBe('ok')
-    expect(res.data.majorTasks).toEqual([{ id: 'x' }])
+    expect(res.data.majorTasks).toEqual([{ id: 'x', sortOrder: 0 }])
     expect(res.data.lotteryPrizes.UR).toEqual([])
     expect(res.data.extra).toBe(1)
   })
@@ -84,7 +84,7 @@ describe('save', () => {
 
     const again = await makeStorage().load()
     expect(again.status).toBe('ok')
-    expect(again.data.subTasks).toEqual([{ id: 's1', title: '任務' }])
+    expect(again.data.subTasks).toEqual([{ id: 's1', title: '任務', sortOrder: 0 }])
   })
 
   it('寫入後資料夾內沒有殘留的 .tmp 檔', async () => {
