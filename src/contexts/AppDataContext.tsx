@@ -22,7 +22,7 @@ type AppLoadResult =
   | { ok: true; data: LifeSyncData; secretsUnavailable: SecretField[] }
   | { ok: false; code?: string; error?: string; dataFile?: string };
 
-/** server.js 錯誤回應（JSON）裡的 error、code */
+/** server.ts 錯誤回應（JSON）裡的 error、code */
 const errorBodyFields = (body: unknown): { error?: string; code?: string } =>
   // 照理是字串；萬一不是，和原本的 JS（body?.error、body?.code）一樣原樣使用，as 只是型別上的說法。
   // 不是物件（null、數字、字串）時原本讀到的也是 undefined，所以換成空物件結果相同
@@ -46,7 +46,7 @@ const toLoadResult = (res: LoadResult | RestoreBackupResult | null | undefined):
   };
 };
 
-/** 存檔（Electron 走 IPC；瀏覽器模式走 server.js）。失敗時丟出帶 code 的錯誤 */
+/** 存檔（Electron 走 IPC；瀏覽器模式走 server.ts）。失敗時丟出帶 code 的錯誤 */
 const persistData = async (data: LifeSyncData): Promise<void> => {
   if (window.electronAPI) {
     // 密碼由主程序負責加密
@@ -70,7 +70,7 @@ const persistData = async (data: LifeSyncData): Promise<void> => {
     try {
       const body = errorBodyFields(await response.json());
       if (body.error) message = body.error;
-      // server.js 拒絕存檔時會帶 SAVE_BLOCKED
+      // server.ts 拒絕存檔時會帶 SAVE_BLOCKED
       if (body.code) code = body.code;
     } catch {
       // 回應不是 JSON，沿用 HTTP 狀態碼
@@ -79,7 +79,7 @@ const persistData = async (data: LifeSyncData): Promise<void> => {
   }
 };
 
-/** 讀取資料（Electron 走 IPC；瀏覽器模式走 server.js）。不丟錯，一律回傳 { ok, ... } */
+/** 讀取資料（Electron 走 IPC；瀏覽器模式走 server.ts）。不丟錯，一律回傳 { ok, ... } */
 const fetchAppData = async (): Promise<AppLoadResult> => {
   try {
     if (window.electronAPI) {
@@ -92,7 +92,7 @@ const fetchAppData = async (): Promise<AppLoadResult> => {
       try {
         const body = errorBodyFields(await response.json());
         if (body.error) message = body.error;
-        // server.js 會帶上讀檔失敗的原因（例如 PARSE_ERROR），畫面才能說明得具體
+        // server.ts 會帶上讀檔失敗的原因（例如 PARSE_ERROR），畫面才能說明得具體
         if (body.code) code = body.code;
       } catch {
         // 回應不是 JSON，沿用 HTTP 狀態碼

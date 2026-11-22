@@ -81,8 +81,8 @@ function plainReason(code: string): string | null {
   }
   if (code === 'ENOSPC') return '硬碟空間不足。';
   if (code === 'EROFS') return '資料所在的磁碟是唯讀的，不能寫入。';
-  if (code === 'SERVER_UNREACHABLE') return '連不到資料伺服器（瀏覽器模式下負責存檔的 server.js），它可能已經關掉了。';
-  if (code.startsWith('HTTP_')) return '資料伺服器（瀏覽器模式下負責存檔的 server.js）回報錯誤。';
+  if (code === 'SERVER_UNREACHABLE') return '連不到資料伺服器（瀏覽器模式下負責存檔的 server.ts），它可能已經關掉了。';
+  if (code.startsWith('HTTP_')) return '資料伺服器（瀏覽器模式下負責存檔的 server.ts）回報錯誤。';
   return null;
 }
 

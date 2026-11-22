@@ -60,7 +60,7 @@ export function describeLoadError(loadError: LoadErrorInfo | null | undefined): 
   }
   if (code.startsWith('HTTP_')) {
     return {
-      reason: '資料伺服器（瀏覽器模式下負責讀寫資料的 server.js）回報錯誤。',
+      reason: '資料伺服器（瀏覽器模式下負責讀寫資料的 server.ts）回報錯誤。',
       suggestRetryFirst: true,
     };
   }

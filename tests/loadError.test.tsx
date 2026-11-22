@@ -29,7 +29,7 @@ describe('describeLoadError', () => {
 
   it('格式不對、瀏覽器模式的伺服器錯誤、不認識的錯誤都有說明', () => {
     expect(describeLoadError({ code: 'INVALID_FORMAT' }).reason).toContain('格式');
-    expect(describeLoadError({ code: 'HTTP_500' }).reason).toContain('server.js');
+    expect(describeLoadError({ code: 'HTTP_500' }).reason).toContain('server.ts');
     expect(describeLoadError({ code: 'WHATEVER' }).reason).toContain('預料之外');
     expect(describeLoadError(null).reason).toContain('預料之外');
   });
