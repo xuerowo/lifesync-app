@@ -1,4 +1,5 @@
 import { createClient } from 'webdav';
+import type { WebDAVClient } from 'webdav';
 import fs from 'fs/promises';
 import path from 'path';
 import { encryptBuffer, decryptBuffer } from './galleryCrypto.ts';
@@ -34,15 +35,24 @@ export function setAbortFlag(value: boolean): void {
     abortSync = value;
 }
 
+/**
+ * 建立 WebDAV 連線設定。帳號、密碼裡有中文或全形字時 createClient 會直接丟出錯誤，
+ * 所以一定要在各處理程序的 try 裡面呼叫：丟到外面的錯誤，畫面上會變成英文的「Error invoking remote method」。
+ * （網址格式錯誤時 createClient 不會出錯，要等真正連線時才會丟出 Invalid URL，也在 try 裡面。）
+ */
+function createCloudClient(config: CloudConfig): WebDAVClient {
+  return createClient(config.url, {
+    username: config.username,
+    password: config.password,
+  });
+}
+
 export function setupCloudHandlers(ipcMain: Pick<IpcMain, 'handle'>, { GALLERY_DIR }: { GALLERY_DIR: string }): void {
   // 注意：取消功能現在由 main.ts 統一調用 setAbortFlag
 
   ipcMain.handle('cloud-test-connection', async (event, config: CloudConfig): Promise<CloudTestResult> => {
-    const client = createClient(config.url, {
-      username: config.username,
-      password: config.password,
-    });
     try {
+      const client = createCloudClient(config);
       await client.getDirectoryContents('/');
       return { success: true };
     } catch (error) {
@@ -51,10 +61,13 @@ export function setupCloudHandlers(ipcMain: Pick<IpcMain, 'handle'>, { GALLERY_D
   });
 
   ipcMain.handle('cloud-upload', async (event, { config, fileName, encryptedData }: CloudUploadPayload): Promise<CloudUploadResult> => {
-    const client = createClient(config.url, {
-      username: config.username,
-      password: config.password,
-    });
+    // 0. 建立連線設定（帳號密碼有不能用的字元時這裡就會出錯；還沒碰到雲端）
+    let client: WebDAVClient;
+    try {
+      client = createCloudClient(config);
+    } catch (error) {
+      return { success: false, error: describeCloudError(error, { action: 'upload' }) };
+    }
     // 1. 蓋掉之前，先把雲端上原本那份複製成舊版；做不到就不上傳，免得唯一的一份被蓋掉後救不回來
     let previous;
     try {
@@ -83,11 +96,8 @@ export function setupCloudHandlers(ipcMain: Pick<IpcMain, 'handle'>, { GALLERY_D
   });
 
   ipcMain.handle('cloud-download', async (event, { config, fileName }: CloudDownloadPayload): Promise<CloudDownloadResult> => {
-    const client = createClient(config.url, {
-      username: config.username,
-      password: config.password,
-    });
     try {
+      const client = createCloudClient(config);
       // 沒指定 format 時 webdav 回傳的是檔案內容本身，在 Node 裡是 Buffer（到畫面會變成 Uint8Array）
       const content = (await client.getFileContents(fileName)) as Buffer;
       return { success: true, data: content };
@@ -98,12 +108,9 @@ export function setupCloudHandlers(ipcMain: Pick<IpcMain, 'handle'>, { GALLERY_D
 
   ipcMain.handle('cloud-sync-gallery', async (event, { config, masterPassword }: CloudGalleryPayload): Promise<CloudSyncGalleryResult> => {
     setAbortFlag(false);
-    const client = createClient(config.url, {
-      username: config.username,
-      password: config.password,
-    });
 
     try {
+      const client = createCloudClient(config);
       // 新電腦或剛安裝時圖庫資料夾可能還不存在，先建立，避免 readdir 丟出 ENOENT
       await fs.mkdir(GALLERY_DIR, { recursive: true });
 
@@ -159,12 +166,9 @@ export function setupCloudHandlers(ipcMain: Pick<IpcMain, 'handle'>, { GALLERY_D
 
   ipcMain.handle('cloud-restore-gallery', async (event, { config, masterPassword }: CloudGalleryPayload): Promise<CloudRestoreGalleryResult> => {
     setAbortFlag(false);
-    const client = createClient(config.url, {
-      username: config.username,
-      password: config.password,
-    });
 
     try {
+      const client = createCloudClient(config);
       // 新電腦或剛安裝時圖庫資料夾可能還不存在，先建立，否則每張都會寫入失敗
       await fs.mkdir(GALLERY_DIR, { recursive: true });
 

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { createStorage } from './electron/storage.ts';
 import { resolveDevServerImagePath } from './electron/galleryFiles.ts';
 import { nodeError } from './electron/nodeError.ts';
+import { folderPathFromBody, MISSING_FOLDER_PATH_MESSAGE } from './electron/scanFolderRequest.ts';
 import { describeFileError } from './src/shared/errorMessages.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -73,10 +74,11 @@ app.post('/api/data', async (req, res) => {
 
 // 掃描獎勵圖片資料夾
 app.post('/api/rewards/scan', async (req, res) => {
-  const { folderPath } = req.body;
+  // 要求沒有 JSON 內容時 req.body 是 undefined，直接解構會變成籠統的 500 錯誤
+  const folderPath = folderPathFromBody(req.body);
 
   if (!folderPath) {
-    return res.status(400).json({ error: '請先輸入資料夾路徑。' });
+    return res.status(400).json({ error: MISSING_FOLDER_PATH_MESSAGE });
   }
 
   try {

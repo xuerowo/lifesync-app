@@ -7,6 +7,7 @@ import type { IpcMainEvent, MenuItemConstructorOptions, WebContents } from 'elec
 import { setupCloudHandlers, setAbortFlag } from './cloudManager.ts';
 import { createStorage } from './storage.ts';
 import { resolveImageReadPath, copyImageIntoGallery } from './galleryFiles.ts';
+import { restoreBackupGallery } from './backupGallery.ts';
 import { isImportableData, stripCloudSecrets } from '../src/shared/cloudSecrets.ts';
 import { decideWindowOpen } from './windowOpen.ts';
 import { setupSingleInstance } from './singleInstance.ts';
@@ -672,26 +673,30 @@ ipcMain.handle('import-full-backup', async (event, backupDir: string): Promise<I
       return { success: false, error: NOT_LIFESYNC_BACKUP_MESSAGE };
     }
     
-    // 2. 恢復圖庫
+    // 2. 恢復圖庫：沒有 gallery 資料夾不算錯；有幾張複製失敗時跳過、繼續下一張，
+    //    資料照樣還原，失敗的張數和原因交給畫面告訴使用者
     await ensureGalleryDir();
-    try {
-      const files = await fs.readdir(gallerySrcDir);
-      const total = files.length;
-      for (let i = 0; i < files.length; i++) {
-        if (abortLocalSync) break;
-        const file = files[i];
-        event.sender.send('cloud-progress', { 
-            current: i + 1, 
-            total, 
-            message: `正在還原圖庫：${file}` 
-        });
-        await fs.copyFile(path.join(gallerySrcDir, file), path.join(GALLERY_DIR, file));
-      }
-    } catch {
-      console.warn('備份中無圖庫');
-    }
-    
-    return { success: true, data: jsonData, aborted: abortLocalSync };
+    const gallery = await restoreBackupGallery(gallerySrcDir, GALLERY_DIR, {
+      shouldAbort: () => abortLocalSync,
+      onProgress: (progress) => event.sender.send('cloud-progress', progress),
+    });
+    if (!gallery.found) console.warn('備份中無圖庫');
+    if (gallery.listError) console.warn('[import-full-backup] 讀不到備份裡的圖庫:', gallery.listError);
+    if (gallery.failed > 0) console.warn(`[import-full-backup] ${gallery.failed} 張圖片複製失敗:`, gallery.errors);
+
+    return {
+      success: true,
+      data: jsonData,
+      aborted: abortLocalSync,
+      gallery: {
+        found: gallery.found,
+        total: gallery.total,
+        copied: gallery.copied,
+        failed: gallery.failed,
+        errors: gallery.errors,
+        listError: gallery.listError,
+      },
+    };
   } catch (error) {
     return { success: false, error: describeFileError(error, { action: 'restore-backup' }) };
   }

@@ -16,7 +16,7 @@ const fieldOf = (value: unknown, key: string): unknown =>
 export type CloudErrorAction = 'test' | 'upload' | 'download' | 'gallery-upload' | 'gallery-download';
 
 /** 檔案錯誤的情境：掃描圖片資料夾、還原完整備份、匯出完整備份 */
-export type FileErrorAction = 'scan-folder' | 'restore-backup' | 'export-backup';
+export type FileErrorAction = 'scan-folder' | 'restore-backup' | 'export-backup' | 'copy-gallery-image';
 
 /** 連不上伺服器時常見的錯誤碼（DNS 查不到、被拒絕、逾時、網路斷線） */
 const NETWORK_CODES = new Set([
@@ -101,8 +101,12 @@ export function cloudErrorReason(error: unknown, { action }: { action?: CloudErr
   if (code && CERT_CODE.test(code)) {
     return '伺服器的安全憑證有問題，為了安全沒有連上。請確認網址是否正確。';
   }
-  if (code === 'ERR_INVALID_URL' || /Invalid URL/i.test(raw)) {
+  if (code === 'ERR_INVALID_URL' || /Invalid URL|Url must be a string/i.test(raw)) {
     return '網址格式不對，請確認「WebDAV 伺服器網址」（要以 https:// 開頭）。';
+  }
+  // webdav 套件建立連線時，帳號密碼要轉成 Base64，只接受 Latin1 字元；打到中文、全形字時會丟出這個錯誤
+  if (fieldOf(error, 'name') === 'InvalidCharacterError' || /outside of the Latin1 range/i.test(raw)) {
+    return '「使用者名稱」或「應用程式密碼」裡有不能用的字元，例如中文或全形符號（像全形的空白、＠）。請把輸入法切換成英文半形，再重新輸入這兩欄。';
   }
   if ((code && NETWORK_CODES.has(code)) || /fetch failed|network|socket hang up|timed? ?out/i.test(raw)) {
     return '連不上伺服器，請檢查網址和網路。';
@@ -124,6 +128,7 @@ export const NOT_LIFESYNC_BACKUP_MESSAGE =
 /**
  * 檔案、資料夾錯誤的白話說明（含下一步）；認不出來時回傳 null。
  * @param options.action restore-backup：還原完整備份。找不到資料檔代表選錯資料夾，而不是資料夾不存在
+ *   copy-gallery-image：還原備份時複製單張圖片
  */
 export function fileErrorReason(error: unknown, { action }: { action?: FileErrorAction } = {}): string | null {
   const code = errorCodeOf(error);
@@ -134,6 +139,13 @@ export function fileErrorReason(error: unknown, { action }: { action?: FileError
     if (error instanceof SyntaxError || fieldOf(error, 'name') === 'SyntaxError') {
       return '備份裡的資料檔（lifesync-data.json）壞掉了，打不開。請改用另一份備份。';
     }
+  }
+  if (action === 'copy-gallery-image') {
+    // 複製單張圖片：「換一個資料夾」不適用，說明是哪張圖、可能被誰鎖住
+    if (code === 'EACCES' || code === 'EPERM' || code === 'EBUSY') {
+      return '這張圖片正被別的程式（例如看圖軟體、防毒軟體、雲端硬碟同步軟體）使用中，或沒有權限蓋掉圖庫裡的同名圖片。';
+    }
+    if (code === 'ENOENT') return '找不到這張圖片，可能在複製時被移走或刪掉了。';
   }
   if (code === 'ENOENT') return '找不到這個資料夾，請確認路徑。';
   if (code === 'ENOTDIR') return '這個路徑不是資料夾，請確認路徑。';

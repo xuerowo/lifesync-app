@@ -219,12 +219,27 @@ export type ExportFullBackupResult =
   | { success: true; path: string; aborted: boolean }
   | { success: false; path: string | null; error: string };
 
+/** 還原完整備份時，備份裡的圖片複製回圖庫的結果（electron/backupGallery.ts） */
+export interface BackupGalleryRestore {
+  /** 備份裡有沒有 gallery 資料夾；沒有時不算錯，其他欄位都是 0 */
+  found: boolean;
+  /** gallery 資料夾裡有幾張要複製（只算檔案，子資料夾略過） */
+  total: number;
+  copied: number;
+  failed: number;
+  /** 失敗的檔名和原文（最多 MAX_ERROR_DETAILS 筆） */
+  errors: GalleryError[];
+  /** gallery 資料夾在、但整個讀不到時的說明（白話＋技術細節）；這時一張都沒有複製 */
+  listError: string | null;
+}
+
 /**
  * data 是備份裡的 lifesync-data.json 原樣讀出來的內容（只確認過「看起來是 LifeSync 的資料」），
  * 還沒經過 normalizeData，所以是 unknown；要用 mergeIncomingData 合併進目前的資料。
+ * 圖片有幾張複製失敗時仍是 success：資料照樣還原，gallery 寫出哪些圖片沒有複製。
  */
 export type ImportFullBackupResult =
-  | { success: true; data: unknown; aborted: boolean }
+  | { success: true; data: unknown; aborted: boolean; gallery: BackupGalleryRestore }
   | { success: false; error: string };
 
 // ---------------------------------------------------------------------------

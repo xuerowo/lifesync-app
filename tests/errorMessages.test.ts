@@ -48,6 +48,16 @@ describe('cloudErrorReason', () => {
     expect(cloudErrorReason(Object.assign(new TypeError('Invalid URL'), { code: 'ERR_INVALID_URL' }))).toContain('網址格式不對');
   });
 
+  it('帳號密碼有中文、全形字（webdav 轉 Base64 時出錯）：說明要改輸入法重打，已經變成文字的訊息也認得', () => {
+    const err = Object.assign(new Error('The string to be encoded contains characters outside of the Latin1 range.'), {
+      name: 'InvalidCharacterError',
+    });
+    expect(cloudErrorReason(err)).toContain('「使用者名稱」或「應用程式密碼」裡有不能用的字元');
+    expect(
+      cloudErrorReason("Error invoking remote method 'cloud-test-connection': Error: The string to be encoded contains characters outside of the Latin1 range.")
+    ).toContain('英文半形');
+  });
+
   it('認不出來的錯誤回傳 null', () => {
     expect(cloudErrorReason(new Error('something odd'))).toBeNull();
     expect(cloudErrorReason(null)).toBeNull();

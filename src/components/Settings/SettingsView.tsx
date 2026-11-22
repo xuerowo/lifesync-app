@@ -10,6 +10,8 @@ import {
 import {
   cloudUploadSuccessMessage, cloudRestoreFailureMessage, galleryResultMessage, CONFIRM_CLOUD_UPLOAD
 } from '../../domain/cloudUpload.ts';
+import { backupRestoreSuccessMessage, backupRestoreAbortedMessage } from '../../domain/backupRestore.ts';
+import { describeCloudError } from '../../shared/errorMessages.ts';
 import {
   evaluateMasterPassword, masterPasswordBlockMessage, isInsecureWebdavUrl, INSECURE_URL_WARNING,
   MASTER_PASSWORD_SAVED_MESSAGE
@@ -122,14 +124,15 @@ const SettingsView = () => {
         const result = await window.electronAPI.importFullBackup(backupDir);
         if (result.success) {
             if (result.aborted) {
-                alert('還原已中斷。目前的資料沒有變動，但已經複製過來的圖庫圖片會留著（同名的圖片已被蓋掉）。');
+                alert(backupRestoreAbortedMessage(result.gallery));
             } else if (!isImportableData(result.data)) {
                 // 主程序已經擋過；這裡再擋一次，避免把不是 LifeSync 的內容蓋進資料
                 alert('還原失敗：這個資料夾裡的資料檔不是 LifeSync 的資料。\n\n目前的資料沒有變動。');
             } else {
                 // 雲端設定保留這台電腦目前的，不用備份裡的
                 setData(prev => mergeIncomingData(prev, result.data));
-                alert(`完整備份還原成功！資料已換成備份裡的內容，備份裡的圖片也已複製回圖庫（同名的會被蓋掉）。${snapshotSavedNote(snapshot)}`);
+                // 有幾張圖片複製失敗時資料照樣還原，訊息會寫出哪些圖片沒有複製
+                alert(`${backupRestoreSuccessMessage(result.gallery)}${snapshotSavedNote(snapshot)}`);
             }
         } else {
             alert(`還原失敗：${result.error}\n\n目前的資料沒有變動。`);
@@ -195,8 +198,13 @@ const SettingsView = () => {
   const testCloudConnection = async () => {
     if (!window.electronAPI) return;
     setTestResult('測試中……');
-    const result = await window.electronAPI.cloudTestConnection(data.cloudConfig);
-    setTestResult(result.success ? '連線成功！' : `連線失敗：${result.error}`);
+    try {
+      const result = await window.electronAPI.cloudTestConnection(data.cloudConfig);
+      setTestResult(result.success ? '連線成功！' : `連線失敗：${result.error}`);
+    } catch (err) {
+      // 主程序照理會把錯誤包成 { success: false } 回傳；萬一還是丟出錯誤，也不要讓畫面一直停在「測試中……」
+      setTestResult(`連線失敗：${describeCloudError(err, { action: 'test' })}`);
+    }
   };
 
   const handleCloudUpload = async () => {
@@ -277,12 +285,11 @@ const SettingsView = () => {
         alert('請先在上方「資料加密主密碼」欄位設定主密碼，才能上傳圖庫。');
         return;
     }
+    if (!window.electronAPI) return;
     setIsSyncing(true);
     setSyncProgress({ message: '準備上傳圖庫……', current: 0, total: 100 });
     try {
-        // 原本這裡沒有先判斷 window.electronAPI（其他雲端按鈕都有）：瀏覽器模式下會丟錯、由下面的 catch 顯示錯誤訊息。
-        // 轉換成 TypeScript 不改行為，照原樣保留，待另外修正
-        const result = await window.electronAPI!.cloudSyncGallery({
+        const result = await window.electronAPI.cloudSyncGallery({
             config: data.cloudConfig,
             masterPassword: data.cloudConfig.masterPassword
         });
@@ -305,12 +312,11 @@ const SettingsView = () => {
         alert('請先在上方「資料加密主密碼」欄位設定主密碼（要和上傳時用的一樣），才能下載圖庫。');
         return;
     }
+    if (!window.electronAPI) return;
     setIsSyncing(true);
     setSyncProgress({ message: '準備下載圖庫……', current: 0, total: 100 });
     try {
-        // 原本這裡沒有先判斷 window.electronAPI（其他雲端按鈕都有）：瀏覽器模式下會丟錯、由下面的 catch 顯示錯誤訊息。
-        // 轉換成 TypeScript 不改行為，照原樣保留，待另外修正
-        const result = await window.electronAPI!.cloudRestoreGallery({
+        const result = await window.electronAPI.cloudRestoreGallery({
             config: data.cloudConfig,
             masterPassword: data.cloudConfig.masterPassword
         });
@@ -516,7 +522,7 @@ const SettingsView = () => {
                     onClick={() => setShowHelp(false)}
                     className="w-full py-4 bg-sky-100 text-sky-600 font-black text-xs md:text-sm hover:bg-sky-200 transition-colors flex items-center justify-center gap-2"
                 >
-                    <ChevronUp className="w-4 h-4 md:w-5 h-5" /> 我明白了，收起教學
+                    <ChevronUp className="w-4 h-4 md:w-5 md:h-5" /> 我明白了，收起教學
                 </button>
             </div>
         )}
@@ -700,7 +706,7 @@ const SettingsView = () => {
           </div>
 
           {testResult && (
-            <div className={`p-3 md:p-4 rounded-xl md:rounded-2xl text-xs md:sm font-bold whitespace-pre-line break-words ${testResult.includes('成功') ? 'bg-emerald-100 text-emerald-600 shadow-sm' : 'bg-red-100 text-red-600 shadow-sm'}`}>
+            <div className={`p-3 md:p-4 rounded-xl md:rounded-2xl text-xs md:text-sm font-bold whitespace-pre-line break-words ${testResult.includes('成功') ? 'bg-emerald-100 text-emerald-600 shadow-sm' : 'bg-red-100 text-red-600 shadow-sm'}`}>
               {testResult}
             </div>
           )}
