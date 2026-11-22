@@ -14,10 +14,19 @@ import {
   evaluateMasterPassword, masterPasswordBlockMessage, isInsecureWebdavUrl, INSECURE_URL_WARNING,
   MASTER_PASSWORD_SAVED_MESSAGE
 } from '../../domain/masterPassword.ts';
+import type { CloudProgress } from '../../types/electronApi.ts';
+
+// 進度面板只顯示文字、不顯示「第幾張／共幾張」時用。
+// App 的進度面板用 syncProgress.total > 0 判斷要不要顯示張數，沒有 total 時就不顯示，所以只帶 message 是原本就有的用法；
+// 但 CloudProgress 型別要求 current、total，這裡照原樣只傳 message（不補 0，以免改變行為）。
+const messageOnlyProgress = (message: string): CloudProgress => ({ message }) as CloudProgress;
+
+// catch 到的錯誤（TypeScript 裡是 unknown）讀 message：只改型別、不改值，和原本直接寫 err.message 一樣
+const errMessage = (err: unknown): string | undefined => (err as { message?: string }).message;
 
 const SettingsView = () => {
   const { data, setData, updateData, isSyncing, setIsSyncing, setSyncProgress, markSecretReentered } = useAppData();
-  const [testResult, setTestResult] = useState(null);
+  const [testResult, setTestResult] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   
   // 密碼顯示開關狀態
@@ -27,7 +36,7 @@ const SettingsView = () => {
   // 主密碼（H11）：修改時要輸入兩次，兩次一樣、而且按了「確認主密碼」才存進資料（打字途中不會自動存）。
   // masterDraft 是主密碼欄正在改的內容（null＝沒有在改，顯示已存的主密碼）；masterConfirm 是「再輸入一次」欄。
   // 沒確認就離開設定頁，修改會被放棄，保留原本的主密碼。
-  const [masterDraft, setMasterDraft] = useState(null);
+  const [masterDraft, setMasterDraft] = useState<string | null>(null);
   const [masterConfirm, setMasterConfirm] = useState('');
   const [masterJustSaved, setMasterJustSaved] = useState(false);
   const masterState = evaluateMasterPassword({
@@ -38,7 +47,7 @@ const SettingsView = () => {
     : masterState.message;
 
   // 打字時只更新畫面上的兩欄，不儲存
-  const applyMasterInput = (nextDraft, nextConfirm) => {
+  const applyMasterInput = (nextDraft: string | null, nextConfirm: string) => {
     const next = evaluateMasterPassword({
       saved: data.cloudConfig.masterPassword, draft: nextDraft, confirm: nextConfirm
     });
@@ -55,7 +64,7 @@ const SettingsView = () => {
     setMasterDraft(null);
     setMasterJustSaved(true);
   };
-  const commitMasterOnEnter = (e) => {
+  const commitMasterOnEnter = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') commitMasterPassword();
   };
   const cancelMasterEdit = () => {
@@ -65,7 +74,7 @@ const SettingsView = () => {
   };
 
   // 主密碼還沒確認好時，雲端按鈕一律先擋下（以免用打錯、或不是畫面上那一個的主密碼加密或解密）
-  const blockedByMasterPassword = (actionLabel) => {
+  const blockedByMasterPassword = (actionLabel: string) => {
     const message = masterPasswordBlockMessage(masterState, actionLabel);
     if (message) alert(message);
     return Boolean(message);
@@ -79,7 +88,7 @@ const SettingsView = () => {
     if (!targetDir) return;
 
     setIsSyncing(true);
-    setSyncProgress({ message: '準備匯出……' });
+    setSyncProgress(messageOnlyProgress('準備匯出……'));
     try {
         const result = await window.electronAPI.exportFullBackup({ targetDir, data });
         if (result.success) {
@@ -92,7 +101,7 @@ const SettingsView = () => {
             alert(`匯出失敗：${result.error}`);
         }
     } catch (err) {
-        alert(`匯出時發生錯誤：${err.message}`);
+        alert(`匯出時發生錯誤：${errMessage(err)}`);
     } finally {
         setIsSyncing(false);
         setSyncProgress(null);
@@ -107,7 +116,7 @@ const SettingsView = () => {
     if (!confirm(CONFIRM_BACKUP_RESTORE)) return;
 
     setIsSyncing(true);
-    setSyncProgress({ message: '正在備份目前的資料……' });
+    setSyncProgress(messageOnlyProgress('正在備份目前的資料……'));
     try {
         // 覆蓋前先拍快照；失敗就整個取消，連圖庫也不動
         const snapshot = await snapshotBeforeOverwrite(window.electronAPI, { reason: SNAPSHOT_REASONS.backupRestore, data });
@@ -115,7 +124,7 @@ const SettingsView = () => {
             alert(snapshotFailedMessage(snapshot));
             return;
         }
-        setSyncProgress({ message: '準備還原……' });
+        setSyncProgress(messageOnlyProgress('準備還原……'));
         const result = await window.electronAPI.importFullBackup(backupDir);
         if (result.success) {
             if (result.aborted) {
@@ -132,23 +141,25 @@ const SettingsView = () => {
             alert(`還原失敗：${result.error}\n\n目前的資料沒有變動。`);
         }
     } catch (err) {
-        alert(`還原時發生錯誤：${err.message}`);
+        alert(`還原時發生錯誤：${errMessage(err)}`);
     } finally {
         setIsSyncing(false);
         setSyncProgress(null);
     }
   };
 
-  const handleJsonImportOnly = (e) => {
-    const file = e.target.files[0];
+  const handleJsonImportOnly = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // type="file" 的 input 一定有 files（不是 null）
+    const file = e.target.files![0];
     // 清空選取，取消後再選同一個檔案時才會再觸發
     e.target.value = '';
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = async (ev) => {
-      let imported;
+    reader.onload = async (ev: ProgressEvent<FileReader>) => {
+      let imported: unknown;
       try {
-        imported = JSON.parse(ev.target.result);
+        // onload 的 target 就是 reader；用 readAsText 讀，result 一定是字串
+        imported = JSON.parse(ev.target!.result as string);
       } catch {
         alert('匯入失敗：這個檔案打不開或已損壞，不是 LifeSync 匯出的資料檔。目前的資料沒有變動。');
         return;
@@ -174,7 +185,7 @@ const SettingsView = () => {
 
   // --- 雲端備份處理 ---
 
-  const handleCloudConfigChange = (e) => {
+  const handleCloudConfigChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
     // 重新輸入了這台電腦解不開的密碼：上方「解不開」的提示就不再適用
     if (name === 'password' && value !== '') markSecretReentered('password');
@@ -204,7 +215,7 @@ const SettingsView = () => {
     // 上傳會整份取代雲端上的備份（原本那份另存為舊版），先確認
     if (!confirm(CONFIRM_CLOUD_UPLOAD)) return;
     setIsSyncing(true);
-    setSyncProgress({ message: '正在加密並上傳……' });
+    setSyncProgress(messageOnlyProgress('正在加密並上傳……'));
     try {
       // 上傳的內容不放密碼：下載時一律保留本機的雲端設定，用不到；也少一份可能外流的密碼
       const encrypted = await encryptData(JSON.stringify(stripCloudSecrets(data)), data.cloudConfig.masterPassword);
@@ -219,7 +230,7 @@ const SettingsView = () => {
         alert(`上傳失敗：${result.error}`);
       }
     } catch (err) {
-      alert(`上傳失敗：${err.message}`);
+      alert(`上傳失敗：${errMessage(err)}`);
     } finally {
       setIsSyncing(false);
       setSyncProgress(null);
@@ -235,7 +246,7 @@ const SettingsView = () => {
     if (!window.electronAPI) return;
     if (!confirm(CONFIRM_CLOUD_RESTORE)) return;
     setIsSyncing(true);
-    setSyncProgress({ message: '正在從雲端下載資料……' });
+    setSyncProgress(messageOnlyProgress('正在從雲端下載資料……'));
     try {
       const result = await window.electronAPI.cloudDownload({
         config: data.cloudConfig,
@@ -243,10 +254,10 @@ const SettingsView = () => {
       });
       if (result.success) {
         const decryptedJson = await decryptData(result.data, data.cloudConfig.masterPassword);
-        const imported = JSON.parse(decryptedJson);
+        const imported: unknown = JSON.parse(decryptedJson);
         if (!isImportableData(imported)) throw new Error('雲端上的檔案不是 LifeSync 的資料格式');
         // 下載、解密都成功了，覆蓋前先拍快照；失敗就不覆蓋
-        setSyncProgress({ message: '正在備份目前的資料……' });
+        setSyncProgress(messageOnlyProgress('正在備份目前的資料……'));
         const snapshot = await snapshotBeforeOverwrite(window.electronAPI, { reason: SNAPSHOT_REASONS.cloudRestore, data });
         if (!snapshot.ok) {
           alert(snapshotFailedMessage(snapshot));
@@ -275,7 +286,9 @@ const SettingsView = () => {
     setIsSyncing(true);
     setSyncProgress({ message: '準備上傳圖庫……', current: 0, total: 100 });
     try {
-        const result = await window.electronAPI.cloudSyncGallery({
+        // 原本這裡沒有先判斷 window.electronAPI（其他雲端按鈕都有）：瀏覽器模式下會丟錯、由下面的 catch 顯示錯誤訊息。
+        // 轉換成 TypeScript 不改行為，照原樣保留，待另外修正
+        const result = await window.electronAPI!.cloudSyncGallery({
             config: data.cloudConfig,
             masterPassword: data.cloudConfig.masterPassword
         });
@@ -285,7 +298,7 @@ const SettingsView = () => {
             alert(`圖庫上傳失敗：${result.error}`);
         }
     } catch (err) {
-        alert(`圖庫上傳時發生錯誤：${err.message}`);
+        alert(`圖庫上傳時發生錯誤：${errMessage(err)}`);
     } finally {
         setIsSyncing(false);
         setSyncProgress(null);
@@ -301,7 +314,9 @@ const SettingsView = () => {
     setIsSyncing(true);
     setSyncProgress({ message: '準備下載圖庫……', current: 0, total: 100 });
     try {
-        const result = await window.electronAPI.cloudRestoreGallery({
+        // 原本這裡沒有先判斷 window.electronAPI（其他雲端按鈕都有）：瀏覽器模式下會丟錯、由下面的 catch 顯示錯誤訊息。
+        // 轉換成 TypeScript 不改行為，照原樣保留，待另外修正
+        const result = await window.electronAPI!.cloudRestoreGallery({
             config: data.cloudConfig,
             masterPassword: data.cloudConfig.masterPassword
         });
@@ -311,7 +326,7 @@ const SettingsView = () => {
             alert(`圖庫下載失敗：${result.error}`);
         }
     } catch (err) {
-        alert(`圖庫下載時發生錯誤：${err.message}`);
+        alert(`圖庫下載時發生錯誤：${errMessage(err)}`);
     } finally {
         setIsSyncing(false);
         setSyncProgress(null);

@@ -6,13 +6,14 @@ import { ITEMS_PER_PAGE } from '../../constants/index.tsx';
 import { clampPage, formatPageRange, getTotalPages } from '../../domain/pagination.ts';
 import { formatFlowTime, pomodoroWorkSeconds } from '../../utils/index.ts';
 import { formatDisplayDate, formatDisplayTime } from '../../utils/displayFormat.ts';
-import PomodoroSummary from './PomodoroSummary';
+import PomodoroSummary from './PomodoroSummary.tsx';
+import type { PomodoroRecord } from '../../types/data.ts';
 
 const PomodoroHistory = () => {
   const { data, updateData, deletePomodoroRecord } = useAppData();
-  const [viewingStats, setViewingStats] = useState(null);
+  const [viewingStats, setViewingStats] = useState<PomodoroRecord | null>(null);
   const [currentPageState, setCurrentPage] = useState(1);
-  const [selectedIds, setSelectedIds] = useState([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   // 刪除紀錄使目前頁碼超過總頁數時，自動顯示最後一頁（在 render 時計算，不在 effect 裡改 state）
   const totalPages = getTotalPages(data.pomodoroHistory.length, ITEMS_PER_PAGE);
   const currentPage = clampPage(currentPageState, data.pomodoroHistory.length, ITEMS_PER_PAGE);
@@ -93,7 +94,7 @@ const PomodoroHistory = () => {
                                   }`}
                                 >
                                   {t.title}
-                                  {t.type === 'infinite' && t.sessionCount > 0 && (
+                                  {t.type === 'infinite' && (t.sessionCount ?? 0) > 0 && (
                                     <span className="ml-1 opacity-70">×{t.sessionCount}</span>
                                   )}
                                 </span>

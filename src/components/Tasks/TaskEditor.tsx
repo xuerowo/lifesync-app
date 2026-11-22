@@ -6,17 +6,30 @@ import { useAppData } from '../../contexts/useAppData.ts';
 import { INDICATORS, WEEK_DAYS } from '../../constants/index.tsx';
 import { firstGoalId, toggleWeekDay, toNonNegativeInt, validateSubTaskTimes } from '../../domain/inputs.ts';
 import { topSortOrder } from '../../shared/taskOrder.ts';
+import type { Dispatch, SetStateAction } from 'react';
+import type { IndicatorId, MajorTask, SubTask, TaskType } from '../../types/data.ts';
+import type { EditingTask } from '../../types/ui.ts';
 
-const TaskEditor = ({ editingTask, setEditingTask }) => {
+interface TaskEditorProps {
+  editingTask: EditingTask;
+  setEditingTask: Dispatch<SetStateAction<EditingTask | null>>;
+}
+
+const TASK_TYPES: TaskType[] = ['precise', 'daily', 'weekly', 'infinite'];
+
+const TaskEditor = ({ editingTask, setEditingTask }: TaskEditorProps) => {
   const { data, updateData, reorderPriorityTasks } = useAppData();
   const { type, item } = editingTask;
-  const [localItem, setLocalItem] = useState(item);
+  const [localItem, setLocalItem] = useState<MajorTask | SubTask>(item);
   const isMajor = type === 'major';
+  // 打開後只會改同一筆的欄位，不會在計畫和任務之間切換：isMajor 為 true 時 localItem 一定是計畫，否則一定是任務
+  const majorItem = localItem as MajorTask;
+  const subItem = localItem as SubTask;
   // 從日曆打開的已結束任務（已完成或已停止）：不能改類型、不能設優先。
   // 改類型會讓「已停止」和「已完成」對調（判斷方式見 domain/tasks.ts 的 isStoppedTask），優先標記存檔時本來就不會改
   const isArchivedTask = !isMajor && !data.subTasks.some(t => t.id === item.id) && data.archivedSubTasks.some(t => t.id === item.id);
   // 原本就是優先任務才有順位；剛勾選的會排在最後（存檔時才編號）
-  const existingPriorityOrder = item.isPriority ? item.priorityOrder : 0;
+  const existingPriorityOrder = editingTask.type === 'sub' && editingTask.item.isPriority ? editingTask.item.priorityOrder : 0;
 
   const handleSave = () => {
     if (!localItem.title?.trim()) {
@@ -24,7 +37,7 @@ const TaskEditor = ({ editingTask, setEditingTask }) => {
       return;
     }
     if (!isMajor) {
-      const timeError = validateSubTaskTimes(localItem);
+      const timeError = validateSubTaskTimes(subItem);
       if (timeError) {
         alert(timeError);
         return;
@@ -32,40 +45,40 @@ const TaskEditor = ({ editingTask, setEditingTask }) => {
     }
     updateData(prev => {
       if (isMajor) {
-          const exists = prev.majorTasks.some(t => t.id === localItem.id);
-          if (exists) return { ...prev, majorTasks: prev.majorTasks.map(t => t.id === localItem.id ? localItem : t) };
+          const exists = prev.majorTasks.some(t => t.id === majorItem.id);
+          if (exists) return { ...prev, majorTasks: prev.majorTasks.map(t => t.id === majorItem.id ? majorItem : t) };
           // 新的計畫放在最上面
-          return { ...prev, majorTasks: [...prev.majorTasks, { ...localItem, sortOrder: topSortOrder(prev.majorTasks) }] };
+          return { ...prev, majorTasks: [...prev.majorTasks, { ...majorItem, sortOrder: topSortOrder(prev.majorTasks) }] };
       } else {
           let newSubTasks = [...prev.subTasks];
-          const originalTask = prev.subTasks.find(t => t.id === localItem.id);
+          const originalTask = prev.subTasks.find(t => t.id === subItem.id);
 
           // 從日曆打開的已完成任務：更新原本已完成的那一筆，不要再新增一份到進行中。
           // 已完成的任務不參與優先順序，保留它原本的優先欄位
-          const archivedOriginal = !originalTask && prev.archivedSubTasks.find(t => t.id === localItem.id);
+          const archivedOriginal = !originalTask && prev.archivedSubTasks.find(t => t.id === subItem.id);
           if (archivedOriginal) {
-            const updated = { ...localItem, type: archivedOriginal.type, isPriority: archivedOriginal.isPriority, priorityOrder: archivedOriginal.priorityOrder };
-            return { ...prev, archivedSubTasks: prev.archivedSubTasks.map(t => t.id === localItem.id ? updated : t) };
+            const updated = { ...subItem, type: archivedOriginal.type, isPriority: archivedOriginal.isPriority, priorityOrder: archivedOriginal.priorityOrder };
+            return { ...prev, archivedSubTasks: prev.archivedSubTasks.map(t => t.id === subItem.id ? updated : t) };
           }
 
-          if (originalTask && originalTask.isPriority && !localItem.isPriority) {
-               const tempTasks = newSubTasks.map(t => t.id === localItem.id ? localItem : t);
+          if (originalTask && originalTask.isPriority && !subItem.isPriority) {
+               const tempTasks = newSubTasks.map(t => t.id === subItem.id ? subItem : t);
                newSubTasks = reorderPriorityTasks(tempTasks);
-          } else if (originalTask && !originalTask.isPriority && localItem.isPriority) {
+          } else if (originalTask && !originalTask.isPriority && subItem.isPriority) {
                const maxOrder = Math.max(0, ...prev.subTasks.filter(t => t.isPriority).map(t => t.priorityOrder || 0));
-               const updatedItem = { ...localItem, priorityOrder: maxOrder + 1 };
-               newSubTasks = newSubTasks.map(t => t.id === localItem.id ? updatedItem : t);
+               const updatedItem = { ...subItem, priorityOrder: maxOrder + 1 };
+               newSubTasks = newSubTasks.map(t => t.id === subItem.id ? updatedItem : t);
           } else if (!originalTask) {
                // 新的任務放在這個計畫的最上面
-               const sortOrder = topSortOrder(prev.subTasks.filter(t => t.majorTaskId === localItem.majorTaskId));
-               if (localItem.isPriority) {
+               const sortOrder = topSortOrder(prev.subTasks.filter(t => t.majorTaskId === subItem.majorTaskId));
+               if (subItem.isPriority) {
                    const maxOrder = Math.max(0, ...prev.subTasks.filter(t => t.isPriority).map(t => t.priorityOrder || 0));
-                   newSubTasks = [...newSubTasks, { ...localItem, sortOrder, priorityOrder: maxOrder + 1 }];
+                   newSubTasks = [...newSubTasks, { ...subItem, sortOrder, priorityOrder: maxOrder + 1 }];
                } else {
-                   newSubTasks = [...newSubTasks, { ...localItem, sortOrder }];
+                   newSubTasks = [...newSubTasks, { ...subItem, sortOrder }];
                }
           } else {
-               newSubTasks = newSubTasks.map(t => t.id === localItem.id ? localItem : t);
+               newSubTasks = newSubTasks.map(t => t.id === subItem.id ? subItem : t);
           }
 
           return { ...prev, subTasks: newSubTasks };
@@ -104,24 +117,24 @@ const TaskEditor = ({ editingTask, setEditingTask }) => {
           {isMajor ? (
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-6">
-                <div><label className="block text-[10px] font-black text-sky-600 mb-2 tracking-widest uppercase">維度</label><select className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none appearance-none cursor-pointer" value={localItem.indicatorId} onChange={e => setLocalItem({ ...localItem, indicatorId: e.target.value, goalId: firstGoalId(data.goals, e.target.value) })}>{INDICATORS.map(ind => <option key={ind.id} value={ind.id}>{ind.name}</option>)}</select></div>
-                <div><label className="block text-[10px] font-black text-sky-600 mb-2 tracking-widest uppercase">目標</label><select className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none appearance-none cursor-pointer" value={localItem.goalId} onChange={e => setLocalItem({ ...localItem, goalId: e.target.value })}>{data.goals[localItem.indicatorId]?.map(g => <option key={g.id} value={g.id}>{g.title}</option>)}</select></div>
+                <div><label className="block text-[10px] font-black text-sky-600 mb-2 tracking-widest uppercase">維度</label><select className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none appearance-none cursor-pointer" value={majorItem.indicatorId} onChange={e => { const indicatorId = e.target.value as IndicatorId; /* 選項只有 INDICATORS 的 id */ setLocalItem({ ...majorItem, indicatorId, goalId: firstGoalId(data.goals, indicatorId) }); }}>{INDICATORS.map(ind => <option key={ind.id} value={ind.id}>{ind.name}</option>)}</select></div>
+                <div><label className="block text-[10px] font-black text-sky-600 mb-2 tracking-widest uppercase">目標</label><select className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none appearance-none cursor-pointer" value={majorItem.goalId} onChange={e => setLocalItem({ ...majorItem, goalId: e.target.value })}>{data.goals[majorItem.indicatorId]?.map(g => <option key={g.id} value={g.id}>{g.title}</option>)}</select></div>
               </div>
               <div className="grid grid-cols-2 gap-6">
-                <div><label className="block text-[10px] font-black text-sky-600 mb-2 tracking-widest uppercase">開始日期</label><input type="date" className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none" value={localItem.startDate} onChange={e => setLocalItem({ ...localItem, startDate: e.target.value })} /></div>
-                <div><label className="block text-[10px] font-black text-sky-600 mb-2 tracking-widest uppercase">結束日期</label><input type="date" className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none" value={localItem.endDate} onChange={e => setLocalItem({ ...localItem, endDate: e.target.value })} /></div>
+                <div><label className="block text-[10px] font-black text-sky-600 mb-2 tracking-widest uppercase">開始日期</label><input type="date" className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none" value={majorItem.startDate} onChange={e => setLocalItem({ ...majorItem, startDate: e.target.value })} /></div>
+                <div><label className="block text-[10px] font-black text-sky-600 mb-2 tracking-widest uppercase">結束日期</label><input type="date" className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none" value={majorItem.endDate} onChange={e => setLocalItem({ ...majorItem, endDate: e.target.value })} /></div>
               </div>
             </div>
           ) : (
             <div className="space-y-6">
-              {localItem.type !== 'infinite' && !isArchivedTask && (
+              {subItem.type !== 'infinite' && !isArchivedTask && (
                 <div className="flex items-center gap-4 p-5 bg-white/30 backdrop-blur-md rounded-[28px] border border-white/60 shadow-sm">
                   <div className="relative flex items-center justify-center">
                     <input
                       type="checkbox"
                       id="isPriority"
-                      checked={localItem.isPriority || false}
-                      onChange={e => setLocalItem({ ...localItem, isPriority: e.target.checked })}
+                      checked={subItem.isPriority || false}
+                      onChange={e => setLocalItem({ ...subItem, isPriority: e.target.checked })}
                       className="peer w-6 h-6 rounded-lg border-2 border-white/80 bg-white/20 checked:bg-amber-500 checked:border-amber-400 appearance-none cursor-pointer transition-all"
                     />
                     <Zap className="absolute w-4 h-4 text-white opacity-0 peer-checked:opacity-100 pointer-events-none transition-opacity" />
@@ -130,7 +143,7 @@ const TaskEditor = ({ editingTask, setEditingTask }) => {
                     <label htmlFor="isPriority" className="text-sm font-black text-sky-700 cursor-pointer select-none">設為優先任務</label>
                     <p className="text-[10px] text-sky-400 font-bold">勾選後要先照順序做完優先任務，其他任務（隨時挑戰除外）會暫時鎖住。</p>
                   </div>
-                  {localItem.isPriority && (
+                  {subItem.isPriority && (
                     <div className="ml-auto shrink-0 flex items-center gap-2 bg-amber-50/50 px-3 py-1.5 rounded-xl border border-amber-100">
                       <span className="text-[10px] font-black text-amber-600 whitespace-nowrap">
                         {existingPriorityOrder ? `優先順序第 ${existingPriorityOrder} 名` : '會排在優先順序的最後'}
@@ -141,21 +154,21 @@ const TaskEditor = ({ editingTask, setEditingTask }) => {
               )}
 
               <div className="flex p-1.5 bg-white/30 backdrop-blur-md rounded-[24px] gap-1 relative border border-white/40">
-                {['precise', 'daily', 'weekly', 'infinite'].map(m => (
+                {TASK_TYPES.map(m => (
                   <button
                     key={m}
                     disabled={isArchivedTask}
                     onClick={() => {
                       if (m === 'infinite') {
-                        setLocalItem({ ...localItem, type: m, isPriority: false, noTime: true });
+                        setLocalItem({ ...subItem, type: m, isPriority: false, noTime: true });
                       } else {
-                        setLocalItem({ ...localItem, type: m });
+                        setLocalItem({ ...subItem, type: m });
                       }
                     }}
-                    className={`relative flex-1 py-4 rounded-2xl text-[10px] font-black z-10 transition-colors disabled:cursor-not-allowed ${localItem.type === m ? 'text-sky-800' : isArchivedTask ? 'text-sky-300' : 'text-sky-500 hover:text-sky-700'}`}
+                    className={`relative flex-1 py-4 rounded-2xl text-[10px] font-black z-10 transition-colors disabled:cursor-not-allowed ${subItem.type === m ? 'text-sky-800' : isArchivedTask ? 'text-sky-300' : 'text-sky-500 hover:text-sky-700'}`}
                   >
                     {m === 'precise' ? '一次性任務' : m === 'daily' ? '每日任務' : m === 'weekly' ? '每週任務' : '隨時挑戰'}
-                    {localItem.type === m && (
+                    {subItem.type === m && (
                       <motion.div
                         layoutId="activeTabHighlight"
                         className="absolute inset-0 bg-white/80 rounded-2xl shadow-sm -z-10"
@@ -168,19 +181,19 @@ const TaskEditor = ({ editingTask, setEditingTask }) => {
               {isArchivedTask && (
                 <p className="-mt-4 ml-2 text-[10px] font-bold text-sky-400">這個任務已經結束，不能改類型。</p>
               )}
-              {localItem.type === 'infinite' && (
+              {subItem.type === 'infinite' && (
                 <p className="-mt-4 ml-2 text-[10px] font-bold text-sky-500">不限時間、可以重複完成無限次，不受優先任務限制。</p>
               )}
-              {localItem.type === 'weekly' && (<div className="flex justify-between bg-white/30 p-2 rounded-[24px] border border-white/40">{[0, 1, 2, 3, 4, 5, 6].map(d => <button key={d} onClick={() => setLocalItem({ ...localItem, days: toggleWeekDay(localItem.days, d) })} className={`w-11 h-11 rounded-full text-[10px] font-black transition-all border-2 ${localItem.days.includes(d) ? 'bg-sky-500 text-white border-sky-400 shadow-md scale-110' : 'text-sky-300 border-transparent hover:bg-white/40'}`}>{WEEK_DAYS[d]}</button>)}</div>)}
+              {subItem.type === 'weekly' && (<div className="flex justify-between bg-white/30 p-2 rounded-[24px] border border-white/40">{[0, 1, 2, 3, 4, 5, 6].map(d => <button key={d} onClick={() => setLocalItem({ ...subItem, days: toggleWeekDay(subItem.days, d) })} className={`w-11 h-11 rounded-full text-[10px] font-black transition-all border-2 ${subItem.days!.includes(d) /* 每週任務一定有 days（新任務預設週一到週五）；萬一沒有，和原本一樣丟錯 */ ? 'bg-sky-500 text-white border-sky-400 shadow-md scale-110' : 'text-sky-300 border-transparent hover:bg-white/40'}`}>{WEEK_DAYS[d]}</button>)}</div>)}
               
-              {localItem.type !== 'infinite' && (
+              {subItem.type !== 'infinite' && (
                 <div className="flex items-center gap-4 p-5 bg-white/30 backdrop-blur-md rounded-[28px] border border-white/60 shadow-sm">
                   <div className="relative flex items-center justify-center">
                     <input
                       type="checkbox"
                       id="noTime"
-                      checked={localItem.noTime || false}
-                      onChange={e => setLocalItem({ ...localItem, noTime: e.target.checked })}
+                      checked={subItem.noTime || false}
+                      onChange={e => setLocalItem({ ...subItem, noTime: e.target.checked })}
                       className="peer w-6 h-6 rounded-lg border-2 border-white/80 bg-white/20 checked:bg-sky-500 checked:border-sky-400 appearance-none cursor-pointer transition-all"
                     />
                     <CheckCircle2 className="absolute w-4 h-4 text-white opacity-0 peer-checked:opacity-100 pointer-events-none transition-opacity" />
@@ -189,16 +202,16 @@ const TaskEditor = ({ editingTask, setEditingTask }) => {
                 </div>
               )}
 
-              {localItem.type !== 'infinite' && !localItem.noTime && (
-                localItem.type === 'precise' ? (
+              {subItem.type !== 'infinite' && !subItem.noTime && (
+                subItem.type === 'precise' ? (
                   <div className="grid grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="block text-[10px] font-black text-sky-600 uppercase tracking-widest ml-1">開始時間</label>
                       <input
                         type="datetime-local"
                         className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none"
-                        value={localItem.startDateTime}
-                        onChange={e => setLocalItem({ ...localItem, startDateTime: e.target.value })}
+                        value={subItem.startDateTime}
+                        onChange={e => setLocalItem({ ...subItem, startDateTime: e.target.value })}
                       />
                     </div>
                     <div className="space-y-2">
@@ -206,15 +219,15 @@ const TaskEditor = ({ editingTask, setEditingTask }) => {
                       <input
                         type="datetime-local"
                         className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none"
-                        value={localItem.endDateTime || ''}
-                        onChange={e => setLocalItem({ ...localItem, endDateTime: e.target.value })}
+                        value={subItem.endDateTime || ''}
+                        onChange={e => setLocalItem({ ...subItem, endDateTime: e.target.value })}
                       />
                     </div>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-6">
-                    <div className="space-y-2"><label className="block text-[10px] font-black text-sky-600 uppercase tracking-widest ml-1">開始時間</label><input type="time" className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none" value={localItem.startTime} onChange={e => setLocalItem({ ...localItem, startTime: e.target.value })} /></div>
-                    <div className="space-y-2"><label className="block text-[10px] font-black text-sky-600 uppercase tracking-widest ml-1">結束時間</label><input type="time" className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none" value={localItem.endTime} onChange={e => setLocalItem({ ...localItem, endTime: e.target.value })} /></div>
+                    <div className="space-y-2"><label className="block text-[10px] font-black text-sky-600 uppercase tracking-widest ml-1">開始時間</label><input type="time" className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none" value={subItem.startTime} onChange={e => setLocalItem({ ...subItem, startTime: e.target.value })} /></div>
+                    <div className="space-y-2"><label className="block text-[10px] font-black text-sky-600 uppercase tracking-widest ml-1">結束時間</label><input type="time" className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none" value={subItem.endTime} onChange={e => setLocalItem({ ...subItem, endTime: e.target.value })} /></div>
                   </div>
                 )
               )}
@@ -230,8 +243,8 @@ const TaskEditor = ({ editingTask, setEditingTask }) => {
                     min="0"
                     step="1"
                     className="w-full bg-white/40 backdrop-blur-md p-5 pl-14 rounded-3xl text-xl font-black outline-none border border-white/60 focus:border-sky-500/50 focus:bg-white/60 text-sky-900 transition-all shadow-sm"
-                    value={localItem.rewardTickets ?? 1}
-                    onChange={e => setLocalItem({ ...localItem, rewardTickets: toNonNegativeInt(e.target.value) })}
+                    value={subItem.rewardTickets ?? 1}
+                    onChange={e => setLocalItem({ ...subItem, rewardTickets: toNonNegativeInt(e.target.value) })}
                     placeholder="輸入抽卡券張數"
                   />
                 </div>

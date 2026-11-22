@@ -4,8 +4,15 @@ import { motion } from 'framer-motion';
 import { BookOpen, X, CheckCircle2 } from 'lucide-react';
 import { useAppData } from '../../contexts/useAppData.ts';
 import { DISCARD_NOTE_MESSAGE, hasUnsavedNoteChanges } from '../../domain/confirmations.ts';
+import type { Dispatch, SetStateAction } from 'react';
+import type { EditingNote } from '../../types/ui.ts';
 
-const NoteEditor = ({ editingNote, setEditingNote }) => {
+interface NoteEditorProps {
+  editingNote: EditingNote;
+  setEditingNote: Dispatch<SetStateAction<EditingNote | null>>;
+}
+
+const NoteEditor = ({ editingNote, setEditingNote }: NoteEditorProps) => {
   const { data, updateData } = useAppData();
   const [localItem, setLocalItem] = useState(editingNote);
   const isNew = !data.notes.some(n => n.id === editingNote.id);

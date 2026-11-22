@@ -2,13 +2,20 @@ import React from 'react';
 import { BookOpen, Plus, Edit3, Trash2, Clock, RotateCw, Cloud } from 'lucide-react';
 import { useAppData } from '../../contexts/useAppData.ts';
 import { formatDisplayDateTime } from '../../utils/displayFormat.ts';
+import type { Dispatch, SetStateAction } from 'react';
+import type { EditingNote } from '../../types/ui.ts';
 
-const NoteView = ({ setEditingNote }) => {
+interface NoteViewProps {
+  setEditingNote: Dispatch<SetStateAction<EditingNote | null>>;
+}
+
+const NoteView = ({ setEditingNote }: NoteViewProps) => {
   const { data, updateData } = useAppData();
-  const sortedNotes = [...data.notes].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  // 沒有 updatedAt 的舊筆記照原本把 undefined 傳給 Date（得到無效日期，相減是 NaN）；as string 只是讓型別檢查接受，值不變
+  const sortedNotes = [...data.notes].sort((a, b) => new Date(b.updatedAt as string).getTime() - new Date(a.updatedAt as string).getTime());
 
   const addNote = () => {
-    const newNote = {
+    const newNote: EditingNote = {
       id: crypto.randomUUID(),
       title: '',
       content: '',
@@ -18,7 +25,7 @@ const NoteView = ({ setEditingNote }) => {
     setEditingNote(newNote);
   };
 
-  const deleteNote = (id) => {
+  const deleteNote = (id: string) => {
     if (confirm('確定要刪除這篇筆記嗎？刪除後無法復原。')) {
       updateData(prev => ({ ...prev, notes: prev.notes.filter(n => n.id !== id) }));
     }

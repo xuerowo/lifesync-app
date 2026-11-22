@@ -5,8 +5,17 @@ import { getDateStr, getTodayStr, formatTaskTime } from '../../utils/index.ts';
 import { WEEK_DAYS } from '../../constants/index.tsx';
 import { getCalendarTasksForDay, isDoneOnDate } from '../../domain/calendar.ts';
 import { formatDisplayMonth } from '../../utils/displayFormat.ts';
+import type { Dispatch, SetStateAction } from 'react';
+import type { EditingTask } from '../../types/ui.ts';
 
-const CalendarView = ({ calendarDate, setCalendarDate, setEditingTask }) => {
+interface CalendarViewProps {
+  /** 顯示哪一週（這一天所在的那一週） */
+  calendarDate: Date;
+  setCalendarDate: Dispatch<SetStateAction<Date>>;
+  setEditingTask: Dispatch<SetStateAction<EditingTask | null>>;
+}
+
+const CalendarView = ({ calendarDate, setCalendarDate, setEditingTask }: CalendarViewProps) => {
   const { data } = useAppData();
 
   const weekDays = Array.from({ length: 7 }, (_, i) => {
@@ -16,7 +25,7 @@ const CalendarView = ({ calendarDate, setCalendarDate, setEditingTask }) => {
   });
 
   // 各種時間欄位分別換成本地日期再比較（以前直接切 UTC 字串，台灣凌晨 0～8 點的事會跑到前一天）
-  const getTasksForDay = (day) => getCalendarTasksForDay(data, getDateStr(day), day.getDay(), getTodayStr());
+  const getTasksForDay = (day: Date) => getCalendarTasksForDay(data, getDateStr(day), day.getDay(), getTodayStr());
 
   return (
     <div className="bg-white/40 backdrop-blur-xl rounded-3xl md:rounded-[48px] p-5 md:p-10 border border-white/60 shadow-xl animate-in slide-up">

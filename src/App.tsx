@@ -13,23 +13,23 @@ import { generateTeethPath } from './utils/index.ts';
 
 // Components
 import IpcImage from './components/Shared/IpcImage.tsx';
-import IndicatorsView from './components/Indicators/IndicatorsView';
-import TasksView from './components/Tasks/TasksView';
-import RewardsView from './components/Rewards/RewardsView';
-import MultiRewardReveal from './components/Rewards/MultiRewardReveal';
-import SettingsView from './components/Settings/SettingsView';
-import Pomodoro from './components/Pomodoro/Pomodoro';
+import IndicatorsView from './components/Indicators/IndicatorsView.tsx';
+import TasksView from './components/Tasks/TasksView.tsx';
+import RewardsView from './components/Rewards/RewardsView.tsx';
+import MultiRewardReveal from './components/Rewards/MultiRewardReveal.tsx';
+import SettingsView from './components/Settings/SettingsView.tsx';
+import Pomodoro from './components/Pomodoro/Pomodoro.tsx';
 import RarityBadge from './components/Shared/RarityBadge.tsx';
-import CalendarView from './components/Calendar/CalendarView';
-import NoteView from './components/Note/NoteView';
-import RulesView from './components/Rules/RulesView';
-import TasksHistory from './components/Tasks/TasksHistory';
+import CalendarView from './components/Calendar/CalendarView.tsx';
+import NoteView from './components/Note/NoteView.tsx';
+import RulesView from './components/Rules/RulesView.tsx';
+import TasksHistory from './components/Tasks/TasksHistory.tsx';
 
-import TaskEditor from './components/Tasks/TaskEditor';
-import HistoryEditor from './components/Rewards/HistoryEditor';
-import TaskHistoryEditor from './components/Tasks/TaskHistoryEditor';
-import NoteEditor from './components/Note/NoteEditor';
-import PriorityManager from './components/Tasks/PriorityManager';
+import TaskEditor from './components/Tasks/TaskEditor.tsx';
+import HistoryEditor from './components/Rewards/HistoryEditor.tsx';
+import TaskHistoryEditor from './components/Tasks/TaskHistoryEditor.tsx';
+import NoteEditor from './components/Note/NoteEditor.tsx';
+import PriorityManager from './components/Tasks/PriorityManager.tsx';
 import LoadErrorScreen from './components/Shared/LoadErrorScreen.tsx';
 import NoticeBar from './components/Shared/NoticeBar.tsx';
 import SaveErrorBanner from './components/Shared/SaveErrorBanner.tsx';
@@ -482,7 +482,6 @@ const App = () => {
                   startFocus={pomodoroStartFocus}
                   startBreak={pomodoroStartBreak}
                   enterFlow={pomodoroEnterFlow}
-                  // @ts-expect-error Pomodoro.jsx 還沒換成 TypeScript：awaiting 的預設值是 null，型別被推斷成只能是 null。換成 .tsx 後拿掉這行
                   awaiting={pomodoroAwaiting}
                   silenceAlarm={pomodoroSilenceAlarm}
                   alarmMuted={pomodoroAlarmMuted}

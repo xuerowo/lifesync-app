@@ -3,12 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ListChecks, Plus, ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
 import { useAppData } from '../../contexts/useAppData.ts';
 import { deleteRuleMessage } from '../../domain/confirmations.ts';
+import type { Rule } from '../../types/data.ts';
 
 const RulesView = () => {
   const { data, updateData } = useAppData();
 
   const addRule = () => {
-    const newRule = {
+    const newRule: Rule = {
       id: crypto.randomUUID(),
       content: '',
       createdAt: new Date().toISOString()
@@ -16,14 +17,14 @@ const RulesView = () => {
     updateData(prev => ({ ...prev, rules: [...prev.rules, newRule] }));
   };
 
-  const deleteRule = (id) => {
+  const deleteRule = (id: string) => {
     // 內容是空的準則沒有東西會遺失，直接刪；有內容的先確認
     const message = deleteRuleMessage(data.rules.find(r => r.id === id));
     if (message && !confirm(message)) return;
     updateData(prev => ({ ...prev, rules: prev.rules.filter(r => r.id !== id) }));
   };
 
-  const moveRule = (index, direction) => {
+  const moveRule = (index: number, direction: number) => {
     const newRules = [...data.rules];
     const targetIndex = index + direction;
     if (targetIndex < 0 || targetIndex >= newRules.length) return;

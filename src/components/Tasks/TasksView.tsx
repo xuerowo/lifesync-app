@@ -15,14 +15,46 @@ import {
 } from '../../domain/confirmations.ts';
 import { applySortOrders, reorderSortOrders, sortBySortOrder } from '../../shared/taskOrder.ts';
 import { canStopTask, completionRewardTickets, isStoppedTask } from '../../domain/tasks.ts';
+import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from 'react';
+import type {
+  Active, Announcements, DragEndEvent, DraggableAttributes, Over, ScreenReaderInstructions, UniqueIdentifier
+} from '@dnd-kit/core';
+import type { AnimateLayoutChanges } from '@dnd-kit/sortable';
+import type { ArchivedSubTask, IndicatorId, MajorTask, SubTask } from '../../types/data.ts';
+import type { EditingTask } from '../../types/ui.ts';
+
+/**
+ * 拖曳把手要用的屬性（SortableItem 給、DragHandle 放到按鈕上）。
+ * 最後一段是 dnd-kit 的事件處理函式（DraggableSyntheticListeners，可能是 undefined），名稱不固定，所以只寫成「任意名稱」
+ */
+type DragHandleProps = { ref: (element: HTMLElement | null) => void } & DraggableAttributes & Record<string, unknown>;
+
+interface SortableItemProps {
+  id: string;
+  className?: string;
+  children: (state: { handleProps: DragHandleProps; isDragging: boolean }) => ReactNode;
+}
+
+interface DragHandleComponentProps {
+  handleProps: DragHandleProps;
+  label: string;
+  className?: string;
+}
+
+interface TasksViewProps {
+  setEditingTask: Dispatch<SetStateAction<EditingTask | null>>;
+  setIsPriorityManagerOpen: Dispatch<SetStateAction<boolean>>;
+  /** 勾選完成任務時呼叫（App 會順便發券）；沒傳時只更新資料 */
+  onCompleteSubTask?: (id: string) => void;
+}
 
 // 可以拖曳換位置的一格。拖曳只從「把手」開始（handleProps 給把手按鈕），點卡片其他地方照常操作。
 // 位移用 dnd-kit 的 transform，所以裡面的動畫不要用 framer-motion 的 layout（兩者都改 transform 會互相干擾）。
 // animateLayoutChanges：放開後其他卡片也平順滑到新位置，不會瞬間跳過去。
-const animateAfterDrop = (args) => defaultAnimateLayoutChanges({ ...args, wasDragging: true });
-function SortableItem({ id, className, children }) {
+const animateAfterDrop: AnimateLayoutChanges = (args) => defaultAnimateLayoutChanges({ ...args, wasDragging: true });
+function SortableItem({ id, className, children }: SortableItemProps) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id, animateLayoutChanges: animateAfterDrop });
-  const style = {
+  const style: CSSProperties = {
     transform: CSS.Translate.toString(transform),
     transition,
     position: 'relative',
@@ -36,7 +68,7 @@ function SortableItem({ id, className, children }) {
 }
 
 // 拖曳把手：手機上一直看得到；滑鼠移上去會變成可以抓的手勢
-function DragHandle({ handleProps, label, className = '' }) {
+function DragHandle({ handleProps, label, className = '' }: DragHandleComponentProps) {
   return (
     <button
       type="button"
@@ -51,8 +83,8 @@ function DragHandle({ handleProps, label, className = '' }) {
 }
 
 // 用鍵盤拖曳時，讀螢幕軟體念出來的中文提示（dnd-kit 預設是英文）
-function dragAccessibility(getName) {
-  const name = (item) => (item ? `「${getName(item.id) || '未命名'}」` : '');
+function dragAccessibility(getName: (id: UniqueIdentifier) => string | undefined): { screenReaderInstructions: ScreenReaderInstructions; announcements: Announcements } {
+  const name = (item: Active | Over | null) => (item ? `「${getName(item.id) || '未命名'}」` : '');
   return {
     screenReaderInstructions: { draggable: '按空白鍵或 Enter 抓起，用方向鍵移動，再按一次空白鍵或 Enter 放下，按 Esc 取消。' },
     announcements: {
@@ -72,21 +104,21 @@ function useSortSensors() {
   );
 }
 
-const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask }) => {
+const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask }: TasksViewProps) => {
   const {
     data, updateData, activePriorityTasks, toggleMajorTask, restoreMajorTask,
     completeSubTaskData, revertTaskCompletion, deleteMajorTask, deleteSubTask, stopSubTask, restoreStoppedSubTask
   } = useAppData();
-  const [expandedArchived, setExpandedArchived] = useState({});
-  const [filterIndicator, setFilterIndicator] = useState('all');
+  const [expandedArchived, setExpandedArchived] = useState<Record<string, boolean>>({});
+  const [filterIndicator, setFilterIndicator] = useState<IndicatorId | 'all'>('all');
 
   // 自動追蹤定位計畫
-  const majorTaskRefs = useRef({});
-  const lastInteractedMajorId = useRef(null);
+  const majorTaskRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const lastInteractedMajorId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (lastInteractedMajorId.current && majorTaskRefs.current[lastInteractedMajorId.current]) {
-      const element = majorTaskRefs.current[lastInteractedMajorId.current];
+    const element = lastInteractedMajorId.current && majorTaskRefs.current[lastInteractedMajorId.current];
+    if (element) {
       // 延遲一點點執行，等畫面更新完再捲過去
       setTimeout(() => {
         element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -95,23 +127,23 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
     }
   }, [data.subTasks, data.archivedSubTasks]);
 
-  const addMajorTask = (indicatorId, goalId) => {
-    const newTask = { id: crypto.randomUUID(), indicatorId, goalId, title: '', startDate: getTodayStr(), endDate: getTodayStr(), completed: false, createdAt: new Date().toISOString() };
+  const addMajorTask = (indicatorId: IndicatorId, goalId: string) => {
+    const newTask: MajorTask = { id: crypto.randomUUID(), indicatorId, goalId, title: '', startDate: getTodayStr(), endDate: getTodayStr(), completed: false, createdAt: new Date().toISOString() };
     setEditingTask({ type: 'major', item: newTask });
   };
 
-  const addSubTask = (majorTaskId) => {
+  const addSubTask = (majorTaskId: string) => {
     const major = data.majorTasks.find(t => t.id === majorTaskId);
     if (!major) return;
     const now = new Date();
     const startTime = now.toTimeString().slice(0, 5);
-    const getLocalISO = (d) => {
+    const getLocalISO = (d: Date) => {
       const offset = d.getTimezoneOffset() * 60000;
       return new Date(d.getTime() - offset).toISOString().slice(0, 16);
     };
     const startDateTime = getLocalISO(now);
     const endDateTime = getLocalISO(new Date(now.getTime() + 3600000));
-    const newSub = {
+    const newSub: SubTask = {
       id: crypto.randomUUID(),
       majorTaskId,
       indicatorId: major.indicatorId,
@@ -134,7 +166,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
     lastInteractedMajorId.current = majorTaskId;
   };
 
-  const completeSubTask = (id, majorTaskId) => {
+  const completeSubTask = (id: string, majorTaskId: string) => {
     lastInteractedMajorId.current = majorTaskId;
     if (onCompleteSubTask) {
       onCompleteSubTask(id);
@@ -144,20 +176,20 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
   };
 
   // 會刪資料或扣券的操作，一律先確認；確認文字寫明會刪幾筆紀錄、扣幾張券
-  const confirmRevert = (subId, majorTaskId) => {
+  const confirmRevert = (subId: string, majorTaskId?: string) => {
     if (!confirm(revertCompletionMessage(data, subId))) return;
     if (majorTaskId) lastInteractedMajorId.current = majorTaskId;
     revertTaskCompletion(subId);
   };
 
-  const confirmDeleteSubTask = (subId, majorTaskId) => {
+  const confirmDeleteSubTask = (subId: string, majorTaskId: string) => {
     if (!confirm(deleteSubTaskMessage(data, subId))) return;
     lastInteractedMajorId.current = majorTaskId;
     deleteSubTask(subId);
   };
 
   // 停止重複任務：不刪紀錄、不扣券，只是不再出現在清單（規則見 domain/tasks.ts）
-  const confirmStopSubTask = (sub, majorTaskId) => {
+  const confirmStopSubTask = (sub: SubTask, majorTaskId: string) => {
     const name = sub.title?.trim() ? `「${sub.title.trim()}」` : '這個任務';
     if (!confirm(`確定要停止${name}嗎？停止後不會再出現在清單，已完成的紀錄和抽卡券都會保留。`)) return;
     lastInteractedMajorId.current = majorTaskId;
@@ -165,12 +197,12 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
   };
 
   // 恢復停止的任務：只放回清單，不動紀錄和券，所以不用確認
-  const handleRestoreStopped = (subId, majorTaskId) => {
+  const handleRestoreStopped = (subId: string, majorTaskId: string) => {
     lastInteractedMajorId.current = majorTaskId;
     restoreStoppedSubTask(subId);
   };
 
-  const confirmDeleteMajorTask = (majorTaskId) => {
+  const confirmDeleteMajorTask = (majorTaskId: string) => {
     if (confirm(deleteMajorTaskMessage(data, majorTaskId))) deleteMajorTask(majorTaskId);
   };
 
@@ -204,8 +236,10 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
   // 現在能做的第一優先任務在哪個計畫：計畫不再自動排到最前面，改用醒目的框和標籤標出來
   const topPriorityPlanId = activePriorityTasks[0]?.majorTaskId;
 
+  const filterIds: (IndicatorId | 'all')[] = ['all', ...INDICATORS.map(i => i.id)];
+
   // 拖曳不算「操作某個計畫」：清掉待捲動的目標，免得拖完畫面突然捲走
-  const handlePlanDragEnd = ({ active, over }) => {
+  const handlePlanDragEnd = ({ active, over }: DragEndEvent) => {
     lastInteractedMajorId.current = null;
     if (!over || active.id === over.id) return;
     updateData(prev => {
@@ -214,7 +248,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
     });
   };
 
-  const handleTaskDragEnd = (planId) => ({ active, over }) => {
+  const handleTaskDragEnd = (planId: string) => ({ active, over }: DragEndEvent) => {
     lastInteractedMajorId.current = null;
     if (!over || active.id === over.id) return;
     updateData(prev => {
@@ -235,8 +269,9 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
         
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
           <div className="flex p-1 bg-white/40 backdrop-blur-md rounded-2xl border border-white/60 shadow-sm relative overflow-x-auto no-scrollbar">
-            {['all', ...INDICATORS.map(i => i.id)].map(id => {
-              const name = id === 'all' ? '全部' : INDICATORS.find(i => i.id === id).name;
+            {filterIds.map(id => {
+              // id 來自 INDICATORS 本身，一定找得到
+              const name = id === 'all' ? '全部' : INDICATORS.find(i => i.id === id)!.name;
               const isActive = filterIndicator === id;
               return (
                 <button
@@ -279,7 +314,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
         <SortableItem key={task.id} id={task.id}>
         {({ handleProps: planHandleProps, isDragging: planDragging }) => (
         <motion.div
-          ref={el => majorTaskRefs.current[task.id] = el}
+          ref={el => { majorTaskRefs.current[task.id] = el; }}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className={`bg-white/40 backdrop-blur-2xl rounded-[32px] md:rounded-[48px] p-6 md:p-8 border border-white/60 group transition-shadow relative overflow-hidden h-full ${planDragging ? 'shadow-[0_30px_60px_-10px_rgba(0,0,0,0.2)] ring-2 ring-sky-300' : 'shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] hover:shadow-[0_30px_60px_-10px_rgba(0,0,0,0.1)]'} ${isTopPriorityPlan && !planDragging ? 'ring-2 ring-amber-300' : ''}`}
@@ -308,7 +343,8 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
               {subs.map(sub => {
                 const today = new Date();
                 const currentDay = today.getDay();
-                const isWrongDay = sub.type === 'weekly' && !sub.days.includes(currentDay);
+                // 每週任務建立時一定有 days；萬一沒有，和原本一樣在這裡丟錯
+                const isWrongDay = sub.type === 'weekly' && !sub.days!.includes(currentDay);
                 
                 // 隨時挑戰不受優先任務限制，也不會被日期鎖住
                 const blockingPriority = sub.type !== 'infinite' && activePriorityTasks.length > 0 && activePriorityTasks[0].id !== sub.id
@@ -349,7 +385,8 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                       <>
                         <input
                           type="checkbox"
-                          checked={isTodayCompleted}
+                          // 每日／每週任務還沒完成過時，isTodayCompleted 是 undefined 或 null（不是 false），原本就是這樣；as 只讓型別檢查接受，值不變
+                          checked={isTodayCompleted as boolean}
                           onChange={() => {
                             if (isTodayCompleted) {
                               confirmRevert(sub.id, task.id);
@@ -400,7 +437,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                             </span>
                           );
                         })()}
-                        {(sub.type === 'daily' || sub.type === 'weekly' || sub.type === 'infinite') && sub.completionCount > 0 && (
+                        {(sub.type === 'daily' || sub.type === 'weekly' || sub.type === 'infinite') && (sub.completionCount ?? 0) > 0 && (
                           <>
                             <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 text-[9px] md:text-[10px] font-black leading-none border border-emerald-500/20" title={`已完成 ${sub.completionCount} 次`}>
                               ×{sub.completionCount}
@@ -466,7 +503,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                                 <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-slate-200 text-[8px] md:text-[9px] font-black leading-none">已停止</span>
                               )}
                               <span className="text-[9px] md:text-[10px] font-semibold text-sky-300">{formatTaskTime(sub)}</span>
-                              {canStopTask(sub) && sub.completionCount > 0 && (
+                              {canStopTask(sub) && (sub.completionCount ?? 0) > 0 && (
                                 <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/5 text-emerald-500/60 text-[8px] md:text-[9px] font-black leading-none" title={`已完成 ${sub.completionCount} 次`}>×{sub.completionCount}</span>
                               )}
                             </div>
@@ -507,7 +544,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
           const ind = INDICATORS.find(i => i.id === task.indicatorId);
           const archivedSubs = data.archivedSubTasks.filter(s => s.majorTaskId === task.id);
           const activeSubs = data.subTasks.filter(s => s.majorTaskId === task.id);
-          const allSubs = [...activeSubs, ...archivedSubs];
+          const allSubs: ArchivedSubTask[] = [...activeSubs, ...archivedSubs];
           const goal = data.goals[task.indicatorId]?.find(g => g.id === task.goalId);
           const isExpanded = expandedArchived[task.id];
 
@@ -566,7 +603,7 @@ const TasksView = ({ setEditingTask, setIsPriorityManagerOpen, onCompleteSubTask
                                 {stopped && (
                                   <span className="px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[7px] md:text-[8px] font-black leading-none">已停止</span>
                                 )}
-                                {canStopTask(sub) && sub.completionCount > 0 && (
+                                {canStopTask(sub) && (sub.completionCount ?? 0) > 0 && (
                                   <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-500 text-[7px] md:text-[8px] font-black leading-none">完成 {sub.completionCount} 次</span>
                                 )}
                               </div>

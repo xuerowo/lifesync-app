@@ -4,13 +4,25 @@ import { Sparkles, CheckCircle2, Star, Search, RotateCw } from 'lucide-react';
 import { RARITY_STYLES } from '../../constants/index.tsx';
 import RarityBadge from '../Shared/RarityBadge.tsx';
 import IpcImage from '../Shared/IpcImage.tsx';
+import type { RewardHistoryRecord } from '../../types/data.ts';
 
-const MultiRewardReveal = ({ results, onClaimAll, onCancel, setLightboxImage }) => {
-  const [revealedIndices, setRevealedIndices] = useState([]);
+interface MultiRewardRevealProps {
+  /** 這次十連抽抽到的紀錄 */
+  results: RewardHistoryRecord[];
+  /** 按「全部領取」 */
+  onClaimAll: () => void;
+  /** 按「稍後領取」 */
+  onCancel: () => void;
+  /** 點翻開的圖片獎勵時，放大顯示這張圖 */
+  setLightboxImage: (src: string) => void;
+}
+
+const MultiRewardReveal = ({ results, onClaimAll, onCancel, setLightboxImage }: MultiRewardRevealProps) => {
+  const [revealedIndices, setRevealedIndices] = useState<number[]>([]);
   // 全部翻開與否直接由已翻開的數量算出來，不必另外存一份狀態再用 effect 同步
   const isAllRevealed = revealedIndices.length === results.length;
 
-  const revealOne = (index) => {
+  const revealOne = (index: number) => {
     if (revealedIndices.includes(index)) return;
     setRevealedIndices(prev => [...prev, index]);
   };

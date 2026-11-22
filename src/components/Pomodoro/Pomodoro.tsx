@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import {
   Timer, Settings2, Target, CheckCircle2, ChevronUp, ChevronDown, Play, Square, Pause, FastForward, Trophy, Gift, Infinity as InfinityIcon, Plus, X, RotateCcw, BellOff, BellRing, Coffee
@@ -6,12 +7,68 @@ import {
 import { useAppData } from '../../contexts/useAppData.ts';
 import { formatTime, formatFlowTime, calculatePomodoroStats, pomodoroWorkSeconds } from '../../utils/index.ts';
 import { isPausedByAppClose, pomodoroClock } from '../../domain/pomodoroClock.ts';
-import PomodoroSummary from './PomodoroSummary';
-import PomodoroHistory from './PomodoroHistory';
+import PomodoroSummary from './PomodoroSummary.tsx';
+import PomodoroHistory from './PomodoroHistory.tsx';
 import { completionRewardTickets } from '../../domain/tasks.ts';
 import { addableSessionTasks, nextBreakInfo, normalizePomodoroSettings, POMODORO_RANGES, pomodoroCandidateTasks, pomodoroSettlementTickets, settlePomodoroTickets } from '../../domain/pomodoro.ts';
-import AddSessionTaskPicker from './AddSessionTaskPicker';
+import AddSessionTaskPicker from './AddSessionTaskPicker.tsx';
 import { sortTasksLikePlanList } from '../../shared/taskOrder.ts';
+import type { PomodoroSettings, PomodoroStatus } from '../../domain/pomodoro.ts';
+import type { Awaiting } from '../../domain/pomodoroClock.ts';
+import type { PomodoroAutoAdvance } from '../../hooks/usePomodoroAutoAdvance.ts';
+import type { PomodoroEvent, PomodoroEventType, PomodoroRecord, PomodoroSessionTask, SubTask } from '../../types/data.ts';
+
+/** 番茄鐘畫面的參數。番茄鐘的狀態都放在 App（切換分頁也不會中斷），這裡拿到狀態與對應的 setState */
+interface PomodoroProps {
+  /** 進行中的任務（data.subTasks） */
+  subTasks: SubTask[];
+  /** 完成一個任務；被拒絕時回傳 null，成功時回傳完成前的任務 */
+  onTaskComplete: (taskId: string, options: { recordId?: string }) => SubTask | null;
+  /** 撤銷一次完成；有 recordId 就只撤銷那一筆 */
+  onTaskRevert: (taskId: string, recordId?: string) => void;
+  status: PomodoroStatus;
+  setStatus: Dispatch<SetStateAction<PomodoroStatus>>;
+  settings: PomodoroSettings;
+  setSettings: Dispatch<SetStateAction<PomodoroSettings>>;
+  /** 目前階段還剩幾秒 */
+  timeLeft: number;
+  /** 開始前勾選的目標任務 id（localStorage 讀出來的，內容沒有逐筆檢查） */
+  selectedTaskIds: unknown[];
+  setSelectedTaskIds: Dispatch<SetStateAction<unknown[]>>;
+  sessionTasks: PomodoroSessionTask[];
+  setSessionTasks: Dispatch<SetStateAction<PomodoroSessionTask[]>>;
+  /** 這一輪完成過的任務 id（同一個任務可以出現好幾次；localStorage 讀出來的，內容沒有逐筆檢查） */
+  completedSessionTaskIds: unknown[];
+  setCompletedSessionTaskIds: Dispatch<SetStateAction<unknown[]>>;
+  isPaused: boolean;
+  setIsPaused: Dispatch<SetStateAction<boolean>>;
+  /** 總專注秒數（專注 + 心流），App 從時間軸算出（唯讀） */
+  totalAccumulated: number;
+  /** 目前階段已經過的秒數，App 從時間軸算出（唯讀） */
+  currentSessionDuration: number;
+  /** 完成了幾個番茄 */
+  cycles: number;
+  setCycles: Dispatch<SetStateAction<number>>;
+  showSettlement: boolean;
+  setShowSettlement: Dispatch<SetStateAction<boolean>>;
+  sessionTimeline: PomodoroEvent[];
+  setSessionTimeline: Dispatch<SetStateAction<PomodoroEvent[]>>;
+  showSummary: boolean;
+  setShowSummary: Dispatch<SetStateAction<boolean>>;
+  /** 這一輪結束時的紀錄（總結、結算畫面用） */
+  sessionStats: PomodoroRecord | null;
+  setSessionStats: Dispatch<SetStateAction<PomodoroRecord | null>>;
+  /** 這一輪開始的時間（ISO 字串）；待機時可能是 null */
+  sessionStartTimeRef: RefObject<string | null>;
+  startFocus: PomodoroAutoAdvance['startFocus'];
+  startBreak: PomodoroAutoAdvance['startBreak'];
+  enterFlow: PomodoroAutoAdvance['enterFlow'];
+  /** 時間到、等使用者按「開始休息／開始專注」；沒有在等就是 null */
+  awaiting?: Awaiting | null;
+  silenceAlarm: PomodoroAutoAdvance['silenceAlarm'];
+  alarmMuted?: boolean;
+  setAlarmMuted?: Dispatch<SetStateAction<boolean>>;
+}
 
 const Pomodoro = ({
   subTasks,
@@ -44,13 +101,13 @@ const Pomodoro = ({
   silenceAlarm,
   alarmMuted = false,
   setAlarmMuted,
-}) => {
+}: PomodoroProps) => {
   const { data, updateData, addPomodoroRecord } = useAppData();
 
   const [isAddingTask, setIsAddingTask] = useState(false);
 
   // 設定一律經過整理再存（長休息的值保證是範圍內的整數）
-  const updateSettings = (patch) => setSettings(prev => normalizePomodoroSettings({ ...prev, ...patch }));
+  const updateSettings = (patch: Partial<PomodoroSettings>) => setSettings(prev => normalizePomodoroSettings({ ...prev, ...patch }));
   const longBreakSettings = normalizePomodoroSettings(settings);
 
   // 可選的「這次要做的任務」（成長維度、未完成；規則見 domain/pomodoro.ts，「＋」加入任務也用同一份）
@@ -60,7 +117,7 @@ const Pomodoro = ({
 
   // 「時間到」的自動處理在 App 層（usePomodoroAutoAdvance），這裡不再監聽，避免重複觸發
 
-  const addTimelineEvent = (type, extra = {}) => {
+  const addTimelineEvent = (type: PomodoroEventType, extra: Omit<PomodoroEvent, 'type' | 'time'> = {}) => {
     setSessionTimeline(prev => [...prev, { type, time: new Date().toISOString(), ...extra }]);
   };
 
@@ -74,14 +131,14 @@ const Pomodoro = ({
     sessionStartTimeRef.current = now;
     localStorage.setItem('pomodoroSessionStartTime', now);
     // 確保任務順序與選擇的順序一致
-    const selectedTasks = selectedTaskIds.map(id => subTasks.find(t => t.id === id)).filter(Boolean);
+    const selectedTasks = selectedTaskIds.map(id => subTasks.find(t => t.id === id)).filter((t): t is SubTask => Boolean(t));
     setSessionTasks(selectedTasks);
     setCompletedSessionTaskIds([]);
     setCycles(0);
   };
 
   // 從上一次休息之後累計的專注 + 心流秒數（用「現在」從時間軸算，進入休息時自動歸零）
-  const currentCycleWork = (timeline = sessionTimeline) =>
+  const currentCycleWork = (timeline: PomodoroEvent[] = sessionTimeline) =>
     pomodoroClock({ timeline, nowMs: Date.now() }).cycleWork;
 
   const endFlow = () => {
@@ -103,7 +160,7 @@ const Pomodoro = ({
   const stopTimer = () => {
     if (status === 'idle') return;
     const now = new Date().toISOString();
-    const finalTimeline = [...sessionTimeline, { type: 'end', time: now }];
+    const finalTimeline: PomodoroEvent[] = [...sessionTimeline, { type: 'end', time: now }];
     
     const { focusDuration: focusDur, flowDuration: flowDur, breakDuration: breakDur } = calculatePomodoroStats(finalTimeline);
 
@@ -113,11 +170,14 @@ const Pomodoro = ({
       finalCycles += 1;
     }
 
-    const stats = {
+    // 不是待機時一定有開始時間：從待機開始時（上面的 startFocus）會設定；
+    // 重新開啟程式時 loadPomodoroState 也保證不是待機就有值（沒有存到時用時間軸第一筆的時間）
+    const sessionStartTime = sessionStartTimeRef.current as string;
+    const stats: PomodoroRecord = {
       id: crypto.randomUUID(),
-      startTime: sessionStartTimeRef.current,
+      startTime: sessionStartTime,
       endTime: now,
-      totalDuration: (new Date(now) - new Date(sessionStartTimeRef.current)) / 1000,
+      totalDuration: (new Date(now).getTime() - new Date(sessionStartTime).getTime()) / 1000,
       focusDuration: focusDur,
       flowDuration: flowDur,
       breakDuration: breakDur,
@@ -148,7 +208,7 @@ const Pomodoro = ({
   });
 
   // claim：true 是「領取」，false 是「結束」不領。兩種都要把這次的完成紀錄改成實際給的張數
-  const handleSettlement = ({ claim = false } = {}) => {
+  const handleSettlement = ({ claim = false }: { claim?: boolean } = {}) => {
     updateData(prev => {
       // 用最新的資料重算一次，畫面算好之後才被撤銷的紀錄不會被加券
       const { timeTickets, grants } = pomodoroSettlementTickets({
@@ -182,10 +242,10 @@ const Pomodoro = ({
   const handleLottery = () => handleSettlement({ claim: true });
 
   // 這個任務在這次番茄鐘裡最後一筆完成事件（撤銷時要撤的就是它）
-  const lastCompletionEvent = (taskId) =>
+  const lastCompletionEvent = (taskId: string) =>
     [...sessionTimeline].reverse().find(e => e.type === 'task_complete' && e.taskId === taskId);
 
-  const removeLastCompletionEvent = (taskId) => {
+  const removeLastCompletionEvent = (taskId: string) => {
     setSessionTimeline(prev => {
       const lastIdx = [...prev].reverse().findIndex(e => e.type === 'task_complete' && e.taskId === taskId);
       if (lastIdx === -1) return prev;
@@ -194,7 +254,7 @@ const Pomodoro = ({
     });
   };
 
-  const handleSessionTaskComplete = (taskId) => {
+  const handleSessionTaskComplete = (taskId: string) => {
     const task = sessionTasks.find(t => t.id === taskId);
     if (!task) return;
 
@@ -228,7 +288,7 @@ const Pomodoro = ({
     }
   };
 
-  const handleSessionTaskRevert = (taskId) => {
+  const handleSessionTaskRevert = (taskId: string) => {
     const task = sessionTasks.find(t => t.id === taskId);
     if (!task || task.type !== 'infinite') return;
     
@@ -269,7 +329,7 @@ const Pomodoro = ({
     }
   };
 
-  const removeSessionTask = (taskId) => {
+  const removeSessionTask = (taskId: string) => {
     setSessionTasks(prev => prev.filter(t => t.id !== taskId));
     setSelectedTaskIds(prev => prev.filter(id => id !== taskId));
     if (completedSessionTaskIds.includes(taskId)) {
@@ -277,7 +337,7 @@ const Pomodoro = ({
     }
   };
 
-  const addSessionTask = (task) => {
+  const addSessionTask = (task: SubTask) => {
     if (!sessionTasks.find(t => t.id === task.id)) {
       const newTasks = [...sessionTasks, task];
       setSessionTasks(newTasks);

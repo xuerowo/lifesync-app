@@ -4,15 +4,28 @@ import { motion } from 'framer-motion';
 import { Trophy, Clock, CheckCircle2, Zap, Timer, X, Calendar, ArrowRight, Sparkles, Pause, Play, Coffee, Flag, Target, BellRing } from 'lucide-react';
 import { formatFlowTime, calculatePomodoroStats, pomodoroWorkSeconds } from '../../utils/index.ts';
 import { formatDisplayTime } from '../../utils/displayFormat.ts';
+import type { PomodoroEvent, PomodoroEventType, PomodoroRecord } from '../../types/data.ts';
 
-const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
+interface PomodoroSummaryProps {
+  /** 要顯示的一輪番茄鐘紀錄；沒有時不顯示 */
+  stats: PomodoroRecord | null;
+  /** 有傳才顯示「下一步」（剛結束一輪時，進入結算畫面） */
+  onConfirm?: () => void;
+  /** 有傳才顯示右上角的 X（點背景也會呼叫） */
+  onClose?: () => void;
+}
+
+/** 時間分配圖下方的時間標籤：開頭、結尾（edge），以及中間的階段事件 */
+type TimeLabel = Pick<PomodoroEvent, 'time'> & { type: PomodoroEventType | 'edge' };
+
+const PomodoroSummary = ({ stats, onConfirm, onClose }: PomodoroSummaryProps) => {
   // hooks 必須在任何條件 return 之前呼叫，所以先用 ?. 取值，沒有 stats 時等 hooks 跑完才 return
   const startTime = stats?.startTime;
-  const endTime = stats?.endTime;
   const totalDuration = stats?.totalDuration;
   const timeline = stats?.timeline;
-  const tasks = stats?.tasks;
 
+  // 下面兩個 useMemo 的回呼只有在有 stats 時才會處理到資料：沒有 stats 時 timeline 是 undefined，
+  // calculatePomodoroStats 回傳空的 segments、taskMarkers 也是空陣列，所以回呼裡的 totalDuration、startTime 一定有值（用 !）
   const { segments: statsSegments } = useMemo(() => {
     return calculatePomodoroStats(timeline);
   }, [timeline]);
@@ -30,7 +43,7 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
         else if (seg.mode === 'await') color = 'bg-amber-300';
       }
       return {
-        width: (seg.duration / totalDuration) * 100,
+        width: (seg.duration / totalDuration!) * 100,
         color,
         isPaused: seg.isPaused
       };
@@ -42,11 +55,12 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
       .filter(e => e.type === 'task_complete')
       .map(e => ({
         ...e,
-        left: ((new Date(e.time) - new Date(startTime)) / (totalDuration * 1000)) * 100
+        left: ((new Date(e.time).getTime() - new Date(startTime!).getTime()) / (totalDuration! * 1000)) * 100
       }));
   }, [timeline, startTime, totalDuration]);
 
   if (!stats) return null;
+  // 以下（畫面）一定有 stats，直接讀 stats 的欄位（和上面的 startTime、timeline 等是同一個值）
 
   return createPortal(
     <div style={{ zIndex: 9999 }} className="fixed inset-0 flex items-center justify-center p-4">
@@ -85,18 +99,18 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
             <div className="bg-sky-50/50 p-6 rounded-[32px] border border-sky-100 text-center">
               <span className="text-[10px] font-black text-sky-600 uppercase tracking-widest block mb-2">全程時間</span>
               {/* 和旁邊的專注時間用同一種寫法（分:秒），方便比較 */}
-              <p className="text-3xl font-black text-sky-800 font-mono">{formatFlowTime(Math.round(totalDuration || 0))}</p>
+              <p className="text-3xl font-black text-sky-800 font-mono">{formatFlowTime(Math.round(stats.totalDuration || 0))}</p>
             </div>
             <div className="bg-indigo-50/50 p-6 rounded-[32px] border border-indigo-100 text-center">
               <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest block mb-2">專注時間（含心流）</span>
               <p className="text-3xl font-black text-indigo-800 font-mono">
                 {/* 和結算畫面、抽卡券用同一個數字 */}
-                {formatFlowTime(pomodoroWorkSeconds(timeline))}
+                {formatFlowTime(pomodoroWorkSeconds(stats.timeline))}
               </p>
             </div>
             <div className="bg-emerald-50/50 p-6 rounded-[32px] border border-emerald-100 text-center">
               <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest block mb-2">完成任務</span>
-              <p className="text-3xl font-black text-sky-800 font-mono">{tasks.filter(t => t.isCompleted).length}</p>
+              <p className="text-3xl font-black text-sky-800 font-mono">{stats.tasks.filter(t => t.isCompleted).length}</p>
             </div>
           </div>
 
@@ -145,14 +159,14 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
               {/* Unified Bottom Markers (Time Labels + Task Icons) */}
               <div className="absolute top-0 left-8 right-8 h-full pointer-events-none">
                 {/* Time Labels */}
-                {[
-                  { time: startTime, type: 'edge' },
-                  ...timeline.filter((e, idx) => idx > 0 && ['focus_start', 'flow_start', 'break_start', 'pause_start', 'pause_end', 'await_start'].includes(e.type)),
-                  { time: endTime, type: 'edge' }
-                ].map((e, i) => {
+                {([
+                  { time: stats.startTime, type: 'edge' },
+                  ...stats.timeline.filter((e, idx) => idx > 0 && ['focus_start', 'flow_start', 'break_start', 'pause_start', 'pause_end', 'await_start'].includes(e.type)),
+                  { time: stats.endTime, type: 'edge' }
+                ] satisfies TimeLabel[]).map((e, i) => {
                   const left = e.type === 'edge' && i === 0 ? 0 :
                                e.type === 'edge' ? 100 :
-                               ((new Date(e.time) - new Date(startTime)) / (totalDuration * 1000)) * 100;
+                               ((new Date(e.time).getTime() - new Date(stats.startTime).getTime()) / (stats.totalDuration * 1000)) * 100;
                   
                   if (left < 0 || left > 100) return null;
 
@@ -245,18 +259,18 @@ const PomodoroSummary = ({ stats, onConfirm, onClose }) => {
               <CheckCircle2 className="w-5 h-5 text-emerald-500" /> 任務清單
             </h3>
             <div className="grid grid-cols-1 gap-2">
-              {tasks.map(task => (
+              {stats.tasks.map(task => (
                 <div key={task.id} className={`flex items-center gap-3 p-4 rounded-2xl border ${task.isCompleted ? 'bg-emerald-50/30 border-emerald-100' : 'bg-slate-50/50 border-slate-100 opacity-60'}`}>
                   {task.isCompleted ? <CheckCircle2 className="w-5 h-5 text-emerald-500" /> : <div className="w-5 h-5 rounded-full border-2 border-slate-200" />}
                   <span className={`font-bold text-sm ${task.isCompleted ? 'text-emerald-900' : 'text-slate-500'}`}>
                     {task.title}
-                    {task.type === 'infinite' && task.sessionCount > 0 && (
+                    {task.type === 'infinite' && (task.sessionCount ?? 0) > 0 && (
                       <span className="ml-2 text-[10px] bg-emerald-500/10 text-emerald-600 px-1.5 py-0.5 rounded-md border border-emerald-500/20">×{task.sessionCount}</span>
                     )}
                   </span>
                   {task.isCompleted && (
                     <span className="ml-auto text-[10px] font-black text-emerald-400">
-                      {formatDisplayTime(timeline.filter(e => e.type === 'task_complete' && e.taskId === task.id).pop()?.time)}
+                      {formatDisplayTime(stats.timeline.filter(e => e.type === 'task_complete' && e.taskId === task.id).pop()?.time)}
                     </span>
                   )}
                 </div>

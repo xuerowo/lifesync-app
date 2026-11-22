@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import type { ReactElement } from 'react';
 import { motion } from 'framer-motion';
 import IpcImage from '../Shared/IpcImage.tsx';
 import { Gift, Percent, CheckCircle2, Zap, ImageIcon, Search, ChevronDown, Plus, BarChart3, Edit3, Trash2, ChevronLeft, ChevronRight, Sprout, Heart, Smile, Trophy, RotateCw, Star, ArrowUp, ArrowDown, Sparkles, History, Tag, Layers } from 'lucide-react';
@@ -7,23 +8,43 @@ import { useLottery } from '../../hooks/useLottery.ts';
 import { RARITY_STYLES, RARITY_NAMES, ITEMS_PER_PAGE } from '../../constants/index.tsx';
 import RarityBadge from '../Shared/RarityBadge.tsx';
 import { deleteAchievementMessage } from '../../domain/confirmations.ts';
-import { getPrizeSortName } from '../../domain/lottery.ts';
+import { RARITIES, getPrizeSortName } from '../../domain/lottery.ts';
 import { clampPage, formatPageRange, getTotalPages } from '../../domain/pagination.ts';
 import { toNonNegativeInt, toNonNegativeNumber } from '../../domain/inputs.ts';
-import AchievementConditionInput from './AchievementConditionInput';
+import AchievementConditionInput from './AchievementConditionInput.tsx';
 import { focusCardTextField } from '../../utils/cardFocus.ts';
 import { formatDisplayDate, formatDisplayTime } from '../../utils/displayFormat.ts';
+import type { Achievement, AchievementCategory, ImagePoolPrize, Rarity, RewardHistoryRecord, TextPrize } from '../../types/data.ts';
+import type { ScanFolderResult } from '../../types/electronApi.ts';
+import type { EditingRewardHistory, RewardStage, RewardToShow } from '../../types/ui.ts';
+
+/** 成就區的一個類別（總成就、各維度） */
+interface AchievementCategoryTab {
+  id: AchievementCategory;
+  name: string;
+  icon: ReactElement;
+  /** 圖示底色（Tailwind 漸層） */
+  color: string;
+}
 
 // 刪除抽卡紀錄的確認文字：抽卡券不會退回；還沒領取的會從「待領取」一起消失
-const deleteRewardRecordsMessage = (records) => {
+const deleteRewardRecordsMessage = (records: readonly RewardHistoryRecord[]) => {
   const head = records.length === 1 ? '確定要刪除這筆抽卡紀錄嗎？' : `確定要刪除選取的 ${records.length} 筆抽卡紀錄嗎？`;
   const hasUnclaimed = records.some(r => r && !r.claimed);
   return `${head}\n抽卡券不會退回${hasUnclaimed ? '；還沒領取的獎勵也會一起消失' : ''}。刪除後無法復原。`;
 };
 
-const EditableContent = ({ initialValue, onSave, className, placeholder }) => {
+interface EditableContentProps {
+  initialValue: string;
+  /** 離開欄位、而且內容有改時呼叫 */
+  onSave: (value: string) => void;
+  className?: string;
+  placeholder?: string;
+}
+
+const EditableContent = ({ initialValue, onSave, className, placeholder }: EditableContentProps) => {
   const [localValue, setLocalValue] = useState(initialValue);
-  const textareaRef = useRef(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     setLocalValue(initialValue);
@@ -55,6 +76,23 @@ const EditableContent = ({ initialValue, onSave, className, placeholder }) => {
   );
 };
 
+interface RewardsViewProps {
+  /** 目前的分頁：'lottery' 抽卡大廳、'config' 卡池設定、'pending' 待領取、'history' 抽卡紀錄、'achievements' 成就區 */
+  rewardSubTab: string;
+  setRewardSubTab: (tab: string) => void;
+  /** 開啟抽卡紀錄的編輯視窗（補登時傳沒有 id 的新紀錄） */
+  setEditingHistory: (history: EditingRewardHistory) => void;
+  /** 開啟抽卡結果畫面 */
+  setRewardToShow: (reward: RewardToShow) => void;
+  setRewardStage: (stage: RewardStage) => void;
+  /** 正在掃描資料夾（加入卡池的按鈕顯示「掃描中」） */
+  isScanning: boolean;
+  setIsScanning: (scanning: boolean) => void;
+  /** 圖庫預覽要不要模糊 */
+  blurImages: boolean;
+  setBlurImages: (blur: boolean) => void;
+}
+
 const RewardsView = ({
   rewardSubTab,
   setRewardSubTab,
@@ -65,28 +103,30 @@ const RewardsView = ({
   setIsScanning,
   blurImages,
   setBlurImages
-}) => {
+}: RewardsViewProps) => {
   const { data, updateData, getIndicatorStats, consumeLotteryTickets } = useAppData();
   const { performLottery } = useLottery();
   
-  const [expandedImagePools, setExpandedImagePools] = useState({});
+  const [expandedImagePools, setExpandedImagePools] = useState<Record<string, boolean>>({});
   const [rewardHistoryPageState, setRewardHistoryPage] = useState(1);
   // 刪除紀錄使目前頁碼超過總頁數時，自動顯示最後一頁（在 render 時計算，不在 effect 裡改 state）
   const rewardHistoryTotalPages = getTotalPages(data.rewardHistory.length, ITEMS_PER_PAGE);
   const rewardHistoryPage = clampPage(rewardHistoryPageState, data.rewardHistory.length, ITEMS_PER_PAGE);
-  const [selectedHistoryIds, setSelectedHistoryIds] = useState([]);
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([]);
 
-  const scanRewardFolder = async (folderPath, targetRarity = 'R') => {
+  const scanRewardFolder = async (folderPath: string, targetRarity: Rarity = 'R') => {
     if (!folderPath || !folderPath.trim()) { alert('請輸入資料夾路徑'); return; }
     setIsScanning(true);
     try {
-      let result;
+      let result: ScanFolderResult;
       if (window.electronAPI) {
         result = await window.electronAPI.scanFolder(folderPath.trim());
       } else {
         const response = await fetch('/api/rewards/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folderPath: folderPath.trim() }) });
-        result = await response.json();
-        if (!response.ok) throw new Error(result.error);
+        const body: unknown = await response.json();
+        // 和原本的 JS 一樣不檢查回應的格式：server.ts 失敗（非 2xx）時回 { error }，成功時回 ScanFolderResult 的成功格式
+        if (!response.ok) throw new Error((body as { error?: string }).error);
+        result = body as ScanFolderResult;
       }
 
       if (result.success) {
@@ -117,7 +157,7 @@ const RewardsView = ({
           }
         }
 
-        const imagePoolPrize = { id: crypto.randomUUID(), type: 'image-pool', content: finalImages, folderPath: folderPath.trim() };
+        const imagePoolPrize: ImagePoolPrize = { id: crypto.randomUUID(), type: 'image-pool', content: finalImages, folderPath: folderPath.trim() };
         updateData(prev => ({ ...prev, rewardFolderPath: folderPath.trim(), lotteryPrizes: { ...prev.lotteryPrizes, [targetRarity]: [...prev.lotteryPrizes[targetRarity], imagePoolPrize] } }));
         if (failedCount > 0) {
           alert(`已加入 ${targetRarity} 級卡池，但有部分圖片複製失敗：成功 ${finalImages.length} 張，失敗 ${failedCount} 張。`);
@@ -125,10 +165,13 @@ const RewardsView = ({
           alert(`已把 ${finalImages.length} 張圖片加入 ${targetRarity} 級卡池。`);
         }
       } else { alert(`掃描失敗：${result.error}`); }
-    } catch (error) { alert(`掃描失敗：${error.message}`); } finally { setIsScanning(false); }
+    } catch (error) {
+      // 這裡丟出來的都是 Error（fetch、JSON 解析、上面自己丟的、主程序呼叫失敗），as 只是型別上的說法
+      alert(`掃描失敗：${(error as Error).message}`);
+    } finally { setIsScanning(false); }
   };
 
-  const claimAchievementReward = (achievement) => {
+  const claimAchievementReward = (achievement: Achievement) => {
     if (achievement.claimed) return;
     const currentCount = getIndicatorStats(achievement.type);
     if (currentCount < achievement.condition) {
@@ -141,7 +184,7 @@ const RewardsView = ({
     }));
   };
 
-  const handleDraw = (count) => {
+  const handleDraw = (count: number) => {
     const cost = count === 10 ? 9 : count;
     // 與 consumeLotteryTickets 相同的判斷，先確認券夠不夠
     if (data.lotteryTickets < cost) {
@@ -150,7 +193,7 @@ const RewardsView = ({
     }
 
     // 先抽、確認抽得到，再扣券
-    const results = [];
+    const results: RewardHistoryRecord[] = [];
     for (let i = 0; i < count; i++) {
       const result = performLottery();
       if (result) {
@@ -214,7 +257,8 @@ const RewardsView = ({
                   <span className={`relative ${rewardSubTab === tab.id ? 'after:absolute after:-bottom-1 after:left-0 after:w-full after:h-1 after:bg-sky-500 after:rounded-full' : ''}`}>
                     {tab.name}
                   </span>
-                  {tab.count > 0 && (
+                  {/* 沒有 count 的分頁（undefined）和原本一樣不顯示數字 */}
+                  {(tab.count ?? 0) > 0 && (
                     <motion.span
                       initial={{ scale: 0.5, opacity: 0, x: 10 }}
                       animate={{ scale: 1, opacity: 1, x: 0 }}
@@ -229,7 +273,7 @@ const RewardsView = ({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {['UR', 'SSR', 'SR', 'R', 'N'].map(r => (
+          {RARITIES.map(r => (
             <div key={r} title={`${r} 卡池裡有 ${data.lotteryPrizes[r].length} 個獎品`} className={`px-2 py-1 md:px-3 md:py-1.5 rounded-xl md:rounded-2xl bg-white/60 backdrop-blur-sm border-2 ${RARITY_STYLES[r].border} flex items-center gap-1.5 md:gap-2 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 md:hover:-translate-y-1.5 hover:scale-105`}>
               <RarityBadge rarity={r} size="xs" />
               <span className={`text-[10px] md:text-xs font-black ${RARITY_STYLES[r].color}`}>{data.lotteryPrizes[r].length}</span>
@@ -336,7 +380,7 @@ const RewardsView = ({
               <div className="h-16 w-full bg-gray-900/5 rounded-[2rem] p-1.5 mb-4 shadow-inner border border-white/60 flex overflow-hidden">
                 <div className="flex-grow flex rounded-[1.6rem] overflow-hidden shadow-2xl relative">
                   <div className="absolute inset-0 z-10 pointer-events-none bg-gradient-to-b from-white/30 via-white/5 to-black/10" />
-                  {['UR', 'SSR', 'SR', 'R', 'N'].map(r => {
+                  {RARITIES.map(r => {
                     const style = RARITY_STYLES[r];
                     const prob = data.lotteryProbability[r];
                     if (prob <= 0) return null;
@@ -345,21 +389,21 @@ const RewardsView = ({
                 </div>
               </div>
               <p className="text-xs font-bold text-sky-500 mb-6">
-                稀有度由低到高：{['N', 'R', 'SR', 'SSR', 'UR'].map(r => `${r} ${RARITY_NAMES[r]}`).join('、')}
+                稀有度由低到高：{(['N', 'R', 'SR', 'SSR', 'UR'] satisfies Rarity[]).map(r => `${r} ${RARITY_NAMES[r]}`).join('、')}
               </p>
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-4">
-                {['UR', 'SSR', 'SR', 'R', 'N'].map(r => (
+                {RARITIES.map(r => (
                   <div key={r} className={`relative group p-4 rounded-3xl border-2 transition-all ${RARITY_STYLES[r].lightBg} ${RARITY_STYLES[r].border} hover:bg-white`}><div className="flex justify-between items-start mb-2"><span className={`text-xs font-black ${RARITY_STYLES[r].color}`}>{r}</span>{RARITY_STYLES[r].icon}</div><div className="flex items-baseline gap-1"><input type="number" min="0" aria-label={`${r}（${RARITY_NAMES[r]}）的機率`} value={data.lotteryProbability[r]} onChange={(e) => updateData(prev => ({ ...prev, lotteryProbability: { ...prev.lotteryProbability, [r]: toNonNegativeNumber(e.target.value) } }))} className={`w-full bg-transparent text-2xl font-black ${RARITY_STYLES[r].color} outline-none`} /><span className="text-xs font-bold text-gray-400">%</span></div></div>
                 ))}
               </div>
             </div>
             <div className="bg-sky-900/5 backdrop-blur-xl rounded-[40px] p-8 border border-white/50 shadow-xl flex flex-col justify-between">
               <div><div className="flex items-center gap-3 mb-6"><div className="p-2 bg-sky-100 rounded-xl text-sky-500"><ImageIcon className="w-5 h-5" /></div><h3 className="text-xl font-black text-sky-900">從資料夾加入圖片</h3></div><div className="space-y-4"><div className="relative"><input type="text" value={data.rewardFolderPath} onChange={(e) => updateData(prev => ({ ...prev, rewardFolderPath: e.target.value }))} placeholder="資料夾路徑" aria-label="圖片資料夾路徑" className="w-full bg-white p-4 pl-10 rounded-2xl text-sm font-bold text-sky-800 outline-none border-2 border-transparent focus:border-sky-300 shadow-sm" /><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /></div><div className="relative flex-grow"><select id="targetRarity" aria-label="加入哪個稀有度的卡池" className="w-full appearance-none bg-white p-4 rounded-2xl text-sm font-black text-sky-800 outline-none border-2 border-transparent focus:border-sky-300 cursor-pointer"><option value="N">N 級卡池</option><option value="R">R 級卡池</option><option value="SR">SR 級卡池</option><option value="SSR">SSR 級卡池</option><option value="UR">UR 級卡池</option></select><ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-sky-400 pointer-events-none" /></div></div></div>
-              <button onClick={() => { const targetRarity = document.getElementById('targetRarity').value; scanRewardFolder(data.rewardFolderPath, targetRarity); }} disabled={isScanning} className={`group relative w-full mt-6 py-4 rounded-[1.5rem] font-black transition-all hover:-translate-y-2 hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 overflow-hidden shadow-xl ${isScanning ? 'bg-slate-400/20 text-slate-400 cursor-wait' : 'bg-slate-900/10 backdrop-blur-md border border-slate-900/20 text-slate-900 hover:bg-slate-900/20'}`}>{!isScanning && (<div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:animate-shine pointer-events-none" />)}{isScanning ? <RotateCw className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform duration-500" />}{isScanning ? '掃描中……' : '加入卡池'}</button>
+              <button onClick={() => { const targetRarity = (document.getElementById('targetRarity') as HTMLSelectElement).value as Rarity; /* 上面「加入哪個稀有度的卡池」的下拉選單，一定在畫面上；選項只有五種稀有度 */ scanRewardFolder(data.rewardFolderPath, targetRarity); }} disabled={isScanning} className={`group relative w-full mt-6 py-4 rounded-[1.5rem] font-black transition-all hover:-translate-y-2 hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 overflow-hidden shadow-xl ${isScanning ? 'bg-slate-400/20 text-slate-400 cursor-wait' : 'bg-slate-900/10 backdrop-blur-md border border-slate-900/20 text-slate-900 hover:bg-slate-900/20'}`}>{!isScanning && (<div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:animate-shine pointer-events-none" />)}{isScanning ? <RotateCw className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform duration-500" />}{isScanning ? '掃描中……' : '加入卡池'}</button>
             </div>
           </div>
           <div className="space-y-8">
-            {['UR', 'SSR', 'SR', 'R', 'N'].map((rarity, idx) => {
+            {RARITIES.map((rarity, idx) => {
               const prizes = data.lotteryPrizes[rarity];
               const style = RARITY_STYLES[rarity];
               return (
@@ -392,7 +436,7 @@ const RewardsView = ({
                             </div></div>
                             <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 backdrop-blur-sm p-1 rounded-xl shadow-sm z-30 pointer-events-none group-hover:pointer-events-auto">
                               {prize.type === 'image-pool' && (<button onClick={() => setExpandedImagePools(prev => ({ ...prev, [prize.id]: !prev[prize.id] }))} title={expandedImagePools[prize.id] ? '收合圖片' : '展開圖片'} aria-label={expandedImagePools[prize.id] ? '收合圖片' : '展開圖片'} className="p-2 text-sky-400 hover:bg-sky-50 rounded-lg">{expandedImagePools[prize.id] ? <ChevronDown className="w-4 h-4" /> : <ImageIcon className="w-4 h-4" />}</button>)}
-                              <div className="relative group/move"><button title="移到其他稀有度" aria-label="移到其他稀有度" className="p-2 text-gray-400 hover:bg-gray-100 rounded-lg"><ArrowUp className="w-4 h-4 rotate-45" /></button><div className="absolute right-0 top-full w-32 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden hidden group-hover/move:block z-50 pt-1">{['UR', 'SSR', 'SR', 'R', 'N'].filter(r => r !== rarity).map(r => (<button key={r} onClick={() => { updateData(prev => ({ ...prev, lotteryPrizes: { ...prev.lotteryPrizes, [rarity]: prev.lotteryPrizes[rarity].filter(p => p.id !== prize.id), [r]: [...prev.lotteryPrizes[r], prize] } })); }} className="w-full text-left px-4 py-2 text-xs font-bold text-gray-600 hover:bg-sky-50 hover:text-sky-600">移到 {r}</button>))}</div></div>
+                              <div className="relative group/move"><button title="移到其他稀有度" aria-label="移到其他稀有度" className="p-2 text-gray-400 hover:bg-gray-100 rounded-lg"><ArrowUp className="w-4 h-4 rotate-45" /></button><div className="absolute right-0 top-full w-32 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden hidden group-hover/move:block z-50 pt-1">{RARITIES.filter(r => r !== rarity).map(r => (<button key={r} onClick={() => { updateData(prev => ({ ...prev, lotteryPrizes: { ...prev.lotteryPrizes, [rarity]: prev.lotteryPrizes[rarity].filter(p => p.id !== prize.id), [r]: [...prev.lotteryPrizes[r], prize] } })); }} className="w-full text-left px-4 py-2 text-xs font-bold text-gray-600 hover:bg-sky-50 hover:text-sky-600">移到 {r}</button>))}</div></div>
                               <button onClick={() => { if(confirm('確定要刪除這個獎品嗎？刪除後無法復原，已抽到的紀錄不受影響。')) updateData(prev => ({ ...prev, lotteryPrizes: { ...prev.lotteryPrizes, [rarity]: prev.lotteryPrizes[rarity].filter(p => p.id !== prize.id) } })) }} title="刪除獎品" aria-label="刪除獎品" className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                             </div>
                             {prize.type === 'image-pool' && expandedImagePools[prize.id] && (
@@ -427,17 +471,18 @@ const RewardsView = ({
 
       {rewardSubTab === 'achievements' && (
         <div className="space-y-10 animate-in slide-up">
-          {[
+          {([
             { id: 'total', name: '總成就', icon: <Trophy className="w-6 h-6" />, color: 'from-slate-400 to-slate-600' },
             { id: 'growth', name: '成長成就', icon: <Sprout className="w-6 h-6" />, color: 'from-blue-400 to-indigo-400' },
             { id: 'health', name: '健康成就', icon: <Heart className="w-6 h-6" />, color: 'from-cyan-400 to-teal-400' },
             { id: 'happiness', name: '幸福成就', icon: <Smile className="w-6 h-6" />, color: 'from-amber-300 to-orange-400' }
-          ].map(category => {
+          ] satisfies AchievementCategoryTab[]).map(category => {
             const categoryAchievements = data.achievements
               .filter(a => a.type === category.id)
               .sort((a, b) => {
                 if (a.condition !== b.condition) return a.condition - b.condition;
-                return new Date(a.createdAt) - new Date(b.createdAt);
+                // 舊資料可能沒有 createdAt：和原本一樣 new Date(undefined) 是無效日期，相減得 NaN（排序當作相同）
+                return new Date(a.createdAt as string).getTime() - new Date(b.createdAt as string).getTime();
               });
             const currentCount = getIndicatorStats(category.id);
             
@@ -454,7 +499,7 @@ const RewardsView = ({
                   <button onClick={() => {
                     const existingAchievements = data.achievements.filter(a => a.type === category.id);
                     const maxCondition = existingAchievements.length > 0 ? Math.max(...existingAchievements.map(a => a.condition || 0)) : 0;
-                    const newAchievement = { id: crypto.randomUUID(), type: category.id, title: '', condition: maxCondition + 10, rewardText: '', claimed: false, createdAt: new Date().toISOString() };
+                    const newAchievement: Achievement = { id: crypto.randomUUID(), type: category.id, title: '', condition: maxCondition + 10, rewardText: '', claimed: false, createdAt: new Date().toISOString() };
                     updateData(prev => ({ ...prev, achievements: [...prev.achievements, newAchievement] }));
                   }} className="group relative px-5 py-3 bg-white/40 backdrop-blur-md border border-white/60 text-sky-600 rounded-2xl hover:bg-white/60 hover:-translate-y-1.5 hover:scale-[1.05] active:scale-95 transition-all duration-300 flex items-center gap-2 font-black text-xs shadow-sm overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:animate-shine pointer-events-none" />
@@ -573,7 +618,7 @@ const RewardsView = ({
               }
 
               // 根據內容進行分組
-              const grouped = pendingRewards.reduce((acc, reward) => {
+              const grouped = pendingRewards.reduce<Record<string, RewardHistoryRecord[]>>((acc, reward) => {
                 const key = reward.prize.type === 'image' ? reward.prize.content : `text:${reward.prize.content}`;
                 if (!acc[key]) acc[key] = [];
                 acc[key].push(reward);
@@ -582,7 +627,7 @@ const RewardsView = ({
 
               // 排序邏輯：稀有度等級 (UR > SSR > SR > R > N) > 名稱
               const sortedGroups = Object.values(grouped).sort((a, b) => {
-                const rarityOrder = { 'UR': 0, 'SSR': 1, 'SR': 2, 'R': 3, 'N': 4 };
+                const rarityOrder: Record<Rarity, number> = { 'UR': 0, 'SSR': 1, 'SR': 2, 'R': 3, 'N': 4 };
                 const rewardA = a[0];
                 const rewardB = b[0];
                 
@@ -659,7 +704,7 @@ const RewardsView = ({
               <h3 className="text-xl font-black text-sky-900">機率統計</h3>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-              {['UR', 'SSR', 'SR', 'R', 'N'].map(r => {
+              {RARITIES.map(r => {
                 const total = data.rewardHistory.length;
                 const count = data.rewardHistory.filter(h => h.rarity === r).length;
                 const actualProb = total > 0 ? (count / total) * 100 : 0;
@@ -698,7 +743,7 @@ const RewardsView = ({
                 </div>
                 <h3 className="text-xl font-black text-sky-900">抽卡紀錄</h3>
               </div>
-              <button onClick={() => setEditingHistory({ rarity: 'R', prize: { type: 'text', content: '' }, timestamp: new Date().toISOString(), claimed: true })} className="group relative px-6 py-3 bg-sky-500/5 backdrop-blur-md text-sky-600 text-[11px] font-black rounded-2xl transition-all shadow-sm hover:bg-sky-500/10 hover:!translate-y-[-6px] hover:scale-105 active:scale-95 flex items-center gap-2 border border-sky-500/20 overflow-hidden"><div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:animate-shine pointer-events-none" /><span className="relative flex items-center gap-2"><Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" /> 補登抽卡紀錄</span></button>
+              <button onClick={() => setEditingHistory({ rarity: 'R', prize: { type: 'text', content: '' } as TextPrize /* 補登的文字獎品沒有 id；data.ts 的 TextPrize 把 id 寫成必填，實際上可以沒有 */, timestamp: new Date().toISOString(), claimed: true })} className="group relative px-6 py-3 bg-sky-500/5 backdrop-blur-md text-sky-600 text-[11px] font-black rounded-2xl transition-all shadow-sm hover:bg-sky-500/10 hover:!translate-y-[-6px] hover:scale-105 active:scale-95 flex items-center gap-2 border border-sky-500/20 overflow-hidden"><div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:animate-shine pointer-events-none" /><span className="relative flex items-center gap-2"><Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" /> 補登抽卡紀錄</span></button>
             </div>
             {selectedHistoryIds.length > 0 && (
               <div className="bg-rose-50/80 p-4 flex justify-between items-center border-b border-rose-100 animate-in slide-down">

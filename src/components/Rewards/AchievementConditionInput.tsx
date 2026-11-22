@@ -1,6 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { commitCountDraft, sanitizeCountDraft } from '../../domain/inputs.ts';
 
+interface AchievementConditionInputProps {
+  /** 目前存著的次數 */
+  value: number;
+  /** 打完（離開欄位或按 Enter）而且次數有改時呼叫，參數是新的次數（至少 1） */
+  onCommit: (next: number) => void;
+  className?: string;
+  ariaLabel?: string;
+}
+
 /**
  * 成就的「條件次數」欄位。
  *
@@ -13,16 +22,16 @@ import { commitCountDraft, sanitizeCountDraft } from '../../domain/inputs.ts';
  * 但數字欄位在有游標時，滑鼠滾輪滾過去會偷偷改掉數字，所以把滾輪改成照常捲動頁面。
  * 上下方向鍵加減 1（最少 1）；數字以外的字元（e、-、小數點）打不進去。
  */
-export default function AchievementConditionInput({ value, onCommit, className, ariaLabel = '要完成幾次任務' }) {
-  const [draft, setDraft] = useState(null); // null = 沒在編輯，直接顯示目前的次數
+export default function AchievementConditionInput({ value, onCommit, className, ariaLabel = '要完成幾次任務' }: AchievementConditionInputProps) {
+  const [draft, setDraft] = useState<string | null>(null); // null = 沒在編輯，直接顯示目前的次數
   const cancelRef = useRef(false);
   const startValueRef = useRef(value); // 開始編輯時的次數：沒改就不存，避免蓋掉編輯途中從別處來的新值
-  const inputRef = useRef(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return undefined;
-    const onWheel = (e) => {
+    const onWheel = (e: WheelEvent) => {
       if (document.activeElement !== el) return;
       e.preventDefault();
       const scroller = el.closest('.app-scroll');
@@ -32,9 +41,10 @@ export default function AchievementConditionInput({ value, onCommit, className, 
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
-  const step = (delta) => {
+  const step = (delta: number) => {
     setDraft((d) => {
-      const current = parseInt(d, 10);
+      // 沒有草稿（null）時和原本的 parseInt(null) 一樣得到 NaN，改用目前的次數
+      const current = parseInt(d ?? '', 10);
       const base = Number.isFinite(current) ? current : value;
       return String(Math.max(1, Math.min(999999, base + delta)));
     });

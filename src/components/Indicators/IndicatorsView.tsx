@@ -6,16 +6,17 @@ import { INDICATORS } from '../../constants/index.tsx';
 import { deleteGoalMessage } from '../../domain/confirmations.ts';
 import { focusCardTextField } from '../../utils/cardFocus.ts';
 import { formatDisplayDate } from '../../utils/displayFormat.ts';
+import type { Goal, IndicatorId } from '../../types/data.ts';
 
 // 每個維度最多幾個目標（新增與恢復目標都受這個限制）
 const MAX_GOALS_PER_INDICATOR = 3;
 
 const IndicatorsView = () => {
   const { data, updateData, getIndicatorStats } = useAppData();
-  const [addingGoalTo, setAddingGoalTo] = useState(null);
+  const [addingGoalTo, setAddingGoalTo] = useState<IndicatorId | null>(null);
   const [newGoalTitle, setNewGoalTitle] = useState('');
 
-  const addGoal = (indicatorId, title) => {
+  const addGoal = (indicatorId: IndicatorId, title: string) => {
     const finalTitle = title?.trim();
     if (!finalTitle) {
       setAddingGoalTo(null);
@@ -23,15 +24,15 @@ const IndicatorsView = () => {
       return;
     }
     if (data.goals[indicatorId].length >= MAX_GOALS_PER_INDICATOR) return;
-    const newGoal = { id: crypto.randomUUID(), title: finalTitle, order: data.goals[indicatorId].length + 1 };
+    const newGoal: Goal = { id: crypto.randomUUID(), title: finalTitle, order: data.goals[indicatorId].length + 1 };
     updateData(prev => ({ ...prev, goals: { ...prev.goals, [indicatorId]: [...prev.goals[indicatorId], newGoal] } }));
     setAddingGoalTo(null);
     setNewGoalTitle('');
   };
 
-  const deleteGoal = (indicatorId, goalId) => updateData(prev => ({ ...prev, goals: { ...prev.goals, [indicatorId]: prev.goals[indicatorId].filter(g => g.id !== goalId) } }));
+  const deleteGoal = (indicatorId: IndicatorId, goalId: string) => updateData(prev => ({ ...prev, goals: { ...prev.goals, [indicatorId]: prev.goals[indicatorId].filter(g => g.id !== goalId) } }));
   
-  const completeGoal = (indicatorId, goalId) => {
+  const completeGoal = (indicatorId: IndicatorId, goalId: string) => {
     updateData(prev => {
       const goal = prev.goals[indicatorId].find(g => g.id === goalId);
       if (!goal) return prev;
@@ -43,7 +44,7 @@ const IndicatorsView = () => {
     });
   };
 
-  const uncompleteGoal = (goalId) => {
+  const uncompleteGoal = (goalId: string) => {
     const archived = data.archivedGoals.find(g => g.id === goalId);
     if (archived && (data.goals[archived.indicatorId] || []).length >= MAX_GOALS_PER_INDICATOR) {
       alert(`每個維度最多 ${MAX_GOALS_PER_INDICATOR} 個目標，請先達成或刪除一個，再恢復這個目標。`);
@@ -61,7 +62,7 @@ const IndicatorsView = () => {
     });
   };
 
-  const moveGoal = (indicatorId, index, direction) => {
+  const moveGoal = (indicatorId: IndicatorId, index: number, direction: number) => {
     const newGoals = [...data.goals[indicatorId]];
     const targetIndex = index + direction;
     if (targetIndex < 0 || targetIndex >= newGoals.length) return;

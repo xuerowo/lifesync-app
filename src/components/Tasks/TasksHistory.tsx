@@ -7,15 +7,25 @@ import { clampPage, formatPageRange, getTotalPages } from '../../domain/paginati
 import { deleteHistoryRecords } from '../../domain/taskHistory.ts';
 import { deleteHistoryRecordsMessage } from '../../domain/confirmations.ts';
 import { formatDisplayDate, formatDisplayTime } from '../../utils/displayFormat.ts';
+import type { Dispatch, SetStateAction } from 'react';
+import type { TaskHistoryRecord } from '../../types/data.ts';
+import type { EditingTaskHistory } from '../../types/ui.ts';
 
-const TasksHistory = ({ setEditingTaskHistory }) => {
+interface TasksHistoryProps {
+  setEditingTaskHistory: Dispatch<SetStateAction<EditingTaskHistory | null>>;
+}
+
+// 完成紀錄沒有 createdAt 欄位（見 types/data.ts）；畫面沿用原本的「completedAt 沒有值才看 createdAt」寫法，這裡只讓型別檢查讀得到它
+const legacyCreatedAt = (record: TaskHistoryRecord): string | undefined => (record as { createdAt?: string }).createdAt;
+
+const TasksHistory = ({ setEditingTaskHistory }: TasksHistoryProps) => {
   const { data, updateData } = useAppData();
   const [currentPageState, setCurrentPage] = useState(1);
-  const [selectedIds, setSelectedIds] = useState([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // 取得所有任務完成紀錄並按時間排序
   const historyTasks = [...data.taskHistory].sort((a, b) =>
-    new Date(b.completedAt) - new Date(a.completedAt)
+    new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
   );
 
   // 刪除紀錄使目前頁碼超過總頁數時，自動顯示最後一頁（在 render 時計算，不在 effect 裡改 state）
@@ -28,7 +38,7 @@ const TasksHistory = ({ setEditingTaskHistory }) => {
   );
 
   // 刪除紀錄時，對應任務的完成次數跟著減少（Q18，規則見 domain/taskHistory.ts）；確認文字會寫出次數怎麼變
-  const handleDelete = (id) => {
+  const handleDelete = (id: string) => {
     if (confirm(deleteHistoryRecordsMessage(data, [id]))) {
       updateData(prev => ({ ...prev, ...deleteHistoryRecords(prev, [id]) }));
     }
@@ -42,7 +52,7 @@ const TasksHistory = ({ setEditingTaskHistory }) => {
     }
   };
 
-  const toggleSelectAll = (e) => {
+  const toggleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
       setSelectedIds(paginatedTasks.map(t => t.id));
     } else {
@@ -50,7 +60,7 @@ const TasksHistory = ({ setEditingTaskHistory }) => {
     }
   };
 
-  const toggleSelect = (id) => {
+  const toggleSelect = (id: string) => {
     setSelectedIds(prev => 
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
@@ -141,8 +151,8 @@ const TasksHistory = ({ setEditingTaskHistory }) => {
                       </td>
                       <td className={`px-4 py-4 bg-white/50 backdrop-blur-sm border-y transition-all duration-300 group-hover/row:bg-white group-hover/row:shadow-md ${isSelected ? 'border-sky-200 bg-sky-50/50' : 'border-white'}`}>
                         <div className="flex flex-col">
-                          <span className="text-xs font-black text-sky-800">{formatDisplayDate(task.completedAt || task.createdAt)}</span>
-                          <span className="text-[10px] font-bold text-sky-500">{formatDisplayTime(task.completedAt || task.createdAt)}</span>
+                          <span className="text-xs font-black text-sky-800">{formatDisplayDate(task.completedAt || legacyCreatedAt(task))}</span>
+                          <span className="text-[10px] font-bold text-sky-500">{formatDisplayTime(task.completedAt || legacyCreatedAt(task))}</span>
                         </div>
                       </td>
                       <td className={`px-4 py-4 bg-white/50 backdrop-blur-sm border-y transition-all duration-300 group-hover/row:bg-white group-hover/row:shadow-md ${isSelected ? 'border-sky-200 bg-sky-50/50' : 'border-white'}`}>

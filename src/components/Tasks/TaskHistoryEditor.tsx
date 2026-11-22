@@ -7,15 +7,31 @@ import { INDICATORS } from '../../constants/index.tsx';
 import { formatForDateTimeLocal } from '../../utils/index.ts';
 import { addHistoryRecord, historyFieldsFromTask, linkableHistoryTasks } from '../../domain/taskHistory.ts';
 import { isStoppedTask } from '../../domain/tasks.ts';
+import type { Dispatch, SetStateAction } from 'react';
+import type { IndicatorId, TaskHistoryRecord, TaskType } from '../../types/data.ts';
+import type { EditingTaskHistory } from '../../types/ui.ts';
 
-const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
+interface TaskHistoryEditorProps {
+  editingTaskHistory: EditingTaskHistory;
+  setEditingTaskHistory: Dispatch<SetStateAction<EditingTaskHistory | null>>;
+}
+
+/** 編輯中的紀錄：這幾個欄位一開始就補上預設值 */
+type LocalHistory = EditingTaskHistory & Required<Pick<EditingTaskHistory, 'title' | 'majorTaskTitle' | 'indicatorId' | 'type'>>;
+
+const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }: TaskHistoryEditorProps) => {
   const { data, updateData } = useAppData();
-  const [localItem, setLocalItem] = useState({
+  // 預設值先放進一個變數再展開：completedAt 在型別上一定有，直接寫在同一個物件裡型別檢查會說「一定被蓋掉」。
+  // 執行起來和原本一樣（資料檔裡缺 completedAt 的舊紀錄仍會用現在時間）
+  const defaults: LocalHistory = {
     title: '',
     majorTaskTitle: '',
     indicatorId: 'growth',
     type: 'daily',
     completedAt: new Date().toISOString(),
+  };
+  const [localItem, setLocalItem] = useState<LocalHistory>({
+    ...defaults,
     ...editingTaskHistory
   });
   const isNew = !editingTaskHistory.id;
@@ -23,7 +39,7 @@ const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
   const linkable = isNew ? linkableHistoryTasks(data) : [];
   const linked = isNew && !!localItem.taskId;
 
-  const handleLinkChange = (taskId) => {
+  const handleLinkChange = (taskId: string) => {
     const option = linkable.find(o => o.task.id === taskId);
     if (!option) {
       const { taskId: _unlinked, ...rest } = localItem;
@@ -44,7 +60,9 @@ const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
         const newRecord = { ...localItem, id: crypto.randomUUID(), rewardTickets: 0 };
         return { ...prev, ...addHistoryRecord(prev, newRecord) };
       } else {
-        return { ...prev, taskHistory: prev.taskHistory.map(h => h.id === localItem.id ? localItem : h) };
+        // 不是補登時（isNew 為 false），editingTaskHistory 一定有 id，localItem 也帶著它，所以是完整的紀錄
+        const edited = localItem as TaskHistoryRecord;
+        return { ...prev, taskHistory: prev.taskHistory.map(h => h.id === localItem.id ? edited : h) };
       }
     });
     setEditingTaskHistory(null);
@@ -95,7 +113,8 @@ const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
                 className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none appearance-none cursor-pointer" 
                 value={localItem.indicatorId} 
                 disabled={linked}
-                onChange={e => setLocalItem({ ...localItem, indicatorId: e.target.value })}
+                // 選項只有 INDICATORS 的 id
+                onChange={e => setLocalItem({ ...localItem, indicatorId: e.target.value as IndicatorId })}
               >
                 {INDICATORS.map(ind => <option key={ind.id} value={ind.id}>{ind.name}</option>)}
               </select>
@@ -106,7 +125,8 @@ const TaskHistoryEditor = ({ editingTaskHistory, setEditingTaskHistory }) => {
                 className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none appearance-none cursor-pointer" 
                 value={localItem.type} 
                 disabled={linked}
-                onChange={e => setLocalItem({ ...localItem, type: e.target.value })}
+                // 選項只有下面四種任務類型
+                onChange={e => setLocalItem({ ...localItem, type: e.target.value as TaskType })}
               >
                 <option value="daily">每日任務</option>
                 <option value="weekly">每週任務</option>

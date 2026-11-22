@@ -2,6 +2,14 @@ import React, { useEffect, useEffectEvent, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Plus, Target, X } from 'lucide-react';
 import { formatTaskTime } from '../../utils/index.ts';
+import type { SubTask } from '../../types/data.ts';
+
+interface AddSessionTaskPickerProps {
+  /** 可以加入的任務（還不在這次清單裡的成長任務） */
+  tasks: SubTask[];
+  onAdd: (task: SubTask) => void;
+  onClose: () => void;
+}
 
 /**
  * 專注計時進行中，按「這次要做的任務」旁的「＋」打開的選單：從可選的成長任務中加入。
@@ -9,12 +17,12 @@ import { formatTaskTime } from '../../utils/index.ts';
  * 已經在這次清單裡的不再列出。加入後選單不關，方便一次加好幾個；Esc、背景、X、「完成」都能關閉。
  * 這裡只改這次的任務清單，不碰計時。
  */
-const AddSessionTaskPicker = ({ tasks, onAdd, onClose }) => {
-  const closeRef = useRef(null);
+const AddSessionTaskPicker = ({ tasks, onAdd, onClose }: AddSessionTaskPickerProps) => {
+  const closeRef = useRef<HTMLButtonElement>(null);
 
   // 計時器每秒都會讓畫面重繪，onClose 每次都是新的函式；用 useEffectEvent 讓下面的 effect 只在打開時跑一次，
   // 否則鍵盤焦點會每秒被拉回關閉鈕
-  const handleKeyDown = useEffectEvent((e) => {
+  const handleKeyDown = useEffectEvent((e: KeyboardEvent) => {
     if (e.key === 'Escape') {
       e.stopPropagation();
       onClose();
@@ -24,7 +32,7 @@ const AddSessionTaskPicker = ({ tasks, onAdd, onClose }) => {
   useEffect(() => {
     // 打開時把鍵盤焦點放到關閉鈕，Esc 隨時可以關掉
     closeRef.current?.focus();
-    const onKeyDown = (e) => handleKeyDown(e);
+    const onKeyDown = (e: KeyboardEvent) => handleKeyDown(e);
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);

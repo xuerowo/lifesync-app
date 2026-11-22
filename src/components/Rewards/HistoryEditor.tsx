@@ -4,10 +4,19 @@ import { motion } from 'framer-motion';
 import { RotateCw, X, CheckCircle2 } from 'lucide-react';
 import { useAppData } from '../../contexts/useAppData.ts';
 import { formatForDateTimeLocal } from '../../utils/index.ts';
+import type { DrawnPrize, Rarity } from '../../types/data.ts';
+import type { EditingRewardHistory } from '../../types/ui.ts';
 
-const HistoryEditor = ({ editingHistory, setEditingHistory }) => {
+interface HistoryEditorProps {
+  /** 要編輯的抽卡紀錄；補登新紀錄時沒有 id */
+  editingHistory: EditingRewardHistory;
+  /** 傳 null 關閉視窗 */
+  setEditingHistory: (history: EditingRewardHistory | null) => void;
+}
+
+const HistoryEditor = ({ editingHistory, setEditingHistory }: HistoryEditorProps) => {
   const { updateData } = useAppData();
-  const [localItem, setLocalItem] = useState({ taskTitle: '', ...editingHistory });
+  const [localItem, setLocalItem] = useState<EditingRewardHistory>({ taskTitle: '', ...editingHistory });
   const isNew = !editingHistory.id;
 
   const handleSave = () => {
@@ -20,7 +29,8 @@ const HistoryEditor = ({ editingHistory, setEditingHistory }) => {
         const newRecord = { ...itemToSave, id: crypto.randomUUID() };
         return { ...prev, rewardHistory: [newRecord, ...prev.rewardHistory] };
       } else {
-        return { ...prev, rewardHistory: prev.rewardHistory.map(h => h.id === itemToSave.id ? itemToSave : h) };
+        // id 相同時 h.id 就是 itemToSave.id，寫 id: h.id 只是讓型別知道 id 一定有，存出來的內容不變
+        return { ...prev, rewardHistory: prev.rewardHistory.map(h => h.id === itemToSave.id ? { ...itemToSave, id: h.id } : h) };
       }
     });
     setEditingHistory(null);
@@ -43,11 +53,11 @@ const HistoryEditor = ({ editingHistory, setEditingHistory }) => {
         </div>
         <div className="p-10 space-y-8 relative z-10">
           <div className="grid grid-cols-2 gap-6">
-            <div><label className="block text-[10px] font-black text-sky-600 mb-2 uppercase tracking-widest">稀有度</label><select className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none appearance-none" value={localItem.rarity} onChange={e => setLocalItem({ ...localItem, rarity: e.target.value })}>{['UR', 'SSR', 'SR', 'R', 'N'].map(r => <option key={r} value={r}>{r}</option>)}</select></div>
+            <div><label className="block text-[10px] font-black text-sky-600 mb-2 uppercase tracking-widest">稀有度</label><select className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none appearance-none" value={localItem.rarity} onChange={e => setLocalItem({ ...localItem, rarity: e.target.value as Rarity /* 選項只有五種稀有度 */ })}>{['UR', 'SSR', 'SR', 'R', 'N'].map(r => <option key={r} value={r}>{r}</option>)}</select></div>
             <div><label className="block text-[10px] font-black text-sky-600 mb-2 uppercase tracking-widest">狀態</label><select className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none appearance-none" value={localItem.claimed ? 'true' : 'false'} onChange={e => { const isClaimed = e.target.value === 'true'; setLocalItem({ ...localItem, claimed: isClaimed, claimedAt: isClaimed ? (localItem.claimedAt || new Date().toISOString()) : null }); }}><option value="true">已領取</option><option value="false">待領取</option></select></div>
           </div>
           <div><label className="block text-[10px] font-black text-sky-600 mb-2 uppercase tracking-widest ml-1">來源任務</label><input className="w-full bg-white/40 p-5 rounded-2xl text-lg font-black outline-none border border-white/60 focus:bg-white/60 text-sky-900 transition-all placeholder:text-sky-300" value={localItem.taskTitle || ''} onChange={e => setLocalItem({ ...localItem, taskTitle: e.target.value })} placeholder="輸入任務名稱" /></div>
-          <div><label className="block text-[10px] font-black text-sky-600 mb-2 uppercase tracking-widest ml-1">獎勵內容</label><input className="w-full bg-white/40 p-5 rounded-2xl text-xl font-black outline-none border border-white/60 focus:bg-white/60 text-sky-900 transition-all placeholder:text-sky-300" value={localItem.prize.content} onChange={e => setLocalItem({ ...localItem, prize: { ...localItem.prize, content: e.target.value, type: 'text' } })} placeholder="輸入描述文字" /><p className="text-[10px] text-sky-500 mt-2 ml-1 italic opacity-60">手動新增僅支援文字類獎品</p></div>
+          <div><label className="block text-[10px] font-black text-sky-600 mb-2 uppercase tracking-widest ml-1">獎勵內容</label><input className="w-full bg-white/40 p-5 rounded-2xl text-xl font-black outline-none border border-white/60 focus:bg-white/60 text-sky-900 transition-all placeholder:text-sky-300" value={localItem.prize.content} onChange={e => setLocalItem({ ...localItem, prize: { ...localItem.prize, content: e.target.value, type: 'text' } as DrawnPrize /* 原本是圖片時可能沒有 id（抽圖庫得到的圖片、補登的紀錄都沒有）；data.ts 的 TextPrize 把 id 寫成必填，實際上可以沒有 */ })} placeholder="輸入描述文字" /><p className="text-[10px] text-sky-500 mt-2 ml-1 italic opacity-60">手動新增僅支援文字類獎品</p></div>
           <div className="grid grid-cols-2 gap-6">
             <div><label className="block text-[10px] font-black text-sky-600 mb-2 uppercase tracking-widest ml-1">抽到時間</label><input type="datetime-local" className="w-full bg-white/40 p-4 rounded-2xl font-black text-sky-800 border border-white/60 focus:bg-white/60 outline-none" value={formatForDateTimeLocal(localItem.timestamp)} onChange={e => { const val = e.target.value; if (val) setLocalItem({ ...localItem, timestamp: new Date(val).toISOString() }); }} /></div>
             <div>

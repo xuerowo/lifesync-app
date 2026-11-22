@@ -4,14 +4,19 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, X, ArrowUp, ArrowDown } from 'lucide-react';
 import { useAppData } from '../../contexts/useAppData.ts';
 
-const PriorityManager = ({ isOpen, onClose }) => {
+interface PriorityManagerProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+const PriorityManager = ({ isOpen, onClose }: PriorityManagerProps) => {
   const { data, updateData } = useAppData();
   
   if (!isOpen) return null;
   
-  const priorityTasks = data.subTasks.filter(t => t.isPriority).sort((a, b) => a.priorityOrder - b.priorityOrder);
+  const priorityTasks = data.subTasks.filter(t => t.isPriority).sort((a, b) => a.priorityOrder! - b.priorityOrder!); // 優先任務存檔時一定編了順位；萬一沒有，和原本一樣相減得到 NaN
 
-  const handleMove = (taskId, direction) => {
+  const handleMove = (taskId: string, direction: number) => {
       const currentIndex = priorityTasks.findIndex(t => t.id === taskId);
       if (currentIndex === -1) return;
       
