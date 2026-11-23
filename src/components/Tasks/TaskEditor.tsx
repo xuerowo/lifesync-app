@@ -105,7 +105,7 @@ const TaskEditor = ({ editingTask, setEditingTask }: TaskEditorProps) => {
             <X className="w-6 h-6 text-sky-600" />
           </button>
         </div>
-        <div className="p-10 max-h-[75vh] overflow-y-auto space-y-10 no-scrollbar relative z-10">
+        <div className="p-10 max-h-[75vh] overflow-y-auto space-y-10 relative z-10">
           <div className="group">
             <label className="block text-[10px] font-black text-sky-600 mb-3 uppercase tracking-[0.2em] ml-1">{isMajor ? '計畫名稱' : '任務名稱'}</label>
             <input

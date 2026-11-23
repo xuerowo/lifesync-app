@@ -607,7 +607,7 @@ const App = () => {
             </div>
           )}
           {rewardStage === 'revealed' && (
-            <div className="relative w-full max-w-[95%] md:max-w-lg lg:max-w-xl text-center animate-in zoom-in-50 duration-700 slide-in-from-bottom-10 flex flex-col items-center max-h-[95vh] overflow-y-auto no-scrollbar py-4">
+            <div className="relative w-full max-w-[95%] md:max-w-lg lg:max-w-xl text-center animate-in zoom-in-50 duration-700 slide-in-from-bottom-10 flex flex-col items-center max-h-[95vh] overflow-y-auto py-4">
               <div className={`relative w-full max-w-[280px] md:max-w-[320px] aspect-[2/3] rounded-[32px] md:rounded-[40px] overflow-hidden shadow-2xl mb-6 md:mb-8 bg-gray-900 border-4 group transition-transform hover:scale-[1.02] duration-500 shrink-0 flex flex-col ${rewardToShow.rarity === 'UR' ? 'border-rose-500 shadow-rose-500/50' : rewardToShow.rarity === 'SSR' ? 'border-amber-400 shadow-amber-500/50' : rewardToShow.rarity === 'SR' ? 'border-purple-400 shadow-purple-500/50' : rewardToShow.rarity === 'R' ? 'border-sky-400 shadow-sky-500/50' : 'border-slate-400 shadow-slate-500/50'}`}>
                 <div className="absolute top-4 left-4 md:top-6 md:left-6 z-30 scale-100 md:scale-125 origin-top-left">
                   <RarityBadge rarity={rewardToShow.rarity} />
@@ -695,6 +695,9 @@ const App = () => {
         .zoom-in-50 { animation-name: zoom-in; }
         @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
         .animate-float { animation: float 3s ease-in-out infinite; }
+        /* 隱藏捲軸但仍可捲動。index.css 對所有元素設了 scrollbar-width: thin，Chromium 121 以後只要設了它，
+           ::-webkit-scrollbar 的樣式就整個不生效，所以要用 scrollbar-width: none 才藏得掉（class 比 * 優先） */
+        .no-scrollbar { scrollbar-width: none; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
