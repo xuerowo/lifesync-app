@@ -244,7 +244,9 @@ const RewardsView = ({
           </div>
           <div className="min-w-0 flex-1">
             <h2 className="text-2xl md:text-4xl font-black text-sky-900 tracking-tight">獎勵庫</h2>
-            <nav className="flex gap-4 mt-1 overflow-x-auto no-scrollbar pb-1">
+            {/* 可以左右捲動的容器會把超出範圍的東西切掉，數字徽章的紅色光暈（陰影）會被切到。
+                四邊加內距留出光暈的空間，再用負的外距抵銷，位置和原本（mt-1、pb-1）一樣 */}
+            <nav className="flex gap-4 -mx-4 px-4 -mt-2 pt-3 -mb-4 pb-5 overflow-x-auto no-scrollbar">
               {[
                 { id: 'lottery', name: '抽卡大廳' },
                 { id: 'config', name: '卡池設定' },
