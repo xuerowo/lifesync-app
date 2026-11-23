@@ -8,7 +8,7 @@ import { useLottery } from '../../hooks/useLottery.ts';
 import { RARITY_STYLES, RARITY_NAMES, ITEMS_PER_PAGE } from '../../constants/index.tsx';
 import RarityBadge from '../Shared/RarityBadge.tsx';
 import { deleteAchievementMessage } from '../../domain/confirmations.ts';
-import { RARITIES, effectiveOdds, getPrizeSortName, movePoolPrize, prizeKeys, removePoolPrize, updatePoolPrize } from '../../domain/lottery.ts';
+import { RARITIES, effectiveOdds, emptyPoolFallbacks, getPrizeSortName, hasAnyUsablePrize, movePoolPrize, prizeKeys, removePoolPrize, updatePoolPrize } from '../../domain/lottery.ts';
 import { computeLotteryStats } from '../../domain/lotteryStats.ts';
 import { clampPage, formatPageRange, getTotalPages } from '../../domain/pagination.ts';
 import { toNonNegativeInt, toNonNegativeNumber } from '../../domain/inputs.ts';
@@ -280,14 +280,6 @@ const RewardsView = ({
             </nav>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {RARITIES.map(r => (
-            <div key={r} title={`${r} 卡池裡有 ${data.lotteryPrizes[r].length} 個獎品`} className={`px-2 py-1 md:px-3 md:py-1.5 rounded-xl md:rounded-2xl bg-white/60 backdrop-blur-sm border-2 ${RARITY_STYLES[r].border} flex items-center gap-1.5 md:gap-2 shadow-sm transition-all hover:shadow-md hover:-translate-y-1 md:hover:-translate-y-1.5 hover:scale-105`}>
-              <RarityBadge rarity={r} size="xs" />
-              <span className={`text-[10px] md:text-xs font-black ${RARITY_STYLES[r].color}`}>{data.lotteryPrizes[r].length}</span>
-            </div>
-          ))}
-        </div>
       </div>
 
       {rewardSubTab === 'lottery' && (
@@ -316,6 +308,26 @@ const RewardsView = ({
                 </div>
                 <h3 className="text-3xl md:text-4xl font-black text-sky-900 tracking-tight mb-1 md:mb-2">幸運抽卡</h3>
                 <p className="text-xs md:text-sm text-sky-500 font-bold">消耗抽卡券，抽一個隨機獎勵</p>
+                {(() => {
+                  // 卡池空了才提醒：抽中空的稀有度時會改給別的稀有度（見 src/domain/lottery.ts 的 emptyPoolFallbacks），平常什麼都不顯示
+                  if (!hasAnyUsablePrize(data.lotteryPrizes)) {
+                    return (
+                      <p className="mt-4 px-4 py-2 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs md:text-sm font-bold text-amber-700">
+                        卡池裡還沒有可以抽的獎品，請先到「卡池設定」新增獎品。
+                      </p>
+                    );
+                  }
+                  const empties = emptyPoolFallbacks(data.lotteryPrizes, data.lotteryProbability);
+                  if (empties.length === 0) return null;
+                  return (
+                    <div className="mt-4 px-4 py-2 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs md:text-sm font-bold text-amber-700 space-y-1">
+                      {empties.map(({ rarity, fallback }) => (
+                        <p key={rarity}>{rarity} 卡池裡沒有可以抽的獎品，抽中 {rarity} 時會改給 {fallback} 的獎品。</p>
+                      ))}
+                      <p className="text-[10px] md:text-xs text-amber-600">到「卡池設定」新增獎品就不會這樣。</p>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="flex flex-col sm:flex-row gap-4 md:gap-6 w-full max-w-2xl justify-center">

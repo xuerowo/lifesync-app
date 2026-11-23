@@ -143,6 +143,36 @@ export function effectiveOdds(
   return odds;
 }
 
+/** 某個稀有度的卡池抽不出東西，抽中時會改給哪個稀有度（見 emptyPoolFallbacks） */
+export interface EmptyPoolFallback {
+  /** 卡池抽不出東西的稀有度 */
+  rarity: Rarity;
+  /** 抽中 rarity 時實際改給的稀有度（findAvailableRarity） */
+  fallback: Rarity;
+}
+
+/**
+ * 抽卡大廳的「卡池空了」提醒用：哪些稀有度抽得中（機率大於 0）、但卡池裡沒有抽得出東西的獎品，
+ * 以及抽中時會改給哪個稀有度。依 RARITIES 的順序（UR 到 N）。
+ * - 機率是 0 的稀有度空著沒關係（抽不中），不列出來
+ * - 圖庫獎品沒有圖也算抽不出東西（isUsablePrize）
+ * - 整個卡池都沒有可用獎品時回傳空陣列（這時根本抽不了，畫面另外提醒）
+ */
+export function emptyPoolFallbacks(
+  lotteryPrizes: PrizePools | null | undefined,
+  probability: Partial<Record<Rarity, number>> | null | undefined,
+): EmptyPoolFallback[] {
+  if (!hasAnyUsablePrize(lotteryPrizes)) return [];
+  const odds = pickRarityOdds(probability);
+  const result: EmptyPoolFallback[] = [];
+  for (const rarity of RARITIES) {
+    if (!(odds[rarity] > 0) || getUsablePrizes(lotteryPrizes, rarity).length > 0) continue;
+    const fallback = findAvailableRarity(lotteryPrizes, rarity);
+    if (fallback) result.push({ rarity, fallback });
+  }
+  return result;
+}
+
 /**
  * 抽卡紀錄的 odds 是否有效：是物件，五個稀有度都有，而且都是有限的數字。
  * 讀檔時沒有有效 odds 的紀錄會補上推算值（normalizeData），統計時也只算有效的。

@@ -5,6 +5,7 @@ import {
   drawPrize,
   drawFromRarity,
   effectiveOdds,
+  emptyPoolFallbacks,
   findAvailableRarity,
   isValidOdds,
   pickRarityOdds,
@@ -341,6 +342,38 @@ describe('effectiveOdds：抽一次實際抽到各稀有度的機率', () => {
         expect(Math.abs(counts[r] / 100 - odds[r]), `${JSON.stringify(p)} ${r}`).toBeLessThanOrEqual(0.02 + 1e-9);
       }
     }
+  });
+});
+
+describe('emptyPoolFallbacks：抽卡大廳的「卡池空了」提醒', () => {
+  const prize = (content: string): LotteryPrize => ({ id: content, type: 'text', content });
+  const prob = { N: 40, R: 30, SR: 20, SSR: 8, UR: 2 };
+  const full = (): FullPools => ({ N: [prize('n')], R: [prize('r')], SR: [prize('sr')], SSR: [prize('ssr')], UR: [prize('ur')] });
+
+  it('每個稀有度都有獎品時不提醒', () => {
+    expect(emptyPoolFallbacks(full(), prob)).toEqual([]);
+  });
+
+  it('空的稀有度列出會改給哪個稀有度（先往低找，最低的空了往高找）', () => {
+    const pools = { ...full(), SSR: [], N: [] };
+    expect(emptyPoolFallbacks(pools, prob)).toEqual([
+      { rarity: 'SSR', fallback: 'SR' },
+      { rarity: 'N', fallback: 'R' },
+    ]);
+  });
+
+  it('沒有圖的圖庫獎品也算空的', () => {
+    const pools = { ...full(), UR: [{ id: 'g', type: 'image-pool' as const, content: [] }] };
+    expect(emptyPoolFallbacks(pools, prob)).toEqual([{ rarity: 'UR', fallback: 'SSR' }]);
+  });
+
+  it('機率是 0 的稀有度空著不提醒', () => {
+    const pools = { ...full(), UR: [] };
+    expect(emptyPoolFallbacks(pools, { ...prob, UR: 0, N: 42 })).toEqual([]);
+  });
+
+  it('整個卡池都空時回傳空陣列（畫面另外提醒）', () => {
+    expect(emptyPoolFallbacks({ N: [], R: [], SR: [], SSR: [], UR: [] }, prob)).toEqual([]);
   });
 });
 
