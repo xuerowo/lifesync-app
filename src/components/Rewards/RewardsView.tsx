@@ -8,7 +8,8 @@ import { useLottery } from '../../hooks/useLottery.ts';
 import { RARITY_STYLES, RARITY_NAMES, ITEMS_PER_PAGE } from '../../constants/index.tsx';
 import RarityBadge from '../Shared/RarityBadge.tsx';
 import { deleteAchievementMessage } from '../../domain/confirmations.ts';
-import { RARITIES, getPrizeSortName, movePoolPrize, prizeKeys, removePoolPrize, updatePoolPrize } from '../../domain/lottery.ts';
+import { RARITIES, effectiveOdds, getPrizeSortName, movePoolPrize, prizeKeys, removePoolPrize, updatePoolPrize } from '../../domain/lottery.ts';
+import { computeLotteryStats } from '../../domain/lotteryStats.ts';
 import { clampPage, formatPageRange, getTotalPages } from '../../domain/pagination.ts';
 import { toNonNegativeInt, toNonNegativeNumber } from '../../domain/inputs.ts';
 import AchievementConditionInput from './AchievementConditionInput.tsx';
@@ -192,6 +193,10 @@ const RewardsView = ({
       return;
     }
 
+    // 這次抽卡各稀有度實際的機率（和 performLottery 用同一份卡池與機率設定），每筆紀錄都記下來，
+    // 之後改機率設定，機率統計仍然拿這一抽當時的機率來比。卡池全空時是 null，這時也抽不到東西
+    const odds = effectiveOdds(data.lotteryPrizes, data.lotteryProbability);
+
     // 先抽、確認抽得到，再扣券
     const results: RewardHistoryRecord[] = [];
     for (let i = 0; i < count; i++) {
@@ -201,7 +206,8 @@ const RewardsView = ({
           id: crypto.randomUUID(),
           ...result,
           timestamp: new Date().toISOString(),
-          claimed: false
+          claimed: false,
+          ...(odds ? { odds: { ...odds } } : {})
         });
       }
     }
@@ -702,37 +708,59 @@ const RewardsView = ({
               <div className="p-2 bg-sky-100 rounded-xl text-sky-500"><BarChart3 className="w-5 h-5" /></div>
               <h3 className="text-xl font-black text-sky-900">機率統計</h3>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-              {RARITIES.map(r => {
-                const total = data.rewardHistory.length;
-                const count = data.rewardHistory.filter(h => h.rarity === r).length;
-                const actualProb = total > 0 ? (count / total) * 100 : 0;
-                const targetProb = data.lotteryProbability[r];
-                const diff = actualProb - targetProb;
-                const isLucky = diff > 0;
-                return (
-                  <div key={r} className="relative group bg-white/40 backdrop-blur-md rounded-3xl p-5 border border-white/60 shadow-sm transition-all hover:shadow-md hover:-translate-y-2 hover:scale-[1.02]">
-                    <div className="flex flex-col items-center gap-3">
-                      <RarityBadge rarity={r} size="sm" />
-                      <div className="text-center">
-                        <p className="text-3xl font-black text-sky-900 leading-none mb-1">{count}</p>
-                        <p className="text-[9px] font-black text-sky-300 uppercase tracking-widest">抽到次數</p>
-                      </div>
-                      <div className="w-full space-y-2 mt-2">
-                        <div className="flex justify-between items-end">
-                          <span className="text-[10px] font-black text-sky-400">實際比例</span>
-                          <span className={`text-xs font-black ${isLucky ? 'text-emerald-500' : 'text-sky-600'}`}>{actualProb.toFixed(1)}%</span>
+            {(() => {
+              // 每筆紀錄都存了抽的當下的機率（odds），應有次數和應有比例用它來算，改過機率設定也不會不準
+              const stats = computeLotteryStats(data.rewardHistory);
+              return (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                    {stats.rarities.map(({ rarity: r, count, actualPercent, expectedCount, expectedPercent, comparison }) => {
+                      const isLucky = comparison === 'higher';
+                      return (
+                        <div key={r} className="relative group bg-white/40 backdrop-blur-md rounded-3xl p-5 border border-white/60 shadow-sm transition-all hover:shadow-md hover:-translate-y-2 hover:scale-[1.02]">
+                          <div className="flex flex-col items-center gap-3">
+                            <RarityBadge rarity={r} size="sm" />
+                            <div className="text-center">
+                              <p className="text-3xl font-black text-sky-900 leading-none mb-1">{count}</p>
+                              <p className="text-[9px] font-black text-sky-300 uppercase tracking-widest">抽到次數</p>
+                            </div>
+                            <div className="w-full space-y-2 mt-2">
+                              <div className="flex justify-between items-end">
+                                <span className="text-[10px] font-black text-sky-400">應有次數</span>
+                                <span className="text-xs font-black text-sky-600">{expectedPercent === null ? '—' : expectedCount.toFixed(1)}</span>
+                              </div>
+                              <div className="flex justify-between items-end">
+                                <span className="text-[10px] font-black text-sky-400">實際比例</span>
+                                <span className={`text-xs font-black ${isLucky ? 'text-emerald-500' : 'text-sky-600'}`}>{actualPercent.toFixed(1)}%</span>
+                              </div>
+                              <div className="flex justify-between items-center gap-2 text-[9px] font-bold">
+                                <span className="text-gray-400">應有比例</span>
+                                <span className="shrink-0 text-gray-400">{expectedPercent === null ? '—' : `${expectedPercent.toFixed(1)}%`}</span>
+                              </div>
+                              {comparison && (
+                                <p className={`text-center text-[9px] font-bold ${comparison === 'higher' ? 'text-emerald-500' : comparison === 'lower' ? 'text-amber-500' : 'text-sky-400'}`}>
+                                  {comparison === 'higher' ? '比預期高' : comparison === 'lower' ? '比預期低' : '和預期一樣'}
+                                </p>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex justify-between items-center text-[9px] font-bold">
-                          <span className="text-gray-400">設定機率：{targetProb}%</span>
-                          {count > 0 && (<span className={isLucky ? 'text-emerald-500' : 'text-amber-500'}>{isLucky ? '比設定高' : '比設定低'}</span>)}
-                        </div>
-                      </div>
-                    </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
+                  {(stats.assumedCount > 0 || stats.withoutOddsCount > 0) && (
+                    <div className="mt-6 space-y-1 text-[10px] font-bold text-gray-400 leading-relaxed">
+                      {stats.assumedCount > 0 && (
+                        <p>其中 {stats.assumedCount} 筆是改版前的舊紀錄或補登的紀錄，沒有記下抽的當下機率，是用改版時（補登的用補登時）的機率設定推算的。</p>
+                      )}
+                      {stats.withoutOddsCount > 0 && (
+                        <p>另有 {stats.withoutOddsCount} 筆沒有抽的當下機率，也無法推算（卡池裡沒有獎品時會這樣），沒有算進應有次數和應有比例。</p>
+                      )}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
           <div className="bg-white/40 backdrop-blur-md rounded-[40px] border border-white shadow-xl overflow-hidden flex flex-col">
             <div className="p-8 pb-4 flex items-center justify-between">

@@ -333,3 +333,83 @@ describe('維度代號改名：學習 learning → 成長 growth（2026-11-22）
     expect(migrateTaskList('bad')).toBe('bad')
   })
 })
+
+describe('normalizeData：舊抽卡紀錄補上推算的機率（odds）', () => {
+  const prizes = {
+    UR: [{ id: 'u', type: 'text', content: 'UR' }],
+    SSR: [{ id: 's', type: 'text', content: 'SSR' }],
+    SR: [{ id: 'sr', type: 'text', content: 'SR' }],
+    R: [{ id: 'r', type: 'text', content: 'R' }],
+    N: [{ id: 'n', type: 'text', content: 'N' }],
+  }
+  const probability = { UR: 2, SSR: 8, SR: 15, R: 25, N: 50 }
+  const recorded = { UR: 10, SSR: 10, SR: 20, R: 20, N: 40 }
+
+  it('沒有 odds 的紀錄用目前的卡池和機率推算，標記 oddsAssumed；已有有效 odds 的不動', () => {
+    const kept = { id: 'b', rarity: 'UR', odds: recorded }
+    const raw = { lotteryPrizes: prizes, lotteryProbability: probability, rewardHistory: [{ id: 'a', rarity: 'N', claimed: true }, kept] }
+    const history = normalizeData(raw).rewardHistory
+    expect(history[0]).toEqual({ id: 'a', rarity: 'N', claimed: true, odds: probability, oddsAssumed: true })
+    // 已有有效 odds 的紀錄原封不動（同一個物件），不會被目前的機率蓋掉
+    expect(history[1]).toBe(kept)
+    expect('oddsAssumed' in history[1]).toBe(false)
+  })
+
+  it('推算時考慮空卡池改抽：沒有獎品的稀有度，機率移到實際會抽到的稀有度', () => {
+    const raw = {
+      lotteryPrizes: { N: [{ id: 'n', type: 'text', content: 'N' }], SR: [{ id: 'sr', type: 'text', content: 'SR' }] },
+      lotteryProbability: probability,
+      rewardHistory: [{ id: 'a', rarity: 'N' }],
+    }
+    expect(normalizeData(raw).rewardHistory[0].odds).toEqual({ UR: 0, SSR: 0, SR: 25, R: 0, N: 75 })
+  })
+
+  it('odds 無效（不是物件、缺稀有度、不是有限數字）時換成推算值', () => {
+    const bad = [null, 'x', [1, 2, 3, 4, 5], { UR: 1, SSR: 1, SR: 1, R: 1 }, { UR: NaN, SSR: 0, SR: 0, R: 0, N: 100 }, { UR: '2', SSR: 8, SR: 15, R: 25, N: 50 }]
+    const raw = { lotteryPrizes: prizes, lotteryProbability: probability, rewardHistory: bad.map((odds, i) => ({ id: String(i), odds, oddsAssumed: false })) }
+    for (const record of normalizeData(raw).rewardHistory) {
+      expect(record.odds).toEqual(probability)
+      expect(record.oddsAssumed).toBe(true)
+    }
+  })
+
+  it('機率設定缺欄位時，先補上預設值再推算（加起來超過 100 時 N 拿剩下的）', () => {
+    const raw = { lotteryPrizes: prizes, lotteryProbability: { UR: 5 }, rewardHistory: [{ id: 'a' }] }
+    // 預設 N 50、R 25、SR 15、SSR 8，UR 改成 5 → 前四個佔 53%，N 剩 47%
+    expect(normalizeData(raw).rewardHistory[0].odds).toEqual({ ...DEFAULT_LOTTERY_PROBABILITY(), UR: 5, N: 47 })
+  })
+
+  it('卡池全空、算不出來時不補，原樣保留', () => {
+    const record = { id: 'a', rarity: 'N' }
+    const raw = { lotteryProbability: probability, rewardHistory: [record] }
+    const result = normalizeData(raw)
+    expect(result.rewardHistory[0]).toBe(record)
+    expect(result.rewardHistory).toBe(raw.rewardHistory)
+  })
+
+  it('不是物件的項目原樣保留', () => {
+    const history = normalizeData({ lotteryPrizes: prizes, rewardHistory: ['x', null, 3, [1]] }).rewardHistory as unknown[]
+    expect(history).toEqual(['x', null, 3, [1]])
+  })
+
+  it('不修改傳入的資料', () => {
+    const raw = deepFreeze({ lotteryPrizes: prizes, lotteryProbability: probability, rewardHistory: [{ id: 'a', rarity: 'N' }] })
+    const snapshot = JSON.stringify(raw)
+    expect(() => normalizeData(raw)).not.toThrow()
+    expect(JSON.stringify(raw)).toBe(snapshot)
+  })
+
+  it('補過一次就固定：之後改了機率設定再整理，舊紀錄的 odds 不會變；全部都有 odds 時沿用原本的陣列', () => {
+    const once = normalizeData({ lotteryPrizes: prizes, lotteryProbability: probability, rewardHistory: [{ id: 'a', rarity: 'N' }] })
+    const changed = normalizeData({ ...once, lotteryProbability: recorded })
+    expect(changed.rewardHistory[0].odds).toEqual(probability)
+    expect(changed.rewardHistory[0].oddsAssumed).toBe(true)
+    expect(changed.rewardHistory).toBe(once.rewardHistory)
+  })
+
+  it('每筆紀錄的 odds 是各自的物件', () => {
+    const history = normalizeData({ lotteryPrizes: prizes, rewardHistory: [{ id: 'a' }, { id: 'b' }] }).rewardHistory
+    expect(history[0].odds).toEqual(history[1].odds)
+    expect(history[0].odds).not.toBe(history[1].odds)
+  })
+})

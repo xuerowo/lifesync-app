@@ -4,6 +4,8 @@
 // server.ts 是用 Node 直接執行的（Node 會把型別刪掉再跑），不經過打包工具。
 
 import { fillPlanSortOrders, fillTaskSortOrders } from './taskOrder.ts';
+import { effectiveOdds, isValidOdds } from '../domain/lottery.ts';
+import type { PrizePools } from '../domain/lottery.ts';
 import type { CloudConfig, IndicatorId, LifeSyncData, LotteryPrize, MajorTask, Rarity, SubTask } from '../types/data.ts';
 
 export const RARITIES: Rarity[] = ['N', 'R', 'SR', 'SSR', 'UR'];
@@ -110,6 +112,29 @@ function ensurePrizeIds(list: unknown[], rarity: string): unknown[] {
   });
 }
 
+/**
+ * 抽卡紀錄沒有有效的 odds（這一抽各稀有度的機率，見 src/types/data.ts 的 RewardHistoryRecord）時，
+ * 複製一份補上「用目前的卡池和機率設定推算」的 odds，並標記 oddsAssumed: true。
+ * - 改版前的舊紀錄沒有記下抽的當下機率，只能用讀檔當時的設定推算；
+ *   補上的值會在下一次存檔時寫進檔案，之後再改機率設定也不會再變（已經有有效 odds 的紀錄不會再補）
+ * - 卡池完全沒有可用獎品、算不出來時不補（等之後讀檔、卡池有獎品時再補）
+ * - 已經有有效 odds 的紀錄沿用原本的參考；沒有要補的時候回傳原本的陣列
+ * - 不是物件的項目原樣保留（陣列裡每一筆的內容不逐筆檢查，見 src/types/data.ts 開頭）
+ *
+ * @param prizes 已經整理過的卡池（每個稀有度都是陣列）
+ * @param probability 已經整理過的機率設定（五個稀有度都是有限的數字）
+ */
+function fillAssumedOdds(history: unknown[], prizes: Record<string, unknown>, probability: Record<string, unknown>): unknown[] {
+  const needsOdds = (item: unknown): item is Record<string, unknown> => isPlainObject(item) && !isValidOdds(item.odds);
+  if (!history.some(needsOdds)) return history;
+  // 每一筆獎品沒有逐筆檢查，但 effectiveOdds 只透過 isUsablePrize 判斷獎品，它會先確認是物件、圖庫有圖，所以壞掉的項目只會被當成抽不到
+  const pools = prizes as PrizePools;
+  // 呼叫端剛把五個稀有度都整理成有限的數字
+  const odds = effectiveOdds(pools, probability as Record<Rarity, number>);
+  if (!odds) return history;
+  return history.map((item) => (needsOdds(item) ? { ...item, odds: { ...odds }, oddsAssumed: true } : item));
+}
+
 export function createDefaultData(): LifeSyncData {
   return {
     goals: { growth: [], health: [], happiness: [] },
@@ -143,6 +168,7 @@ type Draft = Record<string, unknown> & Record<ArrayField, unknown[]>;
 // - 保留 raw 中未知的額外欄位，避免丟資料
 // - 處理舊格式：刪除 rewards；沒有 notes 但有 diaries 時轉成 notes；舊的維度代號換成新的（見 LEGACY_INDICATOR_IDS）
 // - 卡池裡沒有 id 的獎品補上固定的 id（見 ensurePrizeIds）
+// - 抽卡紀錄沒有有效的 odds（這一抽的機率）時補上推算值（見 fillAssumedOdds）
 export function normalizeData(raw: unknown): LifeSyncData {
   if (!isPlainObject(raw)) return createDefaultData();
 
@@ -211,6 +237,9 @@ export function normalizeData(raw: unknown): LifeSyncData {
   }
   result.lotteryProbability = probability;
 
+  // 卡池和機率都整理好了，才能拿來推算舊抽卡紀錄的機率
+  result.rewardHistory = fillAssumedOdds(result.rewardHistory, prizes, probability);
+
   result.cloudConfig = isPlainObject(raw.cloudConfig)
     ? { ...DEFAULT_CLOUD_CONFIG(), ...raw.cloudConfig }
     : DEFAULT_CLOUD_CONFIG();
@@ -219,7 +248,8 @@ export function normalizeData(raw: unknown): LifeSyncData {
   result.lotteryTickets = raw.lotteryTickets !== null && Number.isFinite(tickets) ? tickets : 0;
 
   // 到這裡，頂層每個欄位都已經是正確的格式（陣列欄位是陣列、goals／lotteryPrizes／lotteryProbability／cloudConfig
-  // 有該有的鍵、rewardFolderPath 是字串、lotteryTickets 是數字、卡池裡是物件的獎品都有 id）。陣列裡每一筆的內容沒有逐筆檢查，
+  // 有該有的鍵、rewardFolderPath 是字串、lotteryTickets 是數字、卡池裡是物件的獎品都有 id、
+  // 卡池有可用獎品時，是物件的抽卡紀錄都有有效的 odds）。陣列裡每一筆的內容沒有逐筆檢查，
   // 沿用原檔（這是原本的行為），所以讀巢狀欄位時仍要保留防呆，見 src/types/data.ts 開頭的說明。
   return result as unknown as LifeSyncData;
 }

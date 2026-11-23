@@ -6,7 +6,8 @@
 // - normalizeData（src/shared/defaultData.ts）只保證「頂層」格式正確：每個陣列欄位一定是陣列、
 //   goals／lotteryPrizes／lotteryProbability／cloudConfig 一定有該有的鍵。陣列裡每一筆的內容不逐筆檢查，
 //   沿用原檔（這是原本的行為）。所以讀巢狀欄位時，仍要照原本的寫法保留防呆。
-//   唯一的例外：卡池（lotteryPrizes）裡的獎品是物件但沒有 id 時，會補上新的 id。
+//   例外：卡池（lotteryPrizes）裡的獎品是物件但沒有 id 時，會補上新的 id；
+//   抽卡紀錄（rewardHistory）是物件但沒有有效的 odds 時，會補上推算的 odds（見 RewardHistoryRecord.odds）。
 // - normalizeData 也會保留看不懂的頂層欄位（例如舊版的 diaries、以後的 _sync），這裡沒有列出。
 //
 // 時間欄位有四種格式，換算方式不同，詳見 src/domain/dates.ts 開頭：
@@ -236,6 +237,20 @@ export interface RewardHistoryRecord {
   claimedAt?: UtcIsoString | null;
   /** 補登紀錄時的備註欄位 */
   taskTitle?: string;
+  /**
+   * 這一抽各稀有度實際抽得到的機率（百分比，五個加起來是 100）。
+   * 是「已經考慮空卡池改抽別的稀有度」之後的機率（src/domain/lottery.ts 的 effectiveOdds），
+   * 不一定等於設定的 lotteryProbability。和這筆抽到哪個稀有度無關，編輯紀錄改稀有度時保留原值。
+   * 抽卡時記下；改版前的舊紀錄讀檔時由 normalizeData 補上推算值（見 oddsAssumed）。
+   * 卡池完全沒有獎品、算不出來時沒有這個欄位。
+   */
+  odds?: Record<Rarity, number>;
+  /**
+   * true：odds 是推算的，不是抽的當下記下的。
+   * 改版前的舊紀錄（用讀檔當時的卡池和機率設定推算）和補登的紀錄（用補登當時的設定）會是 true；
+   * 抽卡時記下的紀錄沒有這個欄位。
+   */
+  oddsAssumed?: boolean;
 }
 
 /** 成就：某個類別的完成次數達到 condition 就可以領取 */

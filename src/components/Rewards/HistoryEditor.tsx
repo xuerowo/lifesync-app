@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { RotateCw, X, CheckCircle2 } from 'lucide-react';
 import { useAppData } from '../../contexts/useAppData.ts';
 import { formatForDateTimeLocal } from '../../utils/index.ts';
+import { effectiveOdds } from '../../domain/lottery.ts';
 import type { Rarity } from '../../types/data.ts';
 import type { EditingRewardHistory } from '../../types/ui.ts';
 
@@ -26,7 +27,10 @@ const HistoryEditor = ({ editingHistory, setEditingHistory }: HistoryEditorProps
         claimedAt: localItem.claimed ? (localItem.claimedAt || new Date().toISOString()) : null
       };
       if (isNew) {
-        const newRecord = { ...itemToSave, id: crypto.randomUUID() };
+        // 補登的紀錄不知道抽的當下機率，記下目前卡池和機率設定算出的機率，並標記是推算的（卡池全空、算不出來時不記）。
+        // 編輯既有紀錄時沿用原本的 odds：那是這一抽的機率，和抽到哪個稀有度無關，改稀有度也不用動
+        const odds = effectiveOdds(prev.lotteryPrizes, prev.lotteryProbability);
+        const newRecord = { ...itemToSave, id: crypto.randomUUID(), ...(odds ? { odds, oddsAssumed: true } : {}) };
         return { ...prev, rewardHistory: [newRecord, ...prev.rewardHistory] };
       } else {
         // id 相同時 h.id 就是 itemToSave.id，寫 id: h.id 只是讓型別知道 id 一定有，存出來的內容不變

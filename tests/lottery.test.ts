@@ -4,7 +4,10 @@ import {
   pickRarity,
   drawPrize,
   drawFromRarity,
+  effectiveOdds,
   findAvailableRarity,
+  isValidOdds,
+  pickRarityOdds,
   hasAnyUsablePrize,
   isUsablePrize,
   getPrizeSortName,
@@ -226,6 +229,133 @@ describe('drawPrize：沒有獎品的情況', () => {
   it('稀有度清單缺欄位也不會丟錯', () => {
     const prizes: PrizePools = { SSR: [{ id: 'ssr', type: 'text', content: 'SSR' }] };
     expect(drawPrize(prizes, p, fixed(0.9, 0))!.rarity).toBe('SSR'); // SSR 有獎品，一定抽得到
+  });
+});
+
+// ---- 抽卡的實際機率（effectiveOdds）----
+
+/** 五個稀有度的機率是否都接近預期（toBeCloseTo 的 digits） */
+function expectOdds(actual: Record<Rarity, number> | null, expected: Record<Rarity, number>, digits = 9) {
+  expect(actual).not.toBeNull();
+  for (const r of RARITIES) expect(actual![r], r).toBeCloseTo(expected[r], digits); // 上一行確認過不是 null
+  const sum = RARITIES.reduce((total, r) => total + actual![r], 0); // 同上
+  expect(sum).toBeCloseTo(100, 9);
+}
+
+/** 第一次呼叫回傳 first（決定稀有度），之後都回傳 0（決定獎品、圖片，不影響稀有度） */
+const rollThenZero = (first: number) => {
+  let called = false;
+  return () => {
+    if (called) return 0;
+    called = true;
+    return first;
+  };
+};
+
+/** roll 從 0 到 99.99、每 0.01 掃一點（共 10000 點），用 drawPrize 實際抽，統計各稀有度的比例（百分比） */
+function sweepDrawPrize(pools: PrizePools, probability: Partial<Record<Rarity, number>> | null | undefined) {
+  const counts: Record<Rarity, number> = { UR: 0, SSR: 0, SR: 0, R: 0, N: 0 };
+  const steps = 10000;
+  for (let k = 0; k < steps; k++) {
+    const result = drawPrize(pools, probability, rollThenZero(k / steps));
+    if (result) counts[result.rarity]++;
+  }
+  for (const r of RARITIES) counts[r] = (counts[r] / steps) * 100;
+  return counts;
+}
+
+/** 不正常的機率設定：加總不是 100、負數、超過 100、缺欄位、NaN */
+const ODD_PROBABILITY_CASES: { name: string; p: Partial<Record<Rarity, number>> | null | undefined; expected: Record<Rarity, number> }[] = [
+  { name: '加總小於 100：N 拿剩下的', p: { UR: 1, SSR: 2, SR: 3, R: 4, N: 10 }, expected: { UR: 1, SSR: 2, SR: 3, R: 4, N: 90 } },
+  { name: '加總大於 100：超過 100 的部分抽不到', p: { UR: 30, SSR: 40, SR: 50, R: 60, N: 70 }, expected: { UR: 30, SSR: 40, SR: 30, R: 0, N: 0 } },
+  { name: '單一項超過 100', p: { UR: 150, SSR: 10, SR: 10, R: 10, N: 10 }, expected: { UR: 100, SSR: 0, SR: 0, R: 0, N: 0 } },
+  { name: '第一項是負數', p: { UR: -5, SSR: 10, SR: 20, R: 30, N: 45 }, expected: { UR: 0, SSR: 5, SR: 20, R: 30, N: 45 } },
+  { name: '中間有負數：門檻往回退，後面被前面吃掉', p: { UR: 10, SSR: -20, SR: 15, R: 5, N: 90 }, expected: { UR: 10, SSR: 0, SR: 0, R: 0, N: 90 } },
+  { name: '缺 SSR：從 SSR 開始門檻都是 NaN，全部落到 N', p: { UR: 5, SR: 10, R: 20, N: 65 }, expected: { UR: 5, SSR: 0, SR: 0, R: 0, N: 95 } },
+  { name: '缺 UR：全部是 N', p: { SSR: 10, SR: 10, R: 10, N: 70 }, expected: { UR: 0, SSR: 0, SR: 0, R: 0, N: 100 } },
+  { name: 'SR 是 NaN', p: { UR: 2, SSR: 8, SR: NaN, R: 30, N: 60 }, expected: { UR: 2, SSR: 8, SR: 0, R: 0, N: 90 } },
+  { name: '沒有機率設定：全部是 N', p: undefined, expected: { UR: 0, SSR: 0, SR: 0, R: 0, N: 100 } },
+  { name: '全部是 0：全部是 N', p: { UR: 0, SSR: 0, SR: 0, R: 0, N: 0 }, expected: { UR: 0, SSR: 0, SR: 0, R: 0, N: 100 } },
+];
+
+describe('effectiveOdds：抽一次實際抽到各稀有度的機率', () => {
+  it('一般情況（五個稀有度都有獎品）就是設定的機率', () => {
+    for (const p of PROBABILITY_CASES) expectOdds(effectiveOdds(fullPrizes(), p), p);
+  });
+
+  it.each(ODD_PROBABILITY_CASES)('$name', ({ p, expected }) => {
+    expectOdds(pickRarityOdds(p), expected);
+    expectOdds(effectiveOdds(fullPrizes(), p), expected);
+  });
+
+  it('空的稀有度改抽別的：先往低、再往高，機率跟著移過去', () => {
+    const p = { UR: 1, SSR: 4, SR: 15, R: 30, N: 50 };
+    const lowerOnly: FullPools = { UR: [], SSR: [], SR: [{ id: 'sr', type: 'text', content: 'SR' }], R: [], N: [{ id: 'n', type: 'text', content: 'N' }] };
+    expectOdds(effectiveOdds(lowerOnly, p), { UR: 0, SSR: 0, SR: 20, R: 0, N: 80 });
+    const higherOnly: FullPools = { UR: [{ id: 'ur', type: 'text', content: 'UR' }], SSR: [{ id: 'ssr', type: 'text', content: 'SSR' }], SR: [], R: [], N: [] };
+    expectOdds(effectiveOdds(higherOnly, p), { UR: 1, SSR: 99, SR: 0, R: 0, N: 0 });
+  });
+
+  it('空的圖庫獎品、缺稀有度的清單都當成沒有獎品', () => {
+    const p = { UR: 1, SSR: 4, SR: 15, R: 30, N: 50 };
+    const prizes: PrizePools = { R: [{ id: 'empty', type: 'image-pool', content: [] }], N: [{ id: 'n', type: 'text', content: 'N' }] };
+    expectOdds(effectiveOdds(prizes, p), { UR: 0, SSR: 0, SR: 0, R: 0, N: 100 });
+  });
+
+  it('整個卡池都沒有可用獎品時回傳 null', () => {
+    const p = { UR: 1, SSR: 4, SR: 15, R: 30, N: 50 };
+    expect(effectiveOdds({ UR: [], SSR: [], SR: [], R: [], N: [] }, p)).toBeNull();
+    expect(effectiveOdds({ R: [{ id: 'e', type: 'image-pool', content: [] }] }, p)).toBeNull();
+    expect(effectiveOdds({}, p)).toBeNull();
+    expect(effectiveOdds(undefined, p)).toBeNull();
+  });
+
+  it('和 drawPrize 實際抽出來的分布一致（roll 從 0 到 99.99 每 0.01 掃一點）', () => {
+    const lowerOnly: FullPools = { UR: [], SSR: [], SR: [{ id: 'sr', type: 'text', content: 'SR' }], R: [], N: [{ id: 'n', type: 'text', content: 'N' }] };
+    const higherOnly: FullPools = { UR: [{ id: 'ur', type: 'text', content: 'UR' }], SSR: [{ id: 'ssr', type: 'image-pool', content: ['gallery\\a.png'] }], SR: [], R: [], N: [] };
+    const middleOnly: PrizePools = { SR: [{ id: 'sr', type: 'text', content: 'SR' }], R: [{ id: 'empty', type: 'image-pool', content: [] }] };
+    const probabilities = [
+      ...PROBABILITY_CASES,
+      ...ODD_PROBABILITY_CASES.map(c => c.p),
+      { UR: 2.5, SSR: 7.333, SR: 12.25, R: 33.3, N: 44.617 },
+    ];
+    for (const pools of [fullPrizes(), lowerOnly, higherOnly, middleOnly]) {
+      for (const p of probabilities) {
+        const odds = effectiveOdds(pools, p);
+        const swept = sweepDrawPrize(pools, p);
+        expect(odds).not.toBeNull();
+        for (const r of RARITIES) {
+          // 掃描的每一點代表 0.01%；門檻剛好落在掃描點上時，浮點數誤差最多讓上下兩個邊界各差一點
+          expect(Math.abs(swept[r] - odds![r]), `${JSON.stringify(p)} ${r}`).toBeLessThanOrEqual(0.02 + 1e-9); // 上面確認過不是 null
+        }
+      }
+    }
+  });
+
+  it('和 pickRarity 實際抽出來的分布一致（同樣的掃描，不經過卡池）', () => {
+    for (const p of [...PROBABILITY_CASES, ...ODD_PROBABILITY_CASES.map(c => c.p)]) {
+      const counts: Record<Rarity, number> = { UR: 0, SSR: 0, SR: 0, R: 0, N: 0 };
+      for (let k = 0; k < 10000; k++) counts[pickRarity(p, () => k / 10000)]++;
+      const odds = pickRarityOdds(p);
+      for (const r of RARITIES) {
+        expect(Math.abs(counts[r] / 100 - odds[r]), `${JSON.stringify(p)} ${r}`).toBeLessThanOrEqual(0.02 + 1e-9);
+      }
+    }
+  });
+});
+
+describe('isValidOdds', () => {
+  it('五個稀有度都是有限的數字才算有效', () => {
+    expect(isValidOdds({ UR: 1, SSR: 4, SR: 15, R: 30, N: 50 })).toBe(true);
+    expect(isValidOdds({ UR: 0, SSR: 0, SR: 0, R: 0, N: 100, extra: 'x' })).toBe(true);
+    expect(isValidOdds({ UR: 1, SSR: 4, SR: 15, R: 30 })).toBe(false);
+    expect(isValidOdds({ UR: 1, SSR: 4, SR: 15, R: 30, N: NaN })).toBe(false);
+    expect(isValidOdds({ UR: 1, SSR: 4, SR: 15, R: 30, N: Infinity })).toBe(false);
+    expect(isValidOdds({ UR: '1', SSR: 4, SR: 15, R: 30, N: 50 })).toBe(false);
+    expect(isValidOdds(null)).toBe(false);
+    expect(isValidOdds(undefined)).toBe(false);
+    expect(isValidOdds([1, 4, 15, 30, 50])).toBe(false);
+    expect(isValidOdds('odds')).toBe(false);
   });
 });
 

@@ -25,18 +25,60 @@ export interface DrawResult {
  * 演算法與舊版相同：rand*100 依序和 UR、UR+SSR、UR+SSR+SR、UR+SSR+SR+R 比較，
  * 都沒有落在範圍內就是 N。累加的順序也相同，所以浮點數結果一模一樣。
  *
- * @param probability 各稀有度的機率（百分比）。缺稀有度時那一項算出 NaN、等於機率 0（和原本的 JS 一樣）
+ * @param probability 各稀有度的機率（百分比）。缺稀有度（或是 NaN）時，從那一項開始門檻都是 NaN、比較都是 false，
+ *   那一項和後面的稀有度（N 除外）都抽不到，全部落到 N（和原本的 JS 一樣）
  */
 export function pickRarity(probability: Partial<Record<Rarity, number>> | null | undefined, rand: () => number = Math.random): Rarity {
-  const p: Partial<Record<Rarity, number>> = probability || {};
+  const thresholds = rarityThresholds(probability);
   const roll = rand() * 100;
-  // 缺欄位時是 undefined，加起來變成 NaN，比較永遠是 false（原本的行為）
+  for (let i = 0; i < thresholds.length; i++) {
+    if (roll < thresholds[i]) return RARITIES[i];
+  }
+  return RARITIES[RARITIES.length - 1];
+}
+
+/**
+ * pickRarity 依序比較的門檻：UR、UR+SSR、UR+SSR+SR、UR+SSR+SR+R（四個，N 沒有門檻）。
+ * pickRarity 和 pickRarityOdds 共用這一段，累加順序相同，浮點數結果也就相同。
+ */
+function rarityThresholds(probability: Partial<Record<Rarity, number>> | null | undefined): number[] {
+  const p: Partial<Record<Rarity, number>> = probability || {};
+  const thresholds: number[] = [];
+  // 缺欄位時是 undefined，加起來變成 NaN，比較永遠是 false（原本的行為），所以照原樣當成數字相加
   let threshold = p[RARITIES[0]] as number;
   for (let i = 0; i < RARITIES.length - 1; i++) {
     if (i > 0) threshold = threshold + (p[RARITIES[i]] as number);
-    if (roll < threshold) return RARITIES[i];
+    thresholds.push(threshold);
   }
-  return RARITIES[RARITIES.length - 1];
+  return thresholds;
+}
+
+/** 五個稀有度都是 0 的機率表 */
+const zeroOdds = (): Record<Rarity, number> => ({ UR: 0, SSR: 0, SR: 0, R: 0, N: 0 });
+
+/**
+ * pickRarity 抽出各稀有度的機率（百分比，五個加起來是 100），還沒考慮空卡池改抽。
+ *
+ * pickRarity 的 roll 落在 0 以上、未滿 100。每個稀有度抽中的範圍是
+ * 「roll 小於自己的門檻，而且不小於前面任何一個門檻」，這裡直接算出這段範圍有多長：
+ * - 前面的門檻已經佔掉的部分（covered）不算；門檻超過 100 的部分不算
+ * - 門檻是 NaN、或不比 covered 大（例如負數、加總變小），這個稀有度抽不到
+ * - 最後一個（N）拿剩下的
+ * 所以設定加起來不是 100、有負數、超過 100、缺欄位或 NaN，算出來都和 pickRarity 實際的行為相同。
+ */
+export function pickRarityOdds(probability: Partial<Record<Rarity, number>> | null | undefined): Record<Rarity, number> {
+  const odds = zeroOdds();
+  let covered = 0;
+  rarityThresholds(probability).forEach((threshold, i) => {
+    // pickRarity 用 roll < threshold 比較，會先把 threshold 轉成數字；Number() 的轉法相同
+    const limit = Number(threshold);
+    if (!(limit > covered)) return;
+    const upper = Math.min(limit, 100);
+    odds[RARITIES[i]] = upper - covered;
+    covered = upper;
+  });
+  odds[RARITIES[RARITIES.length - 1]] = 100 - covered;
+  return odds;
 }
 
 /**
@@ -75,6 +117,41 @@ export function findAvailableRarity(lotteryPrizes: PrizePools | null | undefined
     ...RARITIES.slice(0, idx).reverse(),
   ];
   return order.find(r => getUsablePrizes(lotteryPrizes, r).length > 0) || null;
+}
+
+/**
+ * 用 drawPrize 抽一次，實際抽到各稀有度的機率（百分比，五個加起來是 100）。
+ * 先用 pickRarityOdds 算出 pickRarity 抽中各稀有度的機率，
+ * 再把每個稀有度照 findAvailableRarity 換成實際抽到的稀有度（沒有獎品的稀有度會改抽別的，機率也跟著移過去）。
+ * 整個卡池都沒有可用獎品時回傳 null（drawPrize 這時也抽不出東西）。
+ *
+ * 抽卡紀錄的 odds 欄位存的就是這個值，見 src/types/data.ts 的 RewardHistoryRecord。
+ */
+export function effectiveOdds(
+  lotteryPrizes: PrizePools | null | undefined,
+  probability: Partial<Record<Rarity, number>> | null | undefined,
+): Record<Rarity, number> | null {
+  if (!hasAnyUsablePrize(lotteryPrizes)) return null;
+  const picked = pickRarityOdds(probability);
+  const odds = zeroOdds();
+  for (const rarity of RARITIES) {
+    const actual = findAvailableRarity(lotteryPrizes, rarity);
+    // 卡池裡有可用獎品時一定找得到，這行只是防呆
+    if (!actual) return null;
+    odds[actual] += picked[rarity];
+  }
+  return odds;
+}
+
+/**
+ * 抽卡紀錄的 odds 是否有效：是物件，五個稀有度都有，而且都是有限的數字。
+ * 讀檔時沒有有效 odds 的紀錄會補上推算值（normalizeData），統計時也只算有效的。
+ */
+export function isValidOdds(value: unknown): value is Record<Rarity, number> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  // 上一行確認過是一般物件，可以用字串鍵讀
+  const record = value as Record<string, unknown>;
+  return RARITIES.every(r => typeof record[r] === 'number' && Number.isFinite(record[r]));
 }
 
 /**
