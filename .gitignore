@@ -37,5 +37,8 @@ release
 # Data files (keep user data out of git)
 data/
 
+# Project notes stay on the developer's computer only (docs/ has its own local git repo)
+docs/
+
 # Claude Code local worktrees and settings
 .claude/
